@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -29,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -47,6 +49,26 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.ui.theme.Dimens
+
+internal enum class StatFilterSection { BILLABLE, TASKS, TAGS, CLIENTS, PROJECTS }
+
+internal val statFilterSectionOrder = listOf(
+    StatFilterSection.BILLABLE,
+    StatFilterSection.TASKS,
+    StatFilterSection.TAGS,
+    StatFilterSection.CLIENTS,
+    StatFilterSection.PROJECTS,
+)
+
+internal fun filterProjectOptions(
+    options: List<Pair<String, String>>,
+    query: String,
+): List<Pair<String, String>> {
+    val normalized = query.trim()
+    return if (normalized.isEmpty()) options else options.filter { (_, name) ->
+        name.contains(normalized, ignoreCase = true)
+    }
+}
 
 /**
  * Persistent filter bar: a "Filters" button that opens the editing sheet, a legible summary of the
@@ -179,6 +201,8 @@ private fun StatFilterSheet(
     onReset: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    var selectedSection by remember { mutableStateOf(StatFilterSection.BILLABLE) }
+    var projectQuery by remember { mutableStateOf("") }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -202,53 +226,80 @@ private fun StatFilterSheet(
                 }
             }
 
-            Text(
-                stringResource(R.string.stats2_filter_billable),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            val billableOptions = listOf(
-                BillableFilter.All,
-                BillableFilter.Billable,
-                BillableFilter.NonBillable,
-            )
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                billableOptions.forEachIndexed { index, option ->
-                    SegmentedButton(
-                        selected = filters.billable == option,
-                        onClick = { onFiltersChange(filters.copy(billable = option)) },
-                        shape = SegmentedButtonDefaults.itemShape(index, billableOptions.size),
-                    ) { Text(billableLabel(option)) }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
+                verticalArrangement = Arrangement.spacedBy(Dimens.Space4),
+            ) {
+                statFilterSectionOrder.forEach { section ->
+                    FilterChip(
+                        selected = selectedSection == section,
+                        onClick = { selectedSection = section },
+                        label = { Text(statFilterSectionLabel(section)) },
+                    )
                 }
             }
 
-            FilterSection(
-                title = stringResource(R.string.stats2_filter_projects),
-                emptyText = stringResource(R.string.stats2_filter_empty_projects),
-                options = catalog.projects.map { it.id to it.name },
-                selected = filters.projectIds,
-                onToggle = { onFiltersChange(filters.toggleProject(it)) },
-            )
-            FilterSection(
-                title = stringResource(R.string.stats2_filter_clients),
-                emptyText = stringResource(R.string.stats2_filter_empty_clients),
-                options = catalog.clients.map { it.id to it.name },
-                selected = filters.clientIds,
-                onToggle = { onFiltersChange(filters.toggleClient(it)) },
-            )
-            FilterSection(
-                title = stringResource(R.string.stats2_filter_tasks),
-                emptyText = stringResource(R.string.stats2_filter_empty_tasks),
-                options = catalog.tasks.map { it.id to it.name },
-                selected = filters.taskIds,
-                onToggle = { onFiltersChange(filters.toggleTask(it)) },
-            )
-            FilterSection(
-                title = stringResource(R.string.stats2_filter_tags),
-                emptyText = stringResource(R.string.stats2_filter_empty_tags),
-                options = catalog.tags.map { it.id to it.name },
-                selected = filters.tagIds,
-                onToggle = { onFiltersChange(filters.toggleTag(it)) },
-            )
+            when (selectedSection) {
+                StatFilterSection.BILLABLE -> {
+                    val billableOptions = listOf(
+                        BillableFilter.All,
+                        BillableFilter.Billable,
+                        BillableFilter.NonBillable,
+                    )
+                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                        billableOptions.forEachIndexed { index, option ->
+                            SegmentedButton(
+                                selected = filters.billable == option,
+                                onClick = { onFiltersChange(filters.copy(billable = option)) },
+                                shape = SegmentedButtonDefaults.itemShape(index, billableOptions.size),
+                            ) { Text(billableLabel(option)) }
+                        }
+                    }
+                }
+
+                StatFilterSection.TASKS -> FilterSection(
+                    emptyText = stringResource(R.string.stats2_filter_empty_tasks),
+                    options = catalog.tasks.map { it.id to it.name },
+                    selected = filters.taskIds,
+                    onToggle = { onFiltersChange(filters.toggleTask(it)) },
+                )
+
+                StatFilterSection.TAGS -> FilterSection(
+                    emptyText = stringResource(R.string.stats2_filter_empty_tags),
+                    options = catalog.tags.map { it.id to it.name },
+                    selected = filters.tagIds,
+                    onToggle = { onFiltersChange(filters.toggleTag(it)) },
+                )
+
+                StatFilterSection.CLIENTS -> FilterSection(
+                    emptyText = stringResource(R.string.stats2_filter_empty_clients),
+                    options = catalog.clients.map { it.id to it.name },
+                    selected = filters.clientIds,
+                    onToggle = { onFiltersChange(filters.toggleClient(it)) },
+                )
+
+                StatFilterSection.PROJECTS -> {
+                    OutlinedTextField(
+                        value = projectQuery,
+                        onValueChange = { projectQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.search_placeholder)) },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        singleLine = true,
+                    )
+                    val emptyProjectsText = if (projectQuery.isBlank()) {
+                        R.string.stats2_filter_empty_projects
+                    } else {
+                        R.string.no_results_found
+                    }
+                    FilterSection(
+                        emptyText = stringResource(emptyProjectsText),
+                        options = filterProjectOptions(catalog.projects.map { it.id to it.name }, projectQuery),
+                        selected = filters.projectIds,
+                        onToggle = { onFiltersChange(filters.toggleProject(it)) },
+                    )
+                }
+            }
         }
     }
 }
@@ -256,14 +307,12 @@ private fun StatFilterSheet(
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun FilterSection(
-    title: String,
     emptyText: String,
     options: List<Pair<String, String>>,
     selected: Set<String>,
     onToggle: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Dimens.Space4)) {
-        Text(title, style = MaterialTheme.typography.titleSmall)
         if (options.isEmpty()) {
             Text(
                 emptyText,
@@ -283,6 +332,17 @@ private fun FilterSection(
         }
     }
 }
+
+@Composable
+private fun statFilterSectionLabel(section: StatFilterSection): String = stringResource(
+    when (section) {
+        StatFilterSection.BILLABLE -> R.string.stats2_filter_billable
+        StatFilterSection.TASKS -> R.string.stats2_filter_tasks
+        StatFilterSection.TAGS -> R.string.stats2_filter_tags
+        StatFilterSection.CLIENTS -> R.string.stats2_filter_clients
+        StatFilterSection.PROJECTS -> R.string.stats2_filter_projects
+    },
+)
 
 @Composable
 private fun billableLabel(filter: BillableFilter): String = when (filter) {
