@@ -104,8 +104,8 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         waitUntilTagExists(TestTags.TRACK_HISTORY_LIST)
     }
 
-    fun assertStopButtonVisible(): TrackRobot = apply {
-        waitUntilTagExists(TestTags.TRACK_STOP_BUTTON)
+    fun assertStopButtonVisible(timeoutMs: Long = DEFAULT_TIMEOUT_MS): TrackRobot = apply {
+        waitUntilTagExists(TestTags.TRACK_STOP_BUTTON, timeoutMs)
         firstNodeWithTag(TestTags.TRACK_STOP_BUTTON).performScrollTo().assertIsDisplayed()
     }
 
@@ -173,7 +173,10 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
 
     fun closeHistoryFilters(): TrackRobot = apply {
         firstEnabledNodeWithTag(TestTags.TRACK_FILTER_CLOSE_BUTTON).performClick()
-        waitUntilTagIsGone(TestTags.TRACK_FILTER_SEARCH_FIELD)
+        // API 29 can retain the outgoing text-field semantics after the collapsed control is
+        // available. The enabled collapsed control is the authoritative state and is also the
+        // control the next step must interact with.
+        waitUntilEnabledTagExists(TestTags.TRACK_FILTER_OPEN_BUTTON)
     }
 
     fun assertHistorySearch(text: String): TrackRobot = apply {
@@ -259,8 +262,12 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
 
     fun selectSheetTag(tagId: String): TrackRobot = apply {
         val tag = TestTags.trackSheetTagChip(tagId)
+        waitUntilSheetTagExists(TestTags.TRACK_SHEET_TAGS_SELECTOR)
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_TAGS_SELECTOR).performScrollTo()
+        waitUntilSheetTagExists(TestTags.TRACK_SHEET_TAGS_LIST)
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_TAGS_LIST).performScrollToNode(hasTestTag(tag))
         waitUntilSheetTagExists(tag)
-        firstSheetNodeWithTag(tag).performScrollTo().performClick()
+        firstSheetNodeWithTag(tag).assertIsDisplayed().performClick()
     }
 
     fun toggleSheetBillable(): TrackRobot = apply {
