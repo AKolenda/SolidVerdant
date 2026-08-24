@@ -349,6 +349,21 @@ class TimeEntryRepository @Inject constructor(
     }
 
     suspend fun stopEntry(entry: TimeEntry, userId: String) {
+        stopEntryInternal(entry, userId, editedEntry = null, editedTagIds = null)
+    }
+
+    /**
+     * Stop a running entry while committing the metadata currently visible in Track.
+     *
+     * A STOP request carries only timestamps, so edits need their own UPDATE operation. The Room
+     * write and both ordered outbox operations stay in one transaction so refresh or process death
+     * cannot expose a stopped row whose metadata existed only in Compose.
+     */
+    suspend fun stopEntryWithEdits(entry: TimeEntry, userId: String, editedEntry: TimeEntry, tagIds: List<String>) {
+        stopEntryInternal(entry, userId, editedEntry, tagIds)
+    }
+
+    private suspend fun stopEntryInternal(entry: TimeEntry, userId: String, editedEntry: TimeEntry?, editedTagIds: List<String>?) {
         val now = clock.nowMs()
         val end = nowIso()
         database.withTransaction {
@@ -394,8 +409,59 @@ class TimeEntryRepository @Inject constructor(
                 return@withTransaction
             }
             val base = captureBaseSnapshot(targetId)
+            val currentTagIds = timeEntryDao.tagIdsFor(targetId)
+            val contentChanged = editedEntry != null &&
+                (
+                    current == null ||
+                        current.description.orEmpty() != editedEntry.description.orEmpty() ||
+                        current.projectId != editedEntry.projectId ||
+                        current.taskId != editedEntry.taskId ||
+                        current.billable != editedEntry.billable ||
+                        current.type != editedEntry.type ||
+                        currentTagIds.toSet() != editedTagIds.orEmpty().toSet()
+                    )
+            val content = if (contentChanged) {
+                val updated = (current ?: entry.toEntity(updatedAt = now, syncState = SyncState.PENDING)).copy(
+                    id = targetId,
+                    description = editedEntry.description,
+                    projectId = editedEntry.projectId,
+                    taskId = editedEntry.taskId,
+                    billable = editedEntry.billable,
+                    type = editedEntry.type,
+                    updatedAt = now,
+                    syncState = SyncState.PENDING,
+                )
+                timeEntryDao.upsert(updated)
+                timeEntryDao.replaceTagRefs(targetId, editedTagIds.orEmpty())
+                outboxDao.insert(
+                    OutboxEntity(
+                        opType = OutboxOpType.UPDATE,
+                        organizationId = targetOrganizationId,
+                        timeEntryId = targetId,
+                        createdAtMs = now,
+                        clientId = newClientId(),
+                        payloadJson = json.encodeToString(
+                            UpdatePayload(
+                                updated.userId,
+                                targetStart,
+                                end = null,
+                                updated.description,
+                                updated.projectId,
+                                updated.taskId,
+                                updated.billable,
+                                editedTagIds.orEmpty(),
+                                type = updated.type,
+                            ),
+                        ),
+                        baseSnapshotJson = base,
+                    ),
+                )
+                updated
+            } else {
+                current
+            }
             val duration = completedDurationSeconds(targetStart, end)
-            val stopped = current?.copy(end = end, duration = duration, updatedAt = now, syncState = SyncState.PENDING)
+            val stopped = content?.copy(end = end, duration = duration, updatedAt = now, syncState = SyncState.PENDING)
                 ?: entry.copy(end = end, duration = duration).toEntity(updatedAt = now, syncState = SyncState.PENDING)
             timeEntryDao.upsert(stopped)
             outboxDao.insert(

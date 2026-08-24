@@ -340,7 +340,37 @@ class SyncWorker @AssistedInject constructor(
                 ),
             )
         } else {
-            persistSynced(server)
+            val unresolvedMetadata = outboxDao.getUpdatesBeforeStop(op.timeEntryId, op.id)
+            if (current != null && unresolvedMetadata.isNotEmpty()) {
+                // A failed metadata UPDATE remains authoritative locally even if STOP succeeds.
+                // Advance its interval/base so retry cannot restart the timer and a pull cannot
+                // erase the user's description or catalogue selections.
+                val stoppedBase = json.encodeToString(server.toConflictSnapshot())
+                database.withTransaction {
+                    unresolvedMetadata.forEach { updateOperation ->
+                        val updatePayload = json.decodeFromString<UpdatePayload>(updateOperation.payloadJson)
+                        outboxDao.update(
+                            updateOperation.copy(
+                                payloadJson = json.encodeToString(
+                                    updatePayload.copy(start = server.start, end = server.end),
+                                ),
+                                baseSnapshotJson = stoppedBase,
+                            ),
+                        )
+                    }
+                    timeEntryDao.upsert(
+                        current.copy(
+                            start = server.start,
+                            end = server.end,
+                            duration = server.duration,
+                            updatedAt = clock.nowMs(),
+                            syncState = SyncState.PENDING,
+                        ),
+                    )
+                }
+            } else {
+                persistSynced(server)
+            }
         }
         return Outcome.Success()
     }

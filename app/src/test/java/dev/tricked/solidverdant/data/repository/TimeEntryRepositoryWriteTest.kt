@@ -19,6 +19,7 @@ import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.data.remote.FakeRemoteDataSource
 import dev.tricked.solidverdant.sync.ConflictSnapshot
 import dev.tricked.solidverdant.sync.CreatePayload
+import dev.tricked.solidverdant.sync.StopPayload
 import dev.tricked.solidverdant.sync.UpdatePayload
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.flow.first
@@ -522,6 +523,40 @@ class TimeEntryRepositoryWriteTest {
         val stop = db.outboxDao().peekAll().single()
         assertEquals(OutboxOpType.STOP, stop.opType)
         assertEquals(reconciled.id, stop.timeEntryId)
+    }
+
+    @Test fun stop_with_unsaved_fields_persists_metadata_and_orders_update_before_stop() = runTest {
+        val running = repo.startEntry("org1", "member", "u", null, null, "", emptyList())
+        val edited = running.copy(
+            description = "prep",
+            projectId = "project-1",
+            taskId = "task-1",
+            billable = true,
+            tags = listOf(Tag("tag-1")),
+        )
+
+        repo.stopEntryWithEdits(running, "u", edited, listOf("tag-1"))
+
+        val stored = db.timeEntryDao().getById(running.id)
+        assertEquals("prep", stored?.description)
+        assertEquals("project-1", stored?.projectId)
+        assertEquals("task-1", stored?.taskId)
+        assertEquals(true, stored?.billable)
+        assertTrue(stored?.end != null)
+        assertEquals(listOf("tag-1"), db.timeEntryDao().tagIdsFor(running.id))
+
+        val operations = db.outboxDao().peekAll()
+        assertEquals(
+            listOf(OutboxOpType.START, OutboxOpType.UPDATE, OutboxOpType.STOP),
+            operations.map { it.opType },
+        )
+        val update = testJson.decodeFromString<UpdatePayload>(operations[1].payloadJson)
+        assertEquals("prep", update.description)
+        assertEquals("project-1", update.projectId)
+        assertEquals("task-1", update.taskId)
+        val stop = testJson.decodeFromString<StopPayload>(operations[2].payloadJson)
+        assertEquals(running.start, stop.start)
+        assertTrue(stop.end.isNotBlank())
     }
 
     @Test fun repeated_stop_is_idempotent_and_preserves_the_first_end_time() = runTest {
