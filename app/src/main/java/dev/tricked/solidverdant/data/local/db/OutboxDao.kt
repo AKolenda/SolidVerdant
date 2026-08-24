@@ -105,6 +105,17 @@ interface OutboxDao {
     suspend fun countNewerContentMutations(entryId: String, afterId: Long): Int
 
     /**
+     * Metadata writes attempted before a STOP but still present because they failed or will retry.
+     * Once STOP succeeds, their payload/base must be advanced to the authoritative stopped
+     * interval so retrying the metadata cannot restart the timer and a pull cannot erase it.
+     */
+    @Query(
+        "SELECT * FROM outbox WHERE timeEntryId = :entryId AND id < :stopId " +
+            "AND opType = 'UPDATE' ORDER BY id ASC",
+    )
+    suspend fun getUpdatesBeforeStop(entryId: String, stopId: Long): List<OutboxEntity>
+
+    /**
      * Discard every queued operation for an entry that never reached the server (still on its
      * `local-` id). Used when deleting a never-synced entry (SV-008): the entry's own
      * START/CREATE, plus any dependent STOP/UPDATE, must be cancelled outright rather than

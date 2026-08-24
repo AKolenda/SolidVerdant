@@ -1536,8 +1536,22 @@ class TrackingViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                // Optimistic local stop + outbox enqueue. The collector clears the active entry.
-                timeEntryRepository.stopEntry(currentEntry, currentEntry.userId)
+                // Commit the editable running-entry fields atomically with the stop. Otherwise a
+                // fast Stop can leave metadata only in UI state while timestamp sync wins.
+                val editingTags = _uiState.value.editingTags
+                val editedEntry = currentEntry.copy(
+                    description = _uiState.value.editingDescription,
+                    projectId = _uiState.value.editingProjectId,
+                    taskId = _uiState.value.editingTaskId,
+                    billable = _uiState.value.editingBillable,
+                    tags = editingTags.map(::Tag),
+                )
+                timeEntryRepository.stopEntryWithEdits(
+                    entry = currentEntry,
+                    userId = currentEntry.userId,
+                    editedEntry = editedEntry,
+                    tagIds = editingTags,
+                )
                 syncTrigger.requestSync()
 
                 val currentState = _uiState.value

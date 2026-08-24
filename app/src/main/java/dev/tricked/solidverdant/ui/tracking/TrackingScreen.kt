@@ -2971,7 +2971,7 @@ private fun CompactTimeEntryRow(
 @Suppress("LongParameterList", "LongMethod", "CyclomaticComplexMethod")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun TimeEntryFormSheet(
+internal fun TimeEntryFormSheet(
     entry: TimeEntry?, // null = create mode
     zone: ZoneId, // account temporal-policy zone for the new-entry fallback start
     suggestedStart: ZonedDateTime?, // create mode: pre-filled start (end of last entry / now-1h)
@@ -3054,7 +3054,11 @@ private fun TimeEntryFormSheet(
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        // Child date/time/split pickers use separate dialog windows. Do not let the parent sheet
+        // interpret their focus change as a request to close the whole editor.
+        onDismissRequest = {
+            if (canDismissTimeEntryFormSheet(editingTime != null, editingDate != null, showSplitPicker)) onDismiss()
+        },
         modifier = Modifier.testTag(TrackingTestTags.SHEET),
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
@@ -3513,6 +3517,12 @@ private fun EntryTimePickerDialog(
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
     )
 }
+
+internal fun canDismissTimeEntryFormSheet(
+    hasTimePicker: Boolean,
+    hasDatePicker: Boolean,
+    hasSplitPicker: Boolean,
+): Boolean = !hasTimePicker && !hasDatePicker && !hasSplitPicker
 
 /**
  * About section with version info, verification details, and Obtainium button
