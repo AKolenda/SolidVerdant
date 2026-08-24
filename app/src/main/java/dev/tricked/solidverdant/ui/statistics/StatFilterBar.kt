@@ -27,6 +27,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -40,15 +41,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.ui.theme.Dimens
+
+internal object StatisticsFilterTestTags {
+    const val OPEN = "stats_filter_open"
+    const val PROJECT_SEARCH = "stats_project_filter_search"
+    fun projectOption(id: String) = "stats_project_filter_$id"
+    fun section(section: StatFilterSection) = "stats_filter_section_${section.name.lowercase()}"
+}
 
 internal enum class StatFilterSection { BILLABLE, TASKS, TAGS, CLIENTS, PROJECTS }
 
@@ -60,13 +70,14 @@ internal val statFilterSectionOrder = listOf(
     StatFilterSection.PROJECTS,
 )
 
-internal fun filterProjectOptions(
-    options: List<Pair<String, String>>,
-    query: String,
-): List<Pair<String, String>> {
+internal fun filterProjectOptions(options: List<Pair<String, String>>, query: String): List<Pair<String, String>> {
     val normalized = query.trim()
-    return if (normalized.isEmpty()) options else options.filter { (_, name) ->
-        name.contains(normalized, ignoreCase = true)
+    return if (normalized.isEmpty()) {
+        options
+    } else {
+        options.filter { (_, name) ->
+            name.contains(normalized, ignoreCase = true)
+        }
     }
 }
 
@@ -92,7 +103,7 @@ fun StatFilterBar(
         ) {
             FilledTonalButton(
                 onClick = { showSheet = true },
-                modifier = Modifier.heightIn(min = Dimens.MinTouchTarget),
+                modifier = Modifier.heightIn(min = Dimens.MinTouchTarget).testTag(StatisticsFilterTestTags.OPEN),
             ) {
                 Icon(
                     Icons.Default.FilterList,
@@ -201,8 +212,12 @@ private fun StatFilterSheet(
     onReset: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var selectedSection by remember { mutableStateOf(StatFilterSection.BILLABLE) }
-    var projectQuery by remember { mutableStateOf("") }
+    var selectedSection by rememberSaveable { mutableStateOf(StatFilterSection.BILLABLE) }
+    var projectQuery by rememberSaveable { mutableStateOf("") }
+    val filteredProjects = remember(catalog.projects, projectQuery) {
+        val query = projectQuery.trim()
+        if (query.isEmpty()) catalog.projects else catalog.projects.filter { it.name.contains(query, ignoreCase = true) }
+    }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -235,6 +250,7 @@ private fun StatFilterSheet(
                         selected = selectedSection == section,
                         onClick = { selectedSection = section },
                         label = { Text(statFilterSectionLabel(section)) },
+                        modifier = Modifier.testTag(StatisticsFilterTestTags.section(section)),
                     )
                 }
             }
@@ -282,9 +298,18 @@ private fun StatFilterSheet(
                     OutlinedTextField(
                         value = projectQuery,
                         onValueChange = { projectQuery = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.search_placeholder)) },
+                        modifier = Modifier.fillMaxWidth().testTag(StatisticsFilterTestTags.PROJECT_SEARCH),
+                        label = { Text(stringResource(R.string.stats2_search_projects)) },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        trailingIcon = if (projectQuery.isNotEmpty()) {
+                            {
+                                IconButton(onClick = { projectQuery = "" }) {
+                                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_search))
+                                }
+                            }
+                        } else {
+                            null
+                        },
                         singleLine = true,
                     )
                     val emptyProjectsText = if (projectQuery.isBlank()) {
@@ -294,9 +319,10 @@ private fun StatFilterSheet(
                     }
                     FilterSection(
                         emptyText = stringResource(emptyProjectsText),
-                        options = filterProjectOptions(catalog.projects.map { it.id to it.name }, projectQuery),
+                        options = filteredProjects.map { it.id to it.name },
                         selected = filters.projectIds,
                         onToggle = { onFiltersChange(filters.toggleProject(it)) },
+                        optionTestTag = StatisticsFilterTestTags::projectOption,
                     )
                 }
             }
@@ -311,6 +337,7 @@ private fun FilterSection(
     options: List<Pair<String, String>>,
     selected: Set<String>,
     onToggle: (String) -> Unit,
+    optionTestTag: ((String) -> String)? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Dimens.Space4)) {
         if (options.isEmpty()) {
@@ -326,6 +353,7 @@ private fun FilterSection(
                         selected = id in selected,
                         onClick = { onToggle(id) },
                         label = { Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        modifier = optionTestTag?.let { Modifier.testTag(it(id)) } ?: Modifier,
                     )
                 }
             }
