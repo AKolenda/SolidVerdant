@@ -16,11 +16,17 @@ import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.sync.SyncTrigger
 import dev.tricked.solidverdant.util.Clock
+import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
+import io.mockk.spyk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -322,15 +328,35 @@ class TrackingViewModelMutationTest {
         dispose(viewModel)
     }
 
-    private fun viewModel(repository: TimeEntryRepository): TrackingViewModel = TrackingViewModel(
-        authRepository = mockk<AuthRepository>(relaxed = true),
-        settingsDataStore = settings,
-        timeEntryRepository = repository,
-        syncTrigger = SyncTrigger {},
-        temporalPolicyProvider = TemporalPolicyProvider(settings),
-        context = context,
-        clock = clock,
-    ).also { viewModels += it }
+    private suspend fun viewModel(repository: TimeEntryRepository): TrackingViewModel {
+        val appTheme = settings.appTheme.first()
+        val optimisticRefresh = settings.optimisticRefresh.first()
+        val liveUpdateEnabled = settings.liveUpdateEnabled.first()
+        val autoClearEntryFields = settings.autoClearEntryFieldsAfterStop.first()
+        val clearDescription = settings.clearDescriptionAfterStop.first()
+        val longTimerHours = settings.longTimerHours.first()
+        val immediateSettings = spyk(settings)
+        every { immediateSettings.appTheme } returns flowOf(appTheme)
+        every { immediateSettings.optimisticRefresh } returns flowOf(optimisticRefresh)
+        every { immediateSettings.liveUpdateEnabled } returns flowOf(liveUpdateEnabled)
+        every { immediateSettings.autoClearEntryFieldsAfterStop } returns flowOf(autoClearEntryFields)
+        every { immediateSettings.clearDescriptionAfterStop } returns flowOf(clearDescription)
+        every { immediateSettings.longTimerHours } returns flowOf(longTimerHours)
+        coEvery { immediateSettings.setWidgetTrackingState(any(), any(), any(), any(), any()) } just Runs
+        every { immediateSettings.alwaysShowNotification } returns flowOf(false)
+        every { immediateSettings.cacheContinueEntry(any()) } just Runs
+        every { immediateSettings.cacheTrackingState(any()) } just Runs
+        every { immediateSettings.cacheTrackingDraft(any()) } just Runs
+        return TrackingViewModel(
+            authRepository = mockk<AuthRepository>(relaxed = true),
+            settingsDataStore = immediateSettings,
+            timeEntryRepository = repository,
+            syncTrigger = SyncTrigger {},
+            temporalPolicyProvider = TemporalPolicyProvider(immediateSettings),
+            context = context,
+            clock = clock,
+        ).also { viewModels += it }
+    }
 
     private suspend fun dispose(viewModel: TrackingViewModel) {
         val scopeJob = viewModel.cancelScopeForTest()
