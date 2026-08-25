@@ -21,6 +21,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.just
 import io.mockk.mockk
+import io.mockk.spyk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestCoroutineScheduler
@@ -257,7 +258,10 @@ class TrackingViewModelMutationTest {
         )
         val repository = mockk<TimeEntryRepository>(relaxed = true)
         coEvery { repository.startEntry(any(), any(), any(), any(), any(), any(), any()) } returns entry
-        val viewModel = viewModel(repository)
+        coEvery { repository.stopEntryWithEdits(any(), any(), any(), any()) } just Runs
+        val immediateSettings = spyk(settings)
+        coEvery { immediateSettings.setWidgetTrackingState(any(), any(), any(), any(), any()) } just Runs
+        val viewModel = viewModel(repository, immediateSettings)
 
         viewModel.startTimeEntry("org", "member", "user")
         dispatcher.scheduler.runCurrent()
@@ -356,15 +360,16 @@ class TrackingViewModelMutationTest {
         dispose(viewModel)
     }
 
-    private fun viewModel(repository: TimeEntryRepository): TrackingViewModel = TrackingViewModel(
-        authRepository = mockk<AuthRepository>(relaxed = true),
-        settingsDataStore = settings,
-        timeEntryRepository = repository,
-        syncTrigger = SyncTrigger {},
-        temporalPolicyProvider = TemporalPolicyProvider(settings),
-        context = context,
-        clock = clock,
-    ).also { viewModels += it }
+    private fun viewModel(repository: TimeEntryRepository, settingsDataStore: SettingsDataStore = settings): TrackingViewModel =
+        TrackingViewModel(
+            authRepository = mockk<AuthRepository>(relaxed = true),
+            settingsDataStore = settingsDataStore,
+            timeEntryRepository = repository,
+            syncTrigger = SyncTrigger {},
+            temporalPolicyProvider = TemporalPolicyProvider(settingsDataStore),
+            context = context,
+            clock = clock,
+        ).also { viewModels += it }
 
     private suspend fun dispose(viewModel: TrackingViewModel) {
         val scopeJob = viewModel.cancelScopeForTest()
