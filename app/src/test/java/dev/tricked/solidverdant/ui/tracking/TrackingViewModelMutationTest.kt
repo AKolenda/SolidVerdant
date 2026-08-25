@@ -16,8 +16,10 @@ import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.sync.SyncTrigger
 import dev.tricked.solidverdant.util.Clock
+import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.just
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -93,7 +95,7 @@ class TrackingViewModelMutationTest {
             description = "work",
         )
         val repository = mockk<TimeEntryRepository>(relaxed = true)
-        coEvery { repository.stopEntry(any(), any()) } throws IOException("network disappeared")
+        coEvery { repository.stopEntryWithEdits(any(), any(), any(), any()) } throws IOException("network disappeared")
         settings.cacheTrackingState(
             SettingsDataStore.CachedTrackingState(
                 organizationId = "org",
@@ -121,6 +123,7 @@ class TrackingViewModelMutationTest {
         settings.setClearDescriptionAfterStop(false)
         val active = activeEntry()
         val repository = mockk<TimeEntryRepository>(relaxed = true)
+        coEvery { repository.stopEntryWithEdits(any(), any(), any(), any()) } just Runs
         cacheActiveEntry(active)
         val viewModel = viewModel(repository)
 
@@ -131,7 +134,7 @@ class TrackingViewModelMutationTest {
         assertEquals("project-1", viewModel.uiState.value.editingProjectId)
         assertEquals("task-1", viewModel.uiState.value.editingTaskId)
         assertFalse(viewModel.uiState.value.editingBillable)
-        coVerify(exactly = 1) { repository.stopEntry(active, "user") }
+        coVerify(exactly = 1) { repository.stopEntryWithEdits(active, "user", any(), any()) }
         dispose(viewModel)
     }
 
@@ -141,6 +144,7 @@ class TrackingViewModelMutationTest {
         settings.setClearDescriptionAfterStop(true)
         val active = activeEntry()
         val repository = mockk<TimeEntryRepository>(relaxed = true)
+        coEvery { repository.stopEntryWithEdits(any(), any(), any(), any()) } just Runs
         cacheActiveEntry(active)
         val viewModel = viewModel(repository)
 
@@ -150,7 +154,7 @@ class TrackingViewModelMutationTest {
         assertEquals("", viewModel.uiState.value.editingDescription)
         assertEquals("project-1", viewModel.uiState.value.editingProjectId)
         assertEquals("task-1", viewModel.uiState.value.editingTaskId)
-        coVerify(exactly = 1) { repository.stopEntry(active, "user") }
+        coVerify(exactly = 1) { repository.stopEntryWithEdits(active, "user", any(), any()) }
         dispose(viewModel)
     }
 
@@ -159,6 +163,7 @@ class TrackingViewModelMutationTest {
         settings.setAutoClearEntryFieldsAfterStop(true)
         val active = activeEntry()
         val repository = mockk<TimeEntryRepository>(relaxed = true)
+        coEvery { repository.stopEntryWithEdits(any(), any(), any(), any()) } just Runs
         cacheActiveEntry(active)
         val viewModel = viewModel(repository)
 
@@ -175,6 +180,7 @@ class TrackingViewModelMutationTest {
     fun reset_clears_only_reusable_entry_fields() = runTest(dispatcher.scheduler) {
         settings.setAutoClearEntryFieldsAfterStop(false)
         val repository = mockk<TimeEntryRepository>(relaxed = true)
+        coEvery { repository.stopEntryWithEdits(any(), any(), any(), any()) } just Runs
         cacheActiveEntry(activeEntry())
         val viewModel = viewModel(repository)
         viewModel.stopTimeEntry()
@@ -252,7 +258,7 @@ class TrackingViewModelMutationTest {
             description = "work",
         )
         val repository = mockk<TimeEntryRepository>(relaxed = true)
-        coEvery { repository.stopEntry(any(), any()) } coAnswers {
+        coEvery { repository.stopEntryWithEdits(any(), any(), any(), any()) } coAnswers {
             stopped.complete(Unit)
             release.await()
         }
@@ -273,7 +279,7 @@ class TrackingViewModelMutationTest {
         assertTrue(stopped.isCompleted)
         viewModel.stopTimeEntry()
 
-        coVerify(exactly = 1) { repository.stopEntry(any(), any()) }
+        coVerify(exactly = 1) { repository.stopEntryWithEdits(any(), any(), any(), any()) }
         release.complete(Unit)
         dispatcher.scheduler.runCurrent()
         dispose(viewModel)

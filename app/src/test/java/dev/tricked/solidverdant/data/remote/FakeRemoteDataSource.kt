@@ -26,6 +26,7 @@ class FakeRemoteDataSource(
     var failNextWrite: Boolean = false,
     /** When set, every write fails with this throwable (use a non-IOException to exercise FAIL). */
     var writeError: Throwable? = null,
+    var updateError: Throwable? = null,
     var startResult: (TimeEntry) -> TimeEntry = { it },
     var stopResult: (TimeEntry) -> TimeEntry = { it },
     var updateResult: (TimeEntry) -> TimeEntry = { it },
@@ -118,7 +119,8 @@ class FakeRemoteDataSource(
                 )
             }
     override suspend fun updateTimeEntry(organizationId: String, timeEntry: TimeEntry, tags: List<String>) =
-        writeError?.let { Result.failure(it) }
+        updateError?.let { Result.failure(it) }
+            ?: writeError?.let { Result.failure(it) }
             ?: if (failNextWrite) Result.failure(java.io.IOException("offline")) else Result.success(updateResult(timeEntry))
     override suspend fun deleteTimeEntry(organizationId: String, timeEntryId: String): Result<Unit> {
         writeError?.let { return Result.failure(it) }

@@ -724,6 +724,107 @@ class SyncWorkerTest {
         assertTrue(db.outboxDao().peekAll().isEmpty())
     }
 
+    @Test fun rejected_update_then_successful_stop_preserves_metadata_through_refresh() = runTest {
+        val serverActive = TimeEntry(
+            id = "server-1",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2026-08-24T08:00:00Z",
+            end = null,
+            description = null,
+        )
+        val localStopped = serverActive.copy(
+            end = "2026-08-24T09:00:00Z",
+            duration = 3_600,
+            description = "prep",
+            projectId = "project-1",
+            taskId = "task-1",
+        )
+        db.timeEntryDao().upsert(localStopped.toEntity(updatedAt = 2L, syncState = SyncState.PENDING))
+        val activeBase = json.encodeToString(
+            ConflictSnapshot.of(
+                serverActive.start,
+                serverActive.end,
+                serverActive.description,
+                serverActive.projectId,
+                serverActive.taskId,
+                serverActive.billable,
+                emptyList(),
+            ),
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = serverActive.id,
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(
+                    UpdatePayload(
+                        "u1",
+                        serverActive.start,
+                        null,
+                        localStopped.description,
+                        localStopped.projectId,
+                        localStopped.taskId,
+                        false,
+                        emptyList(),
+                    ),
+                ),
+                baseSnapshotJson = activeBase,
+            ),
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.STOP,
+                organizationId = "org1",
+                timeEntryId = serverActive.id,
+                createdAtMs = 2L,
+                payloadJson = json.encodeToString(
+                    StopPayload("u1", serverActive.start, localStopped.end!!),
+                ),
+                baseSnapshotJson = activeBase,
+            ),
+        )
+        remote.entries = listOf(serverActive)
+        remote.memberships = listOf(Membership("m1", "member", Organization("org1", "Org", "USD")))
+        remote.updateError = IllegalStateException("metadata rejected")
+        remote.stopResult = { request -> serverActive.copy(end = request.end, duration = 3_600) }
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        val failedUpdate = db.outboxDao().peekAll().single()
+        assertEquals(OutboxOpType.UPDATE, failedUpdate.opType)
+        assertTrue(failedUpdate.deadLettered)
+        val retryPayload = json.decodeFromString<UpdatePayload>(failedUpdate.payloadJson)
+        assertEquals(localStopped.end, retryPayload.end)
+        val afterStop = db.timeEntryDao().getById(serverActive.id)
+        assertEquals(SyncState.PENDING, afterStop?.syncState)
+        assertEquals("prep", afterStop?.description)
+        assertEquals("project-1", afterStop?.projectId)
+        assertEquals("task-1", afterStop?.taskId)
+
+        remote.entries = listOf(serverActive.copy(end = localStopped.end, duration = 3_600))
+        val repository = TimeEntryRepository(
+            db.timeEntryDao(),
+            db.catalogDao(),
+            db.outboxDao(),
+            db.syncMetaDao(),
+            remote,
+            clock,
+            json,
+            db,
+        )
+        assertTrue(repository.refreshAll("org1", "m1").isSuccess)
+
+        val refreshed = db.timeEntryDao().getById(serverActive.id)
+        assertEquals(SyncState.PENDING, refreshed?.syncState)
+        assertEquals("prep", refreshed?.description)
+        assertEquals("project-1", refreshed?.projectId)
+        assertEquals("task-1", refreshed?.taskId)
+        assertEquals(localStopped.end, refreshed?.end)
+        assertTrue(db.outboxDao().peekAll().single().deadLettered)
+    }
+
     @Test fun update_conflict_preserves_mine_and_does_not_write_server() = runTest {
         val base = TimeEntry(
             id = "server-1",
