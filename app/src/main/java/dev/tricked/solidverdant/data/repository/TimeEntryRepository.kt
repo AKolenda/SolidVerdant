@@ -226,7 +226,10 @@ class TimeEntryRepository @Inject constructor(
         queued + conflicts.filterNot { it.id in queuedIds }.map { conflict ->
             SyncOperation(
                 entryId = conflict.id,
-                type = OutboxOpType.UPDATE,
+                // The outbox operation is removed when a conflict is captured, but a pending
+                // local delete remains encoded on the Room row. Preserve that intent so Sync &
+                // recovery does not mislabel a guarded deletion as an ordinary edit.
+                type = if (conflict.pendingDelete) OutboxOpType.DELETE else OutboxOpType.UPDATE,
                 status = EntrySyncStatus.CONFLICT,
                 attemptCount = 0,
                 error = null,

@@ -205,7 +205,7 @@
     <string name="no_time_entries">No time entries yet</string>
     <string name="edit">Edit</string>
     <string name="delete">Delete</string>
-    <string name="entry_deleted">Entry deleted</string>
+    <string name="entry_deleted">Deletion queued</string>
     <string name="undo">Undo</string>
     <string name="undo_delete_too_late">This entry was already deleted on the server and can no longer be restored automatically.</string>
     <string name="no_description">No description</string>
