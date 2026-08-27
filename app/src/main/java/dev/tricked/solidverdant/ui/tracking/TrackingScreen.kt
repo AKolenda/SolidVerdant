@@ -99,7 +99,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
@@ -162,7 +161,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
@@ -306,7 +304,6 @@ fun TrackingScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var longTimerSnoozedUntil by remember { mutableLongStateOf(0L) }
     val context = LocalContext.current
-    val compactTopBar = LocalConfiguration.current.screenWidthDp < WIDE_LAYOUT_MIN_WIDTH_DP
     val liveUpdatesSupported = Build.VERSION.SDK_INT >= LIVE_UPDATES_API_LEVEL
     var systemLiveUpdatesEnabled by remember(context, liveUpdatesSupported) {
         mutableStateOf(canPostPromotedNotifications(context))
@@ -796,88 +793,75 @@ fun TrackingScreen(
             ),
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
-                val title: @Composable () -> Unit = {
-                    TrackingAppBarTitle(
-                        userName = user?.name,
-                        organizationName = currentMembership?.organization?.name,
-                        canSwitchOrganization = memberships.size > 1 &&
-                            !uiState.isTracking && !uiState.isPaused,
-                        memberships = memberships,
-                        currentMembershipId = currentMembership?.id,
-                        onMembershipChange = onMembershipChange,
-                        showUserName = !compactTopBar,
-                    )
-                }
-                val navigationIcon: @Composable () -> Unit = {
-                    IconButton(
-                        onClick = { scope.launch { drawerState.open() } },
-                        modifier = Modifier.testTag(TrackingTestTags.SETTINGS_BUTTON),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Menu,
-                            contentDescription = stringResource(R.string.settings_menu)
+                TopAppBar(
+                    title = {
+                        TrackingAppBarTitle(
+                            userName = user?.name,
+                            organizationName = currentMembership?.organization?.name,
+                            canSwitchOrganization = memberships.size > 1 &&
+                                !uiState.isTracking && !uiState.isPaused,
+                            memberships = memberships,
+                            currentMembershipId = currentMembership?.id,
+                            onMembershipChange = onMembershipChange,
                         )
-                    }
-                }
-                val actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
-                    IconButton(
-                        onClick = { showAddDialog = true },
-                        modifier = Modifier.testTag(TrackingTestTags.ADD_ENTRY_BUTTON),
-                    ) {
-                        Icon(
-                            Icons.Default.Add,
-                            contentDescription = stringResource(R.string.add_time_entry)
-                        )
-                    }
-                    // Notification permission button (Android 13+) - only show if not granted
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                        !NotificationPermissionHelper.hasNotificationPermission(context)
-                    ) {
+                    },
+                    navigationIcon = {
                         IconButton(
-                            onClick = {
-                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            }
+                            onClick = { scope.launch { drawerState.open() } },
+                            modifier = Modifier.testTag(TrackingTestTags.SETTINGS_BUTTON),
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Notifications,
-                                contentDescription = stringResource(R.string.enable_notifications)
+                                imageVector = Icons.Default.Menu,
+                                contentDescription = stringResource(R.string.settings_menu)
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(
+                            onClick = { showAddDialog = true },
+                            modifier = Modifier.testTag(TrackingTestTags.ADD_ENTRY_BUTTON),
+                        ) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = stringResource(R.string.add_time_entry)
+                            )
+                        }
+                        // Notification permission button (Android 13+) - only show if not granted
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                            !NotificationPermissionHelper.hasNotificationPermission(context)
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Notifications,
+                                    contentDescription = stringResource(R.string.enable_notifications)
+                                )
+                            }
+                        }
+                        val syncTransition = rememberInfiniteTransition(label = "sync")
+                        val syncRotation by syncTransition.animateFloat(
+                            initialValue = 0f,
+                            targetValue = if (routineSyncInProgress) FULL_ROTATION_DEGREES else 0f,
+                            animationSpec = infiniteRepeatable(tween(SYNC_ROTATION_DURATION_MS), RepeatMode.Restart),
+                            label = "sync rotation"
+                        )
+                        IconButton(
+                            onClick = onRefresh,
+                            modifier = Modifier.testTag(TrackingTestTags.REFRESH_BUTTON),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = stringResource(
+                                    if (routineSyncInProgress) R.string.syncing else R.string.refresh,
+                                ),
+                                modifier = Modifier.rotate(syncRotation)
                             )
                         }
                     }
-                    val syncTransition = rememberInfiniteTransition(label = "sync")
-                    val syncRotation by syncTransition.animateFloat(
-                        initialValue = 0f,
-                        targetValue = if (routineSyncInProgress) FULL_ROTATION_DEGREES else 0f,
-                        animationSpec = infiniteRepeatable(tween(SYNC_ROTATION_DURATION_MS), RepeatMode.Restart),
-                        label = "sync rotation"
-                    )
-                    IconButton(
-                        onClick = onRefresh,
-                        modifier = Modifier.testTag(TrackingTestTags.REFRESH_BUTTON),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = stringResource(
-                                if (routineSyncInProgress) R.string.syncing else R.string.refresh,
-                            ),
-                            modifier = Modifier.rotate(syncRotation)
-                        )
-                    }
-                }
-
-                if (compactTopBar) {
-                    CenterAlignedTopAppBar(
-                        title = title,
-                        navigationIcon = navigationIcon,
-                        actions = actions,
-                    )
-                } else {
-                    TopAppBar(
-                        title = title,
-                        navigationIcon = navigationIcon,
-                        actions = actions,
-                    )
-                }
+                )
             },
             containerColor = MaterialTheme.colorScheme.surface
         ) { paddingValues ->
@@ -973,7 +957,7 @@ fun TrackingScreen(
                 }
 
                 BoxWithConstraints(Modifier.fillMaxSize()) {
-                    val wideLayout = maxWidth >= WIDE_LAYOUT_MIN_WIDTH_DP.dp
+                    val wideLayout = maxWidth >= 840.dp
                     val primaryContent: LazyListScope.() -> Unit = {
                         item { Spacer(Modifier.height(8.dp)) }
                         item {
@@ -2707,9 +2691,8 @@ private fun CollapsibleTimeEntryGroup(
 }
 
 /**
- * Track top-app-bar title: the "Time tracking" heading plus the active organization. Wide layouts
- * can also show the signed-in user's name; compact layouts keep that identity in the navigation
- * drawer so the organization selector can remain centered.
+ * Track top-app-bar title: the "Time tracking" heading plus, on subordinate lines, the signed-in
+ * user's name and their active organization.
  *
  * When [userName] and [organizationName] are identical (trimmed, case-sensitive) the two would read
  * as duplicated text / a rendering glitch, so we collapse them into a single line.
@@ -2727,20 +2710,19 @@ internal fun TrackingAppBarTitle(
     memberships: List<Membership>,
     currentMembershipId: String?,
     onMembershipChange: (Membership) -> Unit,
-    showUserName: Boolean = true,
 ) {
     var organizationMenuExpanded by remember { mutableStateOf(false) }
     val collapsed = userName != null && organizationName != null &&
         userName.trim() == organizationName.trim()
 
-    Column(horizontalAlignment = if (showUserName) Alignment.Start else Alignment.CenterHorizontally) {
+    Column {
         Text(
             stringResource(R.string.time_tracking),
             fontWeight = FontWeight.SemiBold
         )
 
         // When collapsed, the org line represents both user and org, so skip the separate user line.
-        if (showUserName && userName != null && !collapsed) {
+        if (userName != null && !collapsed) {
             Text(
                 text = userName,
                 style = MaterialTheme.typography.bodySmall,
@@ -3682,7 +3664,6 @@ private const val FILTER_EXPAND_DURATION_MS = 220
 private const val FILTER_EXIT_DURATION_MS = 120
 private const val FILTER_COLLAPSE_DURATION_MS = 180
 private const val SYNC_ROTATION_DURATION_MS = 900
-private const val WIDE_LAYOUT_MIN_WIDTH_DP = 840
 private const val ALTERNATING_ROW_COUNT = 2
 private const val GHOST_PRIMARY_WIDTH = 0.62f
 private const val GHOST_SECONDARY_WIDTH = 0.45f
