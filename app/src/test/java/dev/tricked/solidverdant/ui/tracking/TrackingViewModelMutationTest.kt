@@ -19,11 +19,13 @@ import dev.tricked.solidverdant.util.Clock
 import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.spyk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -121,13 +123,11 @@ class TrackingViewModelMutationTest {
 
     @Test
     fun stop_keeps_description_project_and_task_when_auto_clear_is_disabled() = runTest(dispatcher.scheduler) {
-        settings.setAutoClearEntryFieldsAfterStop(false)
-        settings.setClearDescriptionAfterStop(false)
         val active = activeEntry()
         val repository = mockk<TimeEntryRepository>(relaxed = true)
         coEvery { repository.stopEntryWithEdits(any(), any(), any(), any()) } just Runs
         cacheActiveEntry(active)
-        val viewModel = viewModel(repository)
+        val viewModel = viewModel(repository, retentionSettings(autoClear = false, clearDescription = false))
 
         viewModel.stopTimeEntry()
         dispatcher.scheduler.runCurrent()
@@ -142,13 +142,11 @@ class TrackingViewModelMutationTest {
 
     @Test
     fun stop_clears_only_description_when_description_clear_is_enabled() = runTest(dispatcher.scheduler) {
-        settings.setAutoClearEntryFieldsAfterStop(false)
-        settings.setClearDescriptionAfterStop(true)
         val active = activeEntry()
         val repository = mockk<TimeEntryRepository>(relaxed = true)
         coEvery { repository.stopEntryWithEdits(any(), any(), any(), any()) } just Runs
         cacheActiveEntry(active)
-        val viewModel = viewModel(repository)
+        val viewModel = viewModel(repository, retentionSettings(autoClear = false, clearDescription = true))
 
         viewModel.stopTimeEntry()
         dispatcher.scheduler.runCurrent()
@@ -162,12 +160,11 @@ class TrackingViewModelMutationTest {
 
     @Test
     fun stop_clears_entry_fields_when_auto_clear_is_enabled() = runTest(dispatcher.scheduler) {
-        settings.setAutoClearEntryFieldsAfterStop(true)
         val active = activeEntry()
         val repository = mockk<TimeEntryRepository>(relaxed = true)
         coEvery { repository.stopEntryWithEdits(any(), any(), any(), any()) } just Runs
         cacheActiveEntry(active)
-        val viewModel = viewModel(repository)
+        val viewModel = viewModel(repository, retentionSettings(autoClear = true, clearDescription = false))
 
         viewModel.stopTimeEntry()
         dispatcher.scheduler.runCurrent()
@@ -180,11 +177,10 @@ class TrackingViewModelMutationTest {
 
     @Test
     fun reset_clears_only_reusable_entry_fields() = runTest(dispatcher.scheduler) {
-        settings.setAutoClearEntryFieldsAfterStop(false)
         val repository = mockk<TimeEntryRepository>(relaxed = true)
         coEvery { repository.stopEntryWithEdits(any(), any(), any(), any()) } just Runs
         cacheActiveEntry(activeEntry())
-        val viewModel = viewModel(repository)
+        val viewModel = viewModel(repository, retentionSettings(autoClear = false, clearDescription = false))
         viewModel.stopTimeEntry()
         dispatcher.scheduler.runCurrent()
         viewModel.updateTags(listOf("tag-1"))
@@ -376,6 +372,13 @@ class TrackingViewModelMutationTest {
         dispatcher.scheduler.advanceUntilIdle()
         scopeJob?.join()
         viewModels.remove(viewModel)
+    }
+
+    private fun retentionSettings(autoClear: Boolean, clearDescription: Boolean): SettingsDataStore = spyk(settings) {
+        every { getCachedAutoClearEntryFieldsAfterStop() } returns autoClear
+        every { getCachedClearDescriptionAfterStop() } returns clearDescription
+        every { autoClearEntryFieldsAfterStop } returns flowOf(autoClear)
+        every { clearDescriptionAfterStop } returns flowOf(clearDescription)
     }
 
     private fun activeEntry() = TimeEntry(
