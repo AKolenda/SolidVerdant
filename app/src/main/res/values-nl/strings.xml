@@ -111,7 +111,7 @@
     <string name="search_history">Geschiedenis doorzoeken</string>
     <string name="needs_categorization">Moet worden gecategoriseerd</string>
     <string name="clear_filters">Filters wissen</string>
-    <string name="entry_deleted">Boeking verwijderd</string>
+    <string name="entry_deleted">Verwijdering in wachtrij</string>
     <string name="undo">Ongedaan maken</string>
     <string name="undo_delete_too_late">Deze boeking is al van de server verwijderd en kan niet automatisch worden hersteld.</string>
     <!-- App Name -->

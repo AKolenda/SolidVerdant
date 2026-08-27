@@ -102,7 +102,7 @@
     <string name="search_history">履歴を検索</string>
     <string name="needs_categorization">分類が必要</string>
     <string name="clear_filters">フィルターを解除</string>
-    <string name="entry_deleted">エントリーを削除しました</string>
+    <string name="entry_deleted">削除を保留中</string>
     <string name="undo">元に戻す</string>
     <string name="undo_delete_too_late">このエントリーはすでにサーバーから削除されているため、自動的に復元できません。</string>
     <!-- App Name -->

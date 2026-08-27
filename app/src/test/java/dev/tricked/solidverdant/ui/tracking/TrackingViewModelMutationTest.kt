@@ -21,6 +21,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.just
 import io.mockk.mockk
+import io.mockk.spyk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestCoroutineScheduler
@@ -32,6 +33,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -247,6 +249,36 @@ class TrackingViewModelMutationTest {
     }
 
     @Test
+    fun successful_start_can_be_stopped_before_room_collectors_emit() = runTest(dispatcher.scheduler) {
+        val entry = TimeEntry(
+            id = "local-start",
+            userId = "user",
+            organizationId = "org",
+            start = "2026-08-10T08:00:00Z",
+        )
+        val repository = mockk<TimeEntryRepository>(relaxed = true)
+        coEvery { repository.startEntry(any(), any(), any(), any(), any(), any(), any()) } returns entry
+        coEvery { repository.stopEntryWithEdits(any(), any(), any(), any()) } just Runs
+        val immediateSettings = spyk(settings)
+        coEvery { immediateSettings.setWidgetTrackingState(any(), any(), any(), any(), any()) } just Runs
+        val viewModel = viewModel(repository, immediateSettings)
+
+        viewModel.startTimeEntry("org", "member", "user")
+        dispatcher.scheduler.runCurrent()
+        assertEquals(entry, viewModel.uiState.value.currentTimeEntry)
+
+        viewModel.stopTimeEntry()
+        dispatcher.scheduler.runCurrent()
+
+        coVerify(exactly = 1) {
+            repository.stopEntryWithEdits(entry, "user", match { it.id == entry.id }, emptyList())
+        }
+        assertFalse(viewModel.uiState.value.isTracking)
+        assertNull(viewModel.uiState.value.currentTimeEntry)
+        dispose(viewModel)
+    }
+
+    @Test
     fun repeated_stop_is_ignored_while_the_first_mutation_is_in_flight() = runTest(dispatcher.scheduler) {
         val release = CompletableDeferred<Unit>()
         val stopped = CompletableDeferred<Unit>()
@@ -328,15 +360,16 @@ class TrackingViewModelMutationTest {
         dispose(viewModel)
     }
 
-    private fun viewModel(repository: TimeEntryRepository): TrackingViewModel = TrackingViewModel(
-        authRepository = mockk<AuthRepository>(relaxed = true),
-        settingsDataStore = settings,
-        timeEntryRepository = repository,
-        syncTrigger = SyncTrigger {},
-        temporalPolicyProvider = TemporalPolicyProvider(settings),
-        context = context,
-        clock = clock,
-    ).also { viewModels += it }
+    private fun viewModel(repository: TimeEntryRepository, settingsDataStore: SettingsDataStore = settings): TrackingViewModel =
+        TrackingViewModel(
+            authRepository = mockk<AuthRepository>(relaxed = true),
+            settingsDataStore = settingsDataStore,
+            timeEntryRepository = repository,
+            syncTrigger = SyncTrigger {},
+            temporalPolicyProvider = TemporalPolicyProvider(settingsDataStore),
+            context = context,
+            clock = clock,
+        ).also { viewModels += it }
 
     private suspend fun dispose(viewModel: TrackingViewModel) {
         val scopeJob = viewModel.cancelScopeForTest()

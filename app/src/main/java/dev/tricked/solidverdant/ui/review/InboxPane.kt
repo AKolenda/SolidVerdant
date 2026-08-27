@@ -670,7 +670,17 @@ private fun ConflictIssueCard(issue: InboxIssue, projectsById: Map<String, Proje
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
             ) {
                 TextButton(onClick = onKeepTheirs) { Text(stringResource(R.string.inbox_conflict_keep_theirs)) }
-                FilledTonalButton(onClick = onKeepMine) { Text(stringResource(R.string.inbox_conflict_keep_mine)) }
+                FilledTonalButton(onClick = onKeepMine) {
+                    Text(
+                        stringResource(
+                            if (issue.conflictLocalDeleted) {
+                                R.string.inbox_conflict_confirm_delete
+                            } else {
+                                R.string.inbox_conflict_keep_mine
+                            },
+                        ),
+                    )
+                }
             }
         }
     }

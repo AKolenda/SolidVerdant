@@ -774,6 +774,60 @@ class TimeEntryRepositoryWriteTest {
         assertEquals("server", Json.decodeFromString<ConflictSnapshot>(op.baseSnapshotJson!!).description)
     }
 
+    @Test fun sync_operations_distinguish_delete_conflicts_from_edit_conflicts() = runTest {
+        val server = TimeEntry(
+            id = "delete-conflict",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "server",
+        )
+        val editConflict = server.copy(id = "edit-conflict", description = "mine")
+        db.timeEntryDao().upsert(
+            server.toEntity(2L, SyncState.CONFLICT, pendingDelete = true).copy(
+                conflictServerJson = testJson.encodeToString(server.copy(description = "changed elsewhere")),
+            ),
+        )
+        db.timeEntryDao().upsert(
+            editConflict.toEntity(2L, SyncState.CONFLICT).copy(
+                conflictServerJson = testJson.encodeToString(editConflict.copy(description = "changed elsewhere")),
+            ),
+        )
+
+        val operations = repo.observeSyncOperations("org1").first().associateBy { it.entryId }
+
+        assertEquals(OutboxOpType.DELETE, operations.getValue("delete-conflict").type)
+        assertEquals(OutboxOpType.UPDATE, operations.getValue("edit-conflict").type)
+        assertTrue(operations.values.all { it.status == TimeEntryRepository.EntrySyncStatus.CONFLICT })
+    }
+
+    @Test fun confirming_a_local_delete_conflict_requeues_the_delete() = runTest {
+        val server = TimeEntry(
+            id = "delete-conflict",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "changed elsewhere",
+        )
+        val local = server.copy(description = "local baseline")
+        db.timeEntryDao().upsert(
+            local.toEntity(2L, SyncState.CONFLICT, pendingDelete = true).copy(
+                conflictServerJson = testJson.encodeToString(server),
+            ),
+        )
+
+        assertTrue(repo.resolveKeepMine(local.id, "member"))
+
+        val stored = db.timeEntryDao().getById(local.id)
+        val operation = db.outboxDao().peekAll().single()
+        assertEquals(SyncState.PENDING, stored?.syncState)
+        assertEquals(true, stored?.pendingDelete)
+        assertNull(stored?.conflictServerJson)
+        assertEquals(OutboxOpType.DELETE, operation.opType)
+    }
+
     @Test fun keep_theirs_restores_server_copy_and_clears_conflict() = runTest {
         val local = TimeEntry(
             id = "server-1",

@@ -59,6 +59,7 @@
     <string name="inbox_conflict_empty_value">—</string>
     <string name="inbox_conflict_version_summary">%1$s · %2$s · %3$s</string>
     <string name="inbox_conflict_keep_mine">Keep mine</string>
+    <string name="inbox_conflict_confirm_delete">Delete entry</string>
     <string name="inbox_conflict_keep_theirs">Keep server</string>
 
     <string name="inbox_action_dismiss">Dismiss</string>

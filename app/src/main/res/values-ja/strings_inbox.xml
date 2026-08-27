@@ -52,6 +52,7 @@
     <string name="inbox_conflict_empty_value">—</string>
     <string name="inbox_conflict_version_summary">%1$s · %2$s · %3$s</string>
     <string name="inbox_conflict_keep_mine">自分の版を残す</string>
+    <string name="inbox_conflict_confirm_delete">項目を削除</string>
     <string name="inbox_conflict_keep_theirs">サーバー版を残す</string>
 
     <string name="inbox_action_dismiss">閉じる</string>
