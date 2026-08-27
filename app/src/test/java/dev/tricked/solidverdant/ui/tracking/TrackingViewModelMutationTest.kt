@@ -65,7 +65,7 @@ class TrackingViewModelMutationTest {
     fun tearDown() {
         val jobs = viewModels.mapNotNull { it.cancelScopeForTest() }
         viewModels.clear()
-        dispatcher.scheduler.runCurrent()
+        dispatcher.scheduler.advanceUntilIdle()
         kotlinx.coroutines.runBlocking { jobs.forEach { it.join() } }
         shadowOf(Looper.getMainLooper()).idle()
         kotlinx.coroutines.Dispatchers.resetMain()
@@ -373,7 +373,7 @@ class TrackingViewModelMutationTest {
 
     private suspend fun dispose(viewModel: TrackingViewModel) {
         val scopeJob = viewModel.cancelScopeForTest()
-        dispatcher.scheduler.runCurrent()
+        dispatcher.scheduler.advanceUntilIdle()
         scopeJob?.join()
         viewModels.remove(viewModel)
     }
