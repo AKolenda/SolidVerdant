@@ -73,6 +73,27 @@ class TrackingAppBarTest {
     }
 
     @Test
+    fun compact_title_keeps_account_identity_out_of_the_app_bar() {
+        val memberships = listOf(membership("m1", "Acme"))
+        composeRule.setContent {
+            MaterialTheme {
+                TrackingAppBarTitle(
+                    userName = "Alice",
+                    organizationName = "Acme",
+                    canSwitchOrganization = false,
+                    memberships = memberships,
+                    currentMembershipId = "m1",
+                    onMembershipChange = {},
+                    showUserName = false,
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Alice").assertDoesNotExist()
+        composeRule.onNodeWithText("Acme").assertExists()
+    }
+
+    @Test
     fun switchable_org_line_exposes_a_labelled_role_button_affordance() {
         val memberships = listOf(
             membership("m1", "Acme"),
