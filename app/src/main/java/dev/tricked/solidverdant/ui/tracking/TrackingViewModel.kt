@@ -75,22 +75,60 @@ internal const val SYNC_STATUS_REVEAL_DELAY_MS = 3_000L
 /** Which slice of history the user is currently looking at. */
 internal enum class HistoryWindowMode { RECENT, PAGINATED }
 
+internal enum class HistoryMembershipChange { COMPLETED_ENTRY_PRESENT, ENTRY_ABSENT }
+
+internal fun resolvedHistoryMembershipChangeIds(changes: Map<String, HistoryMembershipChange>, collected: List<TimeEntry>): Set<String> {
+    val collectedById = collected.associateBy { it.id }
+    return changes.mapNotNullTo(mutableSetOf()) { (entryId, change) ->
+        val collectedEntry = collectedById[entryId]
+        when (change) {
+            HistoryMembershipChange.COMPLETED_ENTRY_PRESENT -> entryId.takeIf {
+                collectedEntry != null && isCompletedTimeEntry(collectedEntry)
+            }
+            HistoryMembershipChange.ENTRY_ABSENT -> entryId.takeIf { collectedEntry == null }
+        }
+    }
+}
+
 /**
  * Single source of truth for how a Room emission from the recent-window collector combines with
  * the list currently on screen.
  *
  * In [HistoryWindowMode.RECENT] the collector owns the list and replaces it wholesale, so live
  * edits and the active-entry poll stay fresh. Once the user pages or jumps to an off-window slice
- * ([HistoryWindowMode.PAGINATED]) the network-fetched window is authoritative: its order and
- * membership are preserved (so scroll position survives a poll emission) while any fresher copy of
- * a still-visible entry carried by the recent collector is overlaid in place.
+ * ([HistoryWindowMode.PAGINATED]) the network-fetched window normally preserves its membership so
+ * scroll position survives a poll emission. Entries mutated locally are the exception: Room is
+ * authoritative for whether those entries are present, even while the paginated window is shown.
  */
 internal object HistoryWindow {
-    fun merge(mode: HistoryWindowMode, displayed: List<TimeEntry>, collected: List<TimeEntry>): List<TimeEntry> = when (mode) {
+    fun merge(
+        mode: HistoryWindowMode,
+        displayed: List<TimeEntry>,
+        collected: List<TimeEntry>,
+        locallyMutatedEntryIds: Set<String> = emptySet(),
+    ): List<TimeEntry> = when (mode) {
         HistoryWindowMode.RECENT -> collected
         HistoryWindowMode.PAGINATED -> {
             val collectedById = collected.associateBy { it.id }
-            displayed.map { collectedById[it.id] ?: it }
+            val refreshed = displayed.mapNotNull { displayedEntry ->
+                collectedById[displayedEntry.id]
+                    ?: displayedEntry.takeUnless { it.id in locallyMutatedEntryIds }
+            }
+            val displayedIds = displayed.mapTo(mutableSetOf()) { it.id }
+            val completedAdditions = collected.filter {
+                it.id in locallyMutatedEntryIds && it.id !in displayedIds && isCompletedTimeEntry(it)
+            }
+
+            completedAdditions.fold(refreshed) { entries, addition ->
+                val insertionIndex = entries.indexOfFirst { it.start < addition.start }
+                if (insertionIndex == -1) {
+                    entries + addition
+                } else {
+                    entries.toMutableList().apply {
+                        add(insertionIndex, addition)
+                    }
+                }
+            }
         }
     }
 }
@@ -294,6 +332,7 @@ class TrackingViewModel @Inject constructor(
     private var historyOffset = 0
     private var historyWindowStartOffset = 0
     private var historyWindowMode = HistoryWindowMode.RECENT
+    private val pendingHistoryMembershipChanges = mutableMapOf<String, HistoryMembershipChange>()
     private var isInitialized = false
 
     /**
@@ -480,6 +519,7 @@ class TrackingViewModel @Inject constructor(
         historyWindowStartOffset = 0
         historyOffset = 0
         historyWindowMode = HistoryWindowMode.RECENT
+        pendingHistoryMembershipChanges.clear()
         clearActivePollOverride()
         dataCollectorJob = viewModelScope.launch {
             combine(
@@ -525,7 +565,17 @@ class TrackingViewModel @Inject constructor(
                 // paging offset) while the recent slice is on screen. Once the user has paged or
                 // jumped, loadMore/jump own the window and offset; here we merely refresh visible
                 // entries in place so a poll emission cannot wipe the window or reset scroll.
-                val displayedEntries = HistoryWindow.merge(mode, currentState.timeEntries, data.entries)
+                val resolvedMembershipChanges = resolvedHistoryMembershipChangeIds(
+                    pendingHistoryMembershipChanges,
+                    data.entries,
+                )
+                val displayedEntries = HistoryWindow.merge(
+                    mode = mode,
+                    displayed = currentState.timeEntries,
+                    collected = data.entries,
+                    locallyMutatedEntryIds = resolvedMembershipChanges,
+                )
+                resolvedMembershipChanges.forEach(pendingHistoryMembershipChanges::remove)
                 if (mode == HistoryWindowMode.RECENT) {
                     historyOffset = data.entries.size
                 }
@@ -1532,6 +1582,7 @@ class TrackingViewModel @Inject constructor(
         // Active polling can complete between the local STOP transaction and the outbox observer
         // emission. Suppress that exact server id synchronously while the STOP is being queued.
         locallyStoppingEntryIds += currentEntry.id
+        pendingHistoryMembershipChanges[currentEntry.id] = HistoryMembershipChange.COMPLETED_ENTRY_PRESENT
         clearActivePollOverride()
 
         viewModelScope.launch {
@@ -1899,6 +1950,7 @@ class TrackingViewModel @Inject constructor(
 
         // Optimistic local-only soft-delete; the collector removes it from the list. No outbox op
         // exists yet, so there is nothing here for the sync worker to act on.
+        pendingHistoryMembershipChanges[entry.id] = HistoryMembershipChange.ENTRY_ABSENT
         timeEntryRepository.softDeleteLocal(entry)
 
         pendingDeleteCommitJobs.remove(entry.id)?.cancel()
@@ -1920,7 +1972,9 @@ class TrackingViewModel @Inject constructor(
             // this guarantees nothing was ever enqueued to the outbox for the repository undo path
             // to race against.
             pendingDeleteCommitJobs.remove(entry.id)?.cancel()
+            pendingHistoryMembershipChanges[entry.id] = HistoryMembershipChange.COMPLETED_ENTRY_PRESENT
             if (!timeEntryRepository.undoDelete(entry, historyMemberId)) {
+                pendingHistoryMembershipChanges.remove(entry.id)
                 _uiState.value = _uiState.value.copy(error = context.getString(R.string.undo_delete_too_late))
             } else {
                 syncTrigger.requestSync()

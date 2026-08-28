@@ -19,10 +19,13 @@ import dev.tricked.solidverdant.util.Clock
 import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
+import io.mockk.spyk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -32,6 +35,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -63,7 +67,7 @@ class TrackingViewModelMutationTest {
     fun tearDown() {
         val jobs = viewModels.mapNotNull { it.cancelScopeForTest() }
         viewModels.clear()
-        dispatcher.scheduler.runCurrent()
+        dispatcher.scheduler.advanceUntilIdle()
         kotlinx.coroutines.runBlocking { jobs.forEach { it.join() } }
         shadowOf(Looper.getMainLooper()).idle()
         kotlinx.coroutines.Dispatchers.resetMain()
@@ -119,13 +123,11 @@ class TrackingViewModelMutationTest {
 
     @Test
     fun stop_keeps_description_project_and_task_when_auto_clear_is_disabled() = runTest(dispatcher.scheduler) {
-        settings.setAutoClearEntryFieldsAfterStop(false)
-        settings.setClearDescriptionAfterStop(false)
         val active = activeEntry()
         val repository = mockk<TimeEntryRepository>(relaxed = true)
         coEvery { repository.stopEntryWithEdits(any(), any(), any(), any()) } just Runs
         cacheActiveEntry(active)
-        val viewModel = viewModel(repository)
+        val viewModel = viewModel(repository, retentionSettings(autoClear = false, clearDescription = false))
 
         viewModel.stopTimeEntry()
         dispatcher.scheduler.runCurrent()
@@ -140,13 +142,11 @@ class TrackingViewModelMutationTest {
 
     @Test
     fun stop_clears_only_description_when_description_clear_is_enabled() = runTest(dispatcher.scheduler) {
-        settings.setAutoClearEntryFieldsAfterStop(false)
-        settings.setClearDescriptionAfterStop(true)
         val active = activeEntry()
         val repository = mockk<TimeEntryRepository>(relaxed = true)
         coEvery { repository.stopEntryWithEdits(any(), any(), any(), any()) } just Runs
         cacheActiveEntry(active)
-        val viewModel = viewModel(repository)
+        val viewModel = viewModel(repository, retentionSettings(autoClear = false, clearDescription = true))
 
         viewModel.stopTimeEntry()
         dispatcher.scheduler.runCurrent()
@@ -160,12 +160,11 @@ class TrackingViewModelMutationTest {
 
     @Test
     fun stop_clears_entry_fields_when_auto_clear_is_enabled() = runTest(dispatcher.scheduler) {
-        settings.setAutoClearEntryFieldsAfterStop(true)
         val active = activeEntry()
         val repository = mockk<TimeEntryRepository>(relaxed = true)
         coEvery { repository.stopEntryWithEdits(any(), any(), any(), any()) } just Runs
         cacheActiveEntry(active)
-        val viewModel = viewModel(repository)
+        val viewModel = viewModel(repository, retentionSettings(autoClear = true, clearDescription = false))
 
         viewModel.stopTimeEntry()
         dispatcher.scheduler.runCurrent()
@@ -178,11 +177,10 @@ class TrackingViewModelMutationTest {
 
     @Test
     fun reset_clears_only_reusable_entry_fields() = runTest(dispatcher.scheduler) {
-        settings.setAutoClearEntryFieldsAfterStop(false)
         val repository = mockk<TimeEntryRepository>(relaxed = true)
         coEvery { repository.stopEntryWithEdits(any(), any(), any(), any()) } just Runs
         cacheActiveEntry(activeEntry())
-        val viewModel = viewModel(repository)
+        val viewModel = viewModel(repository, retentionSettings(autoClear = false, clearDescription = false))
         viewModel.stopTimeEntry()
         dispatcher.scheduler.runCurrent()
         viewModel.updateTags(listOf("tag-1"))
@@ -243,6 +241,36 @@ class TrackingViewModelMutationTest {
 
         assertEquals(entry, viewModel.uiState.value.currentTimeEntry)
         assertTrue(viewModel.uiState.value.isTracking)
+        dispose(viewModel)
+    }
+
+    @Test
+    fun successful_start_can_be_stopped_before_room_collectors_emit() = runTest(dispatcher.scheduler) {
+        val entry = TimeEntry(
+            id = "local-start",
+            userId = "user",
+            organizationId = "org",
+            start = "2026-08-10T08:00:00Z",
+        )
+        val repository = mockk<TimeEntryRepository>(relaxed = true)
+        coEvery { repository.startEntry(any(), any(), any(), any(), any(), any(), any()) } returns entry
+        coEvery { repository.stopEntryWithEdits(any(), any(), any(), any()) } just Runs
+        val immediateSettings = spyk(settings)
+        coEvery { immediateSettings.setWidgetTrackingState(any(), any(), any(), any(), any()) } just Runs
+        val viewModel = viewModel(repository, immediateSettings)
+
+        viewModel.startTimeEntry("org", "member", "user")
+        dispatcher.scheduler.runCurrent()
+        assertEquals(entry, viewModel.uiState.value.currentTimeEntry)
+
+        viewModel.stopTimeEntry()
+        dispatcher.scheduler.runCurrent()
+
+        coVerify(exactly = 1) {
+            repository.stopEntryWithEdits(entry, "user", match { it.id == entry.id }, emptyList())
+        }
+        assertFalse(viewModel.uiState.value.isTracking)
+        assertNull(viewModel.uiState.value.currentTimeEntry)
         dispose(viewModel)
     }
 
@@ -328,21 +356,29 @@ class TrackingViewModelMutationTest {
         dispose(viewModel)
     }
 
-    private fun viewModel(repository: TimeEntryRepository): TrackingViewModel = TrackingViewModel(
-        authRepository = mockk<AuthRepository>(relaxed = true),
-        settingsDataStore = settings,
-        timeEntryRepository = repository,
-        syncTrigger = SyncTrigger {},
-        temporalPolicyProvider = TemporalPolicyProvider(settings),
-        context = context,
-        clock = clock,
-    ).also { viewModels += it }
+    private fun viewModel(repository: TimeEntryRepository, settingsDataStore: SettingsDataStore = settings): TrackingViewModel =
+        TrackingViewModel(
+            authRepository = mockk<AuthRepository>(relaxed = true),
+            settingsDataStore = settingsDataStore,
+            timeEntryRepository = repository,
+            syncTrigger = SyncTrigger {},
+            temporalPolicyProvider = TemporalPolicyProvider(settingsDataStore),
+            context = context,
+            clock = clock,
+        ).also { viewModels += it }
 
     private suspend fun dispose(viewModel: TrackingViewModel) {
         val scopeJob = viewModel.cancelScopeForTest()
-        dispatcher.scheduler.runCurrent()
+        dispatcher.scheduler.advanceUntilIdle()
         scopeJob?.join()
         viewModels.remove(viewModel)
+    }
+
+    private fun retentionSettings(autoClear: Boolean, clearDescription: Boolean): SettingsDataStore = spyk(settings) {
+        every { getCachedAutoClearEntryFieldsAfterStop() } returns autoClear
+        every { getCachedClearDescriptionAfterStop() } returns clearDescription
+        every { autoClearEntryFieldsAfterStop } returns flowOf(autoClear)
+        every { clearDescriptionAfterStop } returns flowOf(clearDescription)
     }
 
     private fun activeEntry() = TimeEntry(

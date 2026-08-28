@@ -53,6 +53,7 @@
     <string name="inbox_conflict_empty_value">—</string>
     <string name="inbox_conflict_version_summary">%1$s · %2$s · %3$s</string>
     <string name="inbox_conflict_keep_mine">Mijn versie houden</string>
+    <string name="inbox_conflict_confirm_delete">Item verwijderen</string>
     <string name="inbox_conflict_keep_theirs">Serverversie houden</string>
 
     <string name="inbox_action_dismiss">Negeren</string>
