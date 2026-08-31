@@ -8,6 +8,8 @@ package dev.tricked.solidverdant.ui.sync
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -99,11 +101,17 @@ fun SyncCenterScreen(onBack: () -> Unit, viewModel: SyncCenterViewModel = hiltVi
                 PendingSection(state.pending)
             }
             if (state.conflicts.isNotEmpty()) {
-                ConflictsSection(state.conflicts)
+                ConflictsSection(
+                    conflicts = state.conflicts,
+                    activeRecoveryEntryIds = state.activeRecoveryEntryIds,
+                    onRetryUpload = viewModel::retryConflictWithLocal,
+                    onUseServerVersion = viewModel::useServerVersion,
+                )
             }
             if (state.failed.isNotEmpty()) {
                 FailuresSection(
                     failed = state.failed,
+                    activeRecoveryEntryIds = state.activeRecoveryEntryIds,
                     onRetry = viewModel::retry,
                     onDiscard = viewModel::discard,
                     onRetryAll = viewModel::retryAll,
@@ -213,25 +221,52 @@ private fun PendingSection(pending: List<SyncOperation>) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ConflictsSection(conflicts: List<SyncOperation>) {
+private fun ConflictsSection(
+    conflicts: List<SyncOperation>,
+    activeRecoveryEntryIds: Set<String>,
+    onRetryUpload: (String) -> Unit,
+    onUseServerVersion: (String) -> Unit,
+) {
     SectionCard(title = stringResource(R.string.sync_conflicts_section_title)) {
         conflicts.forEachIndexed { index, op ->
             if (index > 0) HorizontalDivider()
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(Dimens.Space4)) {
                 Text(opLabel(op.type), style = MaterialTheme.typography.bodyMedium)
                 Text(
                     stringResource(R.string.sync_conflict_item),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
+                    TextButton(
+                        onClick = { onUseServerVersion(op.entryId) },
+                        enabled = op.entryId !in activeRecoveryEntryIds,
+                    ) {
+                        Text(stringResource(R.string.sync_use_server_version))
+                    }
+                    TextButton(
+                        onClick = { onRetryUpload(op.entryId) },
+                        enabled = op.entryId !in activeRecoveryEntryIds,
+                        modifier = Modifier.testTag(SyncCenterTestTags.conflictRetry(op.entryId)),
+                    ) {
+                        Text(stringResource(R.string.sync_retry_upload))
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun FailuresSection(failed: List<SyncOperation>, onRetry: (String) -> Unit, onDiscard: (String) -> Unit, onRetryAll: () -> Unit) {
+private fun FailuresSection(
+    failed: List<SyncOperation>,
+    activeRecoveryEntryIds: Set<String>,
+    onRetry: (String) -> Unit,
+    onDiscard: (String) -> Unit,
+    onRetryAll: () -> Unit,
+) {
     SectionCard(title = stringResource(R.string.sync_failures_section_title)) {
         failed.forEachIndexed { index, op ->
             if (index > 0) HorizontalDivider()
@@ -243,7 +278,13 @@ private fun FailuresSection(failed: List<SyncOperation>, onRetry: (String) -> Un
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
-                    TextButton(onClick = { onRetry(op.entryId) }) { Text(stringResource(R.string.sync_retry)) }
+                    TextButton(
+                        onClick = { onRetry(op.entryId) },
+                        enabled = op.entryId !in activeRecoveryEntryIds,
+                        modifier = Modifier.testTag(SyncCenterTestTags.failedRetry(op.entryId)),
+                    ) {
+                        Text(stringResource(R.string.sync_retry))
+                    }
                     TextButton(onClick = { onDiscard(op.entryId) }) { Text(stringResource(R.string.sync_discard)) }
                 }
             }

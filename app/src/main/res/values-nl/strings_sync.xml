@@ -4,7 +4,7 @@
     <string name="sync_status_card_title">Synchronisatiestatus</string>
     <string name="sync_center_title">Synchronisatie en herstel</string>
     <string name="sync_center_open">Synchronisatiedetails bekijken</string>
-    <string name="sync_center_description">Bekijk welke wijzigingen nog op de server wachten. Probeer mislukte wijzigingen hier opnieuw. Conflicten blijven veilig bewaard totdat je ze oplost onder Nakijken.</string>
+    <string name="sync_center_description">Bekijk welke wijzigingen nog op de server wachten. Probeer mislukte uploads opnieuw of kies welke versie je wilt bewaren wanneer een registratie elders is gewijzigd.</string>
     <string name="sync_center_navigate_back">Terug</string>
 
     <!-- Actualiteit -->
@@ -48,7 +48,9 @@
     <!-- Mislukkingen -->
     <string name="sync_failures_section_title">Synchronisatie mislukt</string>
     <string name="sync_conflicts_section_title">Vraagt om je aandacht</string>
-    <string name="sync_conflict_item">Dit item is op een ander apparaat gewijzigd. Open Nakijken om te kiezen wat er moet gebeuren.</string>
+    <string name="sync_conflict_item">Deze registratie is elders gewijzigd. Opnieuw uploaden verzendt de versie op dit apparaat, of je kunt de serverversie gebruiken.</string>
+    <string name="sync_retry_upload">Opnieuw uploaden</string>
+    <string name="sync_use_server_version">Serverversie gebruiken</string>
     <string name="sync_retry_all">Alles opnieuw proberen</string>
     <string name="sync_retry">Opnieuw</string>
     <string name="sync_discard">Verwijderen</string>

@@ -14,8 +14,11 @@ import dev.tricked.solidverdant.data.local.db.AppDatabase
 import dev.tricked.solidverdant.data.local.db.OutboxEntity
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.local.db.SyncMetaEntity
+import dev.tricked.solidverdant.data.local.db.SyncState
+import dev.tricked.solidverdant.data.local.db.toEntity
 import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.Organization
+import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.remote.FakeRemoteDataSource
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
@@ -210,6 +213,68 @@ class SyncCenterViewModelTest {
         val state = vm.uiState.first { it.organizationId == ORG && it.failed.isEmpty() && it.pending.isNotEmpty() }
         assertTrue(state.pending.any { it.entryId == "e-failed" })
         assertTrue(syncRequests > before)
+    }
+
+    @Test
+    fun `retrying a conflict keeps the device copy and queues a real upload`() = runTest(dispatcher.scheduler) {
+        seedOrg()
+        val server = TimeEntry(
+            id = "e-conflict",
+            userId = "u1",
+            organizationId = ORG,
+            start = "2026-08-31T08:00:00Z",
+            end = "2026-08-31T09:00:00Z",
+            description = "server copy",
+        )
+        val local = server.copy(description = "device copy")
+        db.timeEntryDao().upsert(
+            local.toEntity(NOW_MS, SyncState.CONFLICT).copy(
+                conflictServerJson = Json.encodeToString(TimeEntry.serializer(), server),
+            ),
+        )
+        assertEquals("server copy", repository.observeConflicts(ORG).first().single().server?.description)
+        val vm = viewModel()
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.uiState.first { it.conflicts.any { conflict -> conflict.entryId == local.id } }
+
+        val before = syncRequests
+        vm.retryConflictWithLocal(local.id).join()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        val operation = db.outboxDao().peekAll().single()
+        assertEquals(OutboxOpType.UPDATE, operation.opType)
+        assertEquals("device copy", db.timeEntryDao().getById(local.id)?.description)
+        assertEquals(SyncState.PENDING, db.timeEntryDao().getById(local.id)?.syncState)
+        assertTrue(syncRequests > before)
+    }
+
+    @Test
+    fun `using the server version clears a conflict without uploading the device copy`() = runTest(dispatcher.scheduler) {
+        seedOrg()
+        val server = TimeEntry(
+            id = "e-conflict",
+            userId = "u1",
+            organizationId = ORG,
+            start = "2026-08-31T08:00:00Z",
+            end = "2026-08-31T09:00:00Z",
+            description = "server copy",
+        )
+        db.timeEntryDao().upsert(
+            server.copy(description = "device copy").toEntity(NOW_MS, SyncState.CONFLICT).copy(
+                conflictServerJson = Json.encodeToString(TimeEntry.serializer(), server),
+            ),
+        )
+        assertEquals("server copy", repository.observeConflicts(ORG).first().single().server?.description)
+        val vm = viewModel()
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.uiState.first { it.conflicts.any { conflict -> conflict.entryId == server.id } }
+
+        vm.useServerVersion(server.id).join()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("server copy", db.timeEntryDao().getById(server.id)?.description)
+        assertEquals(SyncState.SYNCED, db.timeEntryDao().getById(server.id)?.syncState)
+        assertTrue(db.outboxDao().peekAll().isEmpty())
     }
 
     @Test
