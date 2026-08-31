@@ -2,6 +2,10 @@
 <network-security-config>
     <!-- Networking libraries that support Android 17 ECH will protect the TLS SNI. -->
     <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
         <domainEncryption mode="enabled" />
     </base-config>
 </network-security-config>
