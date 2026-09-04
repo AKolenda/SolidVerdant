@@ -298,6 +298,7 @@ fun TrackingScreen(
     onLoadNewerEntries: () -> Unit,
     onJumpToDate: (LocalDate) -> Unit,
     onHistoryJumpConsumed: () -> Unit,
+    onClearError: () -> Unit = {},
 ) {
     var showEditDialog by remember { mutableStateOf<TimeEntry?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -325,6 +326,7 @@ fun TrackingScreen(
     }
     val templatesSavedMessage = stringResource(R.string.templates_saved)
     val entryDeletedMessage = stringResource(R.string.entry_deleted)
+    val conflictEditLockedMessage = stringResource(R.string.sync_conflict_edit_locked)
     val undoLabel = stringResource(R.string.undo)
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -346,9 +348,20 @@ fun TrackingScreen(
 
     LaunchedEffect(editActiveEntryRequested, uiState.currentTimeEntry) {
         if (editActiveEntryRequested) {
-            uiState.currentTimeEntry?.takeUnless { it.id in uiState.conflictedEntryIds }?.let { showEditDialog = it }
-            if (uiState.currentTimeEntry != null) onEditActiveEntryConsumed()
+            val entry = uiState.currentTimeEntry ?: return@LaunchedEffect
+            onEditActiveEntryConsumed()
+            if (entry.id in uiState.conflictedEntryIds) {
+                snackbarHostState.showSnackbar(conflictEditLockedMessage, withDismissAction = true)
+            } else {
+                showEditDialog = entry
+            }
         }
+    }
+
+    LaunchedEffect(uiState.error) {
+        val message = uiState.error ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message = message, withDismissAction = true)
+        onClearError()
     }
 
     // Roadmap #13: after a duplicate/split the VM emits the new entry's id; open it for editing
@@ -934,16 +947,21 @@ fun TrackingScreen(
                     if (uiState.syncStatusVisible) uiState.syncOperations else emptyList()
                 }
                 val syncStatusByEntryId = remember(visibleSyncOperations) {
-                    visibleSyncOperations.groupBy { it.entryId }.mapValues { (_, operations) ->
-                        operations.last().status
-                    }
+                    worstSyncStatusByEntryId(visibleSyncOperations)
+                }
+                val showConflictLocked: () -> Unit = {
+                    scope.launch { snackbarHostState.showSnackbar(conflictEditLockedMessage, withDismissAction = true) }
                 }
                 val onHistoryEdit = remember(uiState.conflictedEntryIds) {
-                    { entry: TimeEntry -> if (entry.id !in uiState.conflictedEntryIds) showEditDialog = entry }
+                    { entry: TimeEntry ->
+                        if (entry.id in uiState.conflictedEntryIds) showConflictLocked() else showEditDialog = entry
+                    }
                 }
                 val onHistoryDelete = remember(uiState.conflictedEntryIds) {
                     { entry: TimeEntry ->
-                        if (entry.id !in uiState.conflictedEntryIds) {
+                        if (entry.id in uiState.conflictedEntryIds) {
+                            showConflictLocked()
+                        } else {
                             deletedEntry = entry
                             onDeleteEntry(entry.id)
                         }
@@ -985,7 +1003,11 @@ fun TrackingScreen(
                                 onPause = onPauseTracking,
                                 onResume = onResumeTracking,
                                 onUpdate = onUpdateCurrentEntry,
-                                onEditActiveEntry = { uiState.currentTimeEntry?.let { showEditDialog = it } },
+                                onEditActiveEntry = {
+                                    uiState.currentTimeEntry?.let { entry ->
+                                        if (entry.id in uiState.conflictedEntryIds) showConflictLocked() else showEditDialog = entry
+                                    }
+                                },
                             )
                         }
                         item(key = "long_timer_warning") {
@@ -1803,15 +1825,31 @@ internal fun LazyListScope.trackingHistoryItems(
         historyItems = historyItems,
         projectsById = uiState.projects.associateBy { it.id },
         tasksById = uiState.tasks.associateBy { it.id },
-        syncStatusByEntryId = uiState.syncOperations.groupBy { it.entryId }.mapValues { (_, operations) ->
-            operations.last().status
-        },
+        syncStatusByEntryId = worstSyncStatusByEntryId(uiState.syncOperations),
         onEdit = onEdit,
         onDelete = onDelete,
         onDateClick = onDateClick,
         onRetrySync = onRetrySync,
     )
 }
+
+/**
+ * One chip per entry: a dead-lettered UPDATE queued behind a pending STOP must not read as merely
+ * queued, so the entry shows its worst operation.
+ */
+private val syncStatusSeverity = listOf(
+    TimeEntryRepository.EntrySyncStatus.FAILED,
+    TimeEntryRepository.EntrySyncStatus.CONFLICT,
+    TimeEntryRepository.EntrySyncStatus.RETRYING,
+    TimeEntryRepository.EntrySyncStatus.PENDING,
+    TimeEntryRepository.EntrySyncStatus.SYNCED,
+)
+
+internal fun worstSyncStatusByEntryId(
+    operations: List<TimeEntryRepository.SyncOperation>,
+): Map<String, TimeEntryRepository.EntrySyncStatus> = operations
+    .groupBy { it.entryId }
+    .mapValues { (_, entryOperations) -> entryOperations.minBy { syncStatusSeverity.indexOf(it.status) }.status }
 
 @Immutable
  internal data class HistoryDay(
@@ -2842,8 +2880,9 @@ private fun CompactTimeEntryRow(
     val now = remember { Instant.now() }
     val locale = appLocale()
     val nowLabel = stringResource(R.string.tracking_now)
-    val timeRange = remember(entry.start, entry.end, zone, locale, nowLabel) {
-        formatTimeRange(entry.start, entry.end, zone, locale, nowLabel)
+    val invalidTimeLabel = stringResource(R.string.tracking_invalid_time)
+    val timeRange = remember(entry.start, entry.end, zone, locale, nowLabel, invalidTimeLabel) {
+        formatTimeRange(entry.start, entry.end, zone, locale, nowLabel, invalidTimeLabel)
     }
     val durationText = remember(totalDuration, entry, date, zone, now) {
         formatDuration(totalDuration ?: entryDurationOnDay(entry, date, zone, now))
@@ -3910,13 +3949,14 @@ internal fun formatTimeRange(
     zone: ZoneId,
     locale: Locale = Locale.getDefault(),
     nowLabel: String = "now",
+    invalidLabel: String = "Invalid time",
 ): String {
     val startValue = runCatching { ZonedDateTime.parse(start).withZoneSameInstant(zone) }.getOrNull()
-        ?: return "Invalid time"
+        ?: return invalidLabel
     val startFormatted = startValue.format(hourMinuteFormatter)
     return if (end != null) {
         val endValue = runCatching { ZonedDateTime.parse(end).withZoneSameInstant(zone) }.getOrNull()
-            ?: return "Invalid time"
+            ?: return invalidLabel
         val endFormatted = endValue.format(hourMinuteFormatter)
         val startDate = startValue.toLocalDate()
         val endDate = endValue.toLocalDate()

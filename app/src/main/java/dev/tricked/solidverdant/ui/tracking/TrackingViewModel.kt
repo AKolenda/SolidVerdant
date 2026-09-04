@@ -7,6 +7,7 @@
 package dev.tricked.solidverdant.ui.tracking
 
 import android.content.Context
+import androidx.annotation.StringRes
 import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
@@ -168,10 +169,13 @@ internal fun shouldDeferServerActiveWhileStopping(entryId: String, operations: L
 /**
  * A poll may return an older active row after sync has already written a replacement into Room.
  * Keep the newer timer visible when the ids differ; for the same id, the server response remains
- * authoritative so start-time edits and metadata refreshes still surface immediately.
+ * authoritative so start-time edits and metadata refreshes still surface immediately. A polled or
+ * override row still under a `local-` id has been rekeyed once Room's active row carries a server
+ * id, so Room wins regardless of start times.
  */
 internal fun selectVisibleActiveEntry(roomActive: TimeEntry?, polledActive: TimeEntry?): TimeEntry? {
     if (roomActive == null || polledActive == null || roomActive.id == polledActive.id) return polledActive
+    if (isLocalTimeEntryId(polledActive.id) && !isLocalTimeEntryId(roomActive.id)) return roomActive
     val roomStart = parseTimeEntryInstant(roomActive.start) ?: return polledActive
     val polledStart = parseTimeEntryInstant(polledActive.start) ?: return roomActive
     return if (roomStart > polledStart) {
@@ -1003,7 +1007,7 @@ class TrackingViewModel @Inject constructor(
                 // state. Keep the last trusted UI and notification surface; the next poll or
                 // foreground refresh can replace it when the network recovers.
                 _uiState.value = _uiState.value.copy(
-                    error = error.message ?: "Failed to load tracking state",
+                    error = error.message ?: context.getString(R.string.error_load_tracking_state),
                 )
 
                 // Mark as initialized even on failure
@@ -1076,7 +1080,7 @@ class TrackingViewModel @Inject constructor(
                     Timber.e(error, "Failed to load more time entries")
                     _uiState.value = _uiState.value.copy(
                         isLoadingMoreTimeEntries = false,
-                        error = error.message ?: "Failed to load more entries",
+                        error = error.message ?: context.getString(R.string.error_load_more_entries),
                     )
                 }
         }
@@ -1136,7 +1140,7 @@ class TrackingViewModel @Inject constructor(
                         historyJumpTarget = null,
                         historyJumpProgress = null,
                         historyRateLimitWaitSeconds = null,
-                        error = error.message ?: "Failed to load date",
+                        error = error.message ?: context.getString(R.string.error_load_date),
                     )
                     return@launch
                 }
@@ -1193,9 +1197,17 @@ class TrackingViewModel @Inject constructor(
                 return@launch
             }
             if (!isCurrentHistoryRequest(organizationId, memberId, requestGeneration)) return@launch
-            val window = (response.data + carryInEntries).distinctBy { it.id }.map { entry ->
+            val fetchedWindow = (response.data + carryInEntries).distinctBy { it.id }.map { entry ->
                 entry.copy(tags = entry.tags.map { tagsById[it.id] ?: it })
             }
+            // Unsynced local rows exist only in Room; the merge keeps them inside the fetched range.
+            val window = HistoryWindow.merge(
+                mode = HistoryWindowMode.PAGINATED,
+                displayed = fetchedWindow,
+                collected = timeEntryRepository.observeTimeEntries(organizationId).first(),
+                includesNewestHistory = windowStart == 0,
+            ).sortedByDescending { it.start }
+            if (!isCurrentHistoryRequest(organizationId, memberId, requestGeneration)) return@launch
             historyWindowStartOffset = windowStart
             historyOffset = windowStart + response.data.size
             historyLoadStage = 2
@@ -1493,7 +1505,7 @@ class TrackingViewModel @Inject constructor(
                 timerMutationInProgress = false
                 Timber.d("Time entry started successfully (optimistic)")
             } catch (e: Exception) {
-                handleTimerMutationFailure(e, "Failed to start time entry")
+                handleTimerMutationFailure(e, R.string.error_start_entry)
             }
         }
     }
@@ -1554,7 +1566,7 @@ class TrackingViewModel @Inject constructor(
                 )
                 Timber.d("Time entry updated successfully (optimistic)")
             } catch (e: Exception) {
-                handleMutationFailure(e, "Failed to update time entry")
+                handleMutationFailure(e, R.string.error_update_entry)
             }
         }
     }
@@ -1646,7 +1658,7 @@ class TrackingViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(isLoading = false)
             } catch (e: Exception) {
                 locallyStoppingEntryIds.remove(currentEntry.id)
-                handleTimerMutationFailure(e, "Failed to stop time entry")
+                handleTimerMutationFailure(e, R.string.error_stop_entry)
             }
         }
     }
@@ -1689,7 +1701,7 @@ class TrackingViewModel @Inject constructor(
                 settingsDataStore.setWidgetTrackingState(isTracking = false)
                 TimeTrackingWidget.requestUpdate(context)
             } catch (e: Exception) {
-                handleTimerMutationFailure(e, "Failed to pause time entry")
+                handleTimerMutationFailure(e, R.string.error_pause_entry)
             }
         }
     }
@@ -1748,7 +1760,7 @@ class TrackingViewModel @Inject constructor(
                 Timber.d("Time entry resumed successfully with new entry (optimistic)")
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(isPaused = wasPaused)
-                handleTimerMutationFailure(e, "Failed to resume time entry")
+                handleTimerMutationFailure(e, R.string.error_resume_entry)
             }
         }
     }
@@ -1797,7 +1809,7 @@ class TrackingViewModel @Inject constructor(
                 )
                 Timber.d("Manual time entry created successfully")
             } catch (e: Exception) {
-                handleMutationFailure(e, "Failed to create entry")
+                handleMutationFailure(e, R.string.error_create_entry)
             }
         }
     }
@@ -1883,7 +1895,7 @@ class TrackingViewModel @Inject constructor(
 
                 Timber.d("Time entry updated successfully (optimistic)")
             } catch (e: Exception) {
-                handleMutationFailure(e, "Failed to update time entry")
+                handleMutationFailure(e, R.string.error_update_entry)
             }
         }
     }
@@ -1902,7 +1914,7 @@ class TrackingViewModel @Inject constructor(
                 }
                 .onFailure { error ->
                     Timber.e(error, "Failed to duplicate time entry")
-                    _uiState.value = _uiState.value.copy(error = error.message ?: "Failed to duplicate entry")
+                    _uiState.value = _uiState.value.copy(error = error.message ?: context.getString(R.string.error_duplicate_entry))
                 }
         }
     }
@@ -1921,7 +1933,7 @@ class TrackingViewModel @Inject constructor(
                 }
                 .onFailure { error ->
                     Timber.e(error, "Failed to split time entry")
-                    _uiState.value = _uiState.value.copy(error = error.message ?: "Failed to split entry")
+                    _uiState.value = _uiState.value.copy(error = error.message ?: context.getString(R.string.error_split_entry))
                 }
         }
     }
@@ -2014,8 +2026,9 @@ class TrackingViewModel @Inject constructor(
         viewModelScope.launch { timeEntryRepository.discardFailedSync(entryId) }
     }
 
-    private fun handleMutationFailure(error: Exception, fallbackMessage: String) {
+    private fun handleMutationFailure(error: Exception, @StringRes fallbackMessageRes: Int) {
         if (error is CancellationException) throw error
+        val fallbackMessage = context.getString(fallbackMessageRes)
         Timber.e(error, fallbackMessage)
         _uiState.value = _uiState.value.copy(
             isLoading = false,
@@ -2033,9 +2046,9 @@ class TrackingViewModel @Inject constructor(
         return true
     }
 
-    private fun handleTimerMutationFailure(error: Exception, fallbackMessage: String) {
+    private fun handleTimerMutationFailure(error: Exception, @StringRes fallbackMessageRes: Int) {
         timerMutationInProgress = false
-        handleMutationFailure(error, fallbackMessage)
+        handleMutationFailure(error, fallbackMessageRes)
     }
 
     /**

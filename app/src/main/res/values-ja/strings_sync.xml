@@ -62,7 +62,7 @@
     <string name="sync_reason_offline">デバイスがオフラインだったため、この変更を送信できませんでした。</string>
     <string name="sync_reason_server">サーバーがこの変更の受け入れで問題が発生しました。</string>
     <string name="sync_reason_rejected">サーバーがこの変更を受け入れませんでした。</string>
-    <string name="sync_reason_generic">この変更を送信できませんでした。引き続き試行します。</string>
+    <string name="sync_reason_generic">この変更を送信できませんでした。再試行するか、破棄してください。</string>
 
     <!-- 空の状態 -->
     <string name="sync_all_caught_up">すべて最新です。すべての変更がサーバーに安全に保存されています。</string>
