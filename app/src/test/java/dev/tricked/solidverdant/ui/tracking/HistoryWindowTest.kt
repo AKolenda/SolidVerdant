@@ -7,8 +7,11 @@
 package dev.tricked.solidverdant.ui.tracking
 
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.domain.time.formatTimeEntryInstant
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
 class HistoryWindowTest {
     private fun entry(id: String, description: String? = null) = TimeEntry(
@@ -194,5 +197,19 @@ class HistoryWindowTest {
         )
 
         assertEquals(listOf("existing"), merged.map { it.id })
+    }
+
+    @Test fun `entry saved from the editor slots chronologically among server timestamps`() {
+        val displayed = listOf(
+            entry("later").copy(start = "2026-07-06T09:00:00Z", end = "2026-07-06T09:30:00Z"),
+            entry("earlier").copy(start = "2026-07-06T08:00:00Z", end = "2026-07-06T08:30:00Z"),
+        )
+        val localStart = ZonedDateTime.of(2026, 7, 6, 10, 30, 0, 0, ZoneId.of("Europe/Amsterdam"))
+        val saved = entry("local-create-1").copy(
+            start = formatTimeEntryInstant(localStart),
+            end = formatTimeEntryInstant(localStart.plusMinutes(10)),
+        )
+        val merged = HistoryWindow.merge(HistoryWindowMode.PAGINATED, displayed, displayed + saved)
+        assertEquals(listOf("later", "local-create-1", "earlier"), merged.map { it.id })
     }
 }

@@ -189,6 +189,7 @@ import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.domain.time.clipTimeEntryToLocalDay
+import dev.tricked.solidverdant.domain.time.formatTimeEntryInstant
 import dev.tricked.solidverdant.domain.time.isCompletedTimeEntry
 import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.domain.time.isWorkTimeEntry
@@ -209,6 +210,7 @@ import dev.tricked.solidverdant.data.local.AppThemeMode
 import dev.tricked.solidverdant.ui.components.ProjectTaskDropdown as SharedProjectTaskDropdown
 import dev.tricked.solidverdant.ui.components.EntryDateFieldButton
 import dev.tricked.solidverdant.ui.components.EntryDatePickerDialog
+import dev.tricked.solidverdant.ui.components.retimedEnd
 import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
 import dev.tricked.solidverdant.ui.components.SectionCard
 import dev.tricked.solidverdant.ui.components.SearchableSingleSelectDialog
@@ -3113,8 +3115,8 @@ internal fun TimeEntryFormSheet(
             val candidate = TimeEntry(
                 id = entry?.id ?: "",
                 userId = entry?.userId ?: "",
-                start = startTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
-                end = endTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                start = formatTimeEntryInstant(startTime),
+                end = formatTimeEntryInstant(endTime),
                 organizationId = org,
             )
             existingEntries.any { it.id != candidate.id && EntryTrustRules.overlaps(candidate, it) }
@@ -3465,8 +3467,8 @@ internal fun TimeEntryFormSheet(
                                 taskId,
                                 selectedTags,
                                 billable,
-                                startTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
-                                endTime.takeUnless { isRunningEntry }?.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                                formatTimeEntryInstant(startTime),
+                                endTime.takeUnless { isRunningEntry }?.let(::formatTimeEntryInstant)
                             )
                         },
                         enabled = saveEnabled && durationIsValid && validation.canSave,
@@ -3487,11 +3489,9 @@ internal fun TimeEntryFormSheet(
             onDismiss = { editingTime = null },
             onConfirm = { hour, minute ->
                 if (field == TimeField.Start) {
-                    startTime = startTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
-                    if (!isRunningEntry) {
-                        val minutes = durationMinutes.toLongOrNull() ?: 1
-                        endTime = startTime.plusMinutes(minutes)
-                    }
+                    val newStart = startTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
+                    if (!isRunningEntry) endTime = retimedEnd(startTime, newStart, endTime)
+                    startTime = newStart
                 } else {
                     val sameDayEnd = endTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
                     // Do not silently roll an earlier clock-time into a ~24h entry: only a plausible
@@ -3512,11 +3512,9 @@ internal fun TimeEntryFormSheet(
             onDismiss = { editingDate = null },
             onConfirm = { date ->
                 if (field == TimeField.Start) {
-                    startTime = startTime.with(date)
-                    if (!isRunningEntry) {
-                        val minutes = durationMinutes.toLongOrNull() ?: 1
-                        endTime = startTime.plusMinutes(minutes)
-                    }
+                    val newStart = startTime.with(date)
+                    if (!isRunningEntry) endTime = retimedEnd(startTime, newStart, endTime)
+                    startTime = newStart
                 } else {
                     endTime = endTime.with(date)
                     durationMinutes = java.time.Duration.between(startTime, endTime).toMinutes().toString()
@@ -3541,7 +3539,7 @@ internal fun TimeEntryFormSheet(
                 // Clamp into the open interval: reject boundary/out-of-range picks (half-open
                 // semantics) - the repository re-validates, this just avoids an obvious no-op.
                 if (candidate.isAfter(originalStart) && candidate.isBefore(originalEnd)) {
-                    onSplit(candidate.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+                    onSplit(formatTimeEntryInstant(candidate))
                     onDismiss()
                 }
             },
