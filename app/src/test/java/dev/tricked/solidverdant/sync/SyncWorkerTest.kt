@@ -11,6 +11,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.work.ListenableWorker
 import androidx.work.testing.TestListenableWorkerBuilder
 import dev.tricked.solidverdant.data.local.db.AppDatabase
+import dev.tricked.solidverdant.data.local.db.InboxDismissalEntity
 import dev.tricked.solidverdant.data.local.db.OutboxEntity
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.local.db.SyncState
@@ -38,6 +39,7 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -1593,5 +1595,43 @@ class SyncWorkerTest {
         assertTrue(db.outboxDao().peekAll().isEmpty())
         assertNull(db.timeEntryDao().getById("local-1"))
         assertEquals(SyncState.SYNCED, db.timeEntryDao().getById("server-9")?.syncState)
+    }
+
+    private fun repository() = TimeEntryRepository(
+        db.timeEntryDao(),
+        db.catalogDao(),
+        db.outboxDao(),
+        db.syncMetaDao(),
+        remote,
+        clock,
+        json,
+        db,
+    )
+
+    @Test fun start_reply_keeps_a_soft_delete_that_landed_while_the_start_was_in_flight() = runTest {
+        val repository = repository()
+        val local = repository.startEntry("org1", "m1", "u1", null, null, "work", emptyList())
+        repository.softDeleteLocal(local)
+        remote.startResult = { it.copy(id = "server-1") }
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        val row = db.timeEntryDao().getById("server-1")
+        assertNotNull(row)
+        assertTrue("CREATE reply must not resurrect a delete in progress", row!!.pendingDelete)
+        assertNull(db.timeEntryDao().getById(local.id))
+    }
+
+    @Test fun start_reply_rekeys_inbox_dismissals_recorded_against_the_local_id() = runTest {
+        val local = repository().startEntry("org1", "m1", "u1", null, null, "", emptyList())
+        db.inboxDismissalDao().upsert(InboxDismissalEntity("missing:v1:${local.id}:1000:DESCRIPTION", "org1", 1L))
+        remote.startResult = { it.copy(id = "server-1") }
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        assertEquals(
+            listOf("missing:v1:server-1:1000:DESCRIPTION"),
+            db.inboxDismissalDao().observeDismissedKeys("org1").first(),
+        )
     }
 }

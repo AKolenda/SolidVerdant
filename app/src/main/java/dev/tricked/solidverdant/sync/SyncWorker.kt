@@ -543,7 +543,12 @@ class SyncWorker @AssistedInject constructor(
                 outboxDao.rekeyReferences(localId, server.id)
                 rekeyedTo = server.id
             }
-            timeEntryDao.upsert(server.toEntity(updatedAt = clock.nowMs(), syncState = SyncState.SYNCED))
+            // The user may have soft-deleted this entry while its START/CREATE was in flight; the
+            // queued DELETE follows once this reply lands, so the row must stay hidden until then.
+            val pendingDelete = timeEntryDao.getById(server.id)?.pendingDelete ?: false
+            timeEntryDao.upsert(
+                server.toEntity(updatedAt = clock.nowMs(), syncState = SyncState.SYNCED, pendingDelete = pendingDelete),
+            )
             // Preserve the server's authoritative tag set; only fall back to the queued tags when
             // the server returned none (avoids clobbering a server-side tag merge).
             val tagIds = server.tags.map { it.id }.ifEmpty { fallbackTagIds.orEmpty() }

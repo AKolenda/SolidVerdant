@@ -27,7 +27,9 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -1083,5 +1085,75 @@ class TimeEntryRepositoryWriteTest {
         assertEquals(OutboxOpType.CREATE, op.opType)
         assertEquals(entry.id, op.timeEntryId)
         assertNull(op.baseSnapshotJson)
+    }
+
+    /** What SyncWorker.reconcile does to a START/CREATE row once the server assigns its id. */
+    private suspend fun simulateRekey(local: TimeEntry, serverId: String, pendingDelete: Boolean = false) {
+        db.timeEntryDao().rekey(local.id, serverId)
+        db.outboxDao().rekeyReferences(local.id, serverId)
+        db.outboxDao().peekAll().forEach { db.outboxDao().delete(it) }
+        db.timeEntryDao().upsert(
+            local.copy(id = serverId).toEntity(updatedAt = 2L, syncState = SyncState.SYNCED, pendingDelete = pendingDelete),
+        )
+    }
+
+    @Test fun updateEntry_with_a_retired_local_id_edits_the_rekeyed_row() = runTest {
+        val local = repo.startEntry("org1", "m", "u", null, null, "draft", emptyList())
+        simulateRekey(local, "server-1")
+
+        repo.updateEntry(local.copy(description = "edited"), tagIds = listOf("t1"))
+
+        assertNull("no ghost row under the retired id", db.timeEntryDao().getById(local.id))
+        assertEquals("edited", db.timeEntryDao().getById("server-1")?.description)
+        assertEquals(listOf("t1"), db.timeEntryDao().tagIdsFor("server-1"))
+        val op = db.outboxDao().peekAll().single()
+        assertEquals(OutboxOpType.UPDATE, op.opType)
+        assertEquals("server-1", op.timeEntryId)
+    }
+
+    @Test fun updateEntry_with_an_unresolvable_local_id_throws_and_writes_nothing() = runTest {
+        val orphan = TimeEntry(
+            id = "local-gone",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+        )
+
+        assertThrows(IllegalStateException::class.java) {
+            kotlinx.coroutines.runBlocking { repo.updateEntry(orphan, emptyList()) }
+        }
+
+        assertNull(db.timeEntryDao().getById("local-gone"))
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+    }
+
+    @Test fun commitDelete_after_a_rekey_enqueues_a_server_delete_for_the_new_id() = runTest {
+        val local = repo.startEntry("org1", "m", "u", null, null, "x", emptyList())
+        repo.softDeleteLocal(local)
+        simulateRekey(local, "server-1", pendingDelete = true)
+
+        repo.commitDelete(local)
+
+        val op = db.outboxDao().peekAll().single()
+        assertEquals(OutboxOpType.DELETE, op.opType)
+        assertEquals("server-1", op.timeEntryId)
+        assertEquals(true, db.timeEntryDao().getById("server-1")?.pendingDelete)
+        assertNull(db.timeEntryDao().getById(local.id))
+    }
+
+    @Test fun softDelete_and_undo_with_a_retired_local_id_act_on_the_rekeyed_row() = runTest {
+        val local = repo.startEntry("org1", "m", "u", null, null, "x", emptyList())
+        simulateRekey(local, "server-1")
+
+        repo.softDeleteLocal(local)
+        assertEquals(true, db.timeEntryDao().getById("server-1")?.pendingDelete)
+        assertNull(db.timeEntryDao().getById(local.id))
+
+        assertTrue(repo.undoDelete(local, "m"))
+        val restored = db.timeEntryDao().getById("server-1")
+        assertFalse(restored!!.pendingDelete)
+        assertEquals(SyncState.SYNCED, restored.syncState)
+        assertTrue(db.outboxDao().peekAll().isEmpty())
     }
 }
