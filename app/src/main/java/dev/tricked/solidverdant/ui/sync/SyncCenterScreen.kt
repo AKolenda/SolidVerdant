@@ -318,7 +318,9 @@ internal fun failureReasonRes(error: String?): Int {
         lower.isBlank() -> R.string.sync_reason_generic
         listOf("offline", "timeout", "unable to resolve host", "connect", "unreachable", "network")
             .any { it in lower } -> R.string.sync_reason_offline
-        listOf("400", "401", "403", "404", "409", "422", "unprocessable", "forbidden", "unauthorized", "bad request")
+        // The worker's own dead-letter message says "rejected"; match it before the server
+        // bucket, whose "server" keyword would otherwise claim it and imply a transient fault.
+        listOf("400", "401", "403", "404", "409", "422", "unprocessable", "forbidden", "unauthorized", "bad request", "reject")
             .any { it in lower } -> R.string.sync_reason_rejected
         listOf("500", "502", "503", "504", "server", "gateway", "unavailable")
             .any { it in lower } -> R.string.sync_reason_server

@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.WindowInsets
@@ -610,12 +611,14 @@ fun TrackingScreen(
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
+                                .heightIn(min = Dimens.MinTouchTarget)
+                                .clickable(role = Role.Button) {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                     clipboard.setPrimaryClip(ClipData.newPlainText("Server endpoint", serverEndpoint))
                                     Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
                                 }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .wrapContentHeight()
                         )
                         Text(
                             text = stringResource(R.string.client_id),
@@ -629,12 +632,14 @@ fun TrackingScreen(
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
+                                .heightIn(min = Dimens.MinTouchTarget)
+                                .clickable(role = Role.Button) {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                     clipboard.setPrimaryClip(ClipData.newPlainText("Client ID", clientId))
                                     Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
                                 }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .wrapContentHeight()
                         )
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -1109,7 +1114,8 @@ fun TrackingScreen(
                                 syncStatusByEntryId = syncStatusByEntryId,
                                 onEdit = onHistoryEdit,
                                 onDelete = onHistoryDelete,
-                                onDateClick = onHistoryDateClick
+                                onDateClick = onHistoryDateClick,
+                                onRetrySync = { onRetrySyncEntry(it.id) }
                             )
                             item { Spacer(Modifier.height(16.dp)) }
                         }
@@ -2594,14 +2600,12 @@ private fun DateHeader(
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 12.sp,
             maxLines = 1
         )
         Text(
             text = headerStats,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-            fontSize = 11.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
@@ -2693,14 +2697,16 @@ private fun CollapsibleTimeEntryGroup(
                             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                             RoundedCornerShape(6.dp)
                         )
+                        .heightIn(min = Dimens.MinTouchTarget)
+                        .clickable(role = Role.Button) { isExpanded = false }
                         .padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.Center
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = pluralStringResource(R.plurals.collapse_entries, entries.size, entries.size),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.clickable { isExpanded = false }
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -3613,9 +3619,11 @@ private fun AboutSection(context: Context) {
                 text = context.packageName,
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                modifier = Modifier.clickable {
-                    copyToClipboard(context, context.packageName)
-                }
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = Dimens.MinTouchTarget)
+                    .clickable(role = Role.Button) { copyToClipboard(context, context.packageName) }
+                    .wrapContentHeight()
             )
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -3631,9 +3639,11 @@ private fun AboutSection(context: Context) {
                 text = signingHash,
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                modifier = Modifier.clickable {
-                    copyToClipboard(context, signingHash)
-                }
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = Dimens.MinTouchTarget)
+                    .clickable(role = Role.Button) { copyToClipboard(context, signingHash) }
+                    .wrapContentHeight()
             )
         }
     }

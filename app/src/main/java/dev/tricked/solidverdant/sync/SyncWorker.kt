@@ -153,12 +153,10 @@ class SyncWorker @AssistedInject constructor(
         // only lastPushAtMs, never the pull timestamp a concurrent refresh may have written.
         val pushedAt = clock.nowMs()
         pushedOrgs.forEach { orgId -> syncMetaDao.stampPush(orgId, pushedAt) }
-        if (retryResult != null) {
-            syncStatus.set(SyncStatus.Idle)
-            return retryResult
-        }
+        // A dead-letter raised earlier in this drain must stay visible even when another op
+        // still needs a retry; only a clean drain returns the banner to idle.
         if (syncStatus.status.value !is SyncStatus.Error) syncStatus.set(SyncStatus.Idle)
-        return Result.success()
+        return retryResult ?: Result.success()
     }
 
     /** Rewrite [OutboxEntity.timeEntryId] through the in-run rekey map, following chained hops. */
