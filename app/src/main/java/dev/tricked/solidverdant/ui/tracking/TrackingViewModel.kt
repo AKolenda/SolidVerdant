@@ -23,6 +23,7 @@ import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.TimeEntryType
+import dev.tricked.solidverdant.data.model.isLocalTimeEntryId
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.time.TemporalPolicy
@@ -96,9 +97,12 @@ internal fun resolvedHistoryMembershipChangeIds(changes: Map<String, HistoryMemb
  *
  * In [HistoryWindowMode.RECENT] the collector owns the list and replaces it wholesale, so live
  * edits and the active-entry poll stay fresh. Once the user pages or jumps to an off-window slice
- * ([HistoryWindowMode.PAGINATED]) the network-fetched window normally preserves its membership so
- * scroll position survives a poll emission. Entries mutated locally are the exception: Room is
- * authoritative for whether those entries are present, even while the paginated window is shown.
+ * ([HistoryWindowMode.PAGINATED]) the network-fetched window preserves entries Room does not hold
+ * so scroll position survives a poll emission. Inside the window's start range Room is
+ * authoritative: completed rows it holds are shown, rows it has dropped under a `local-` id are
+ * removed. That covers sync rekeying a local CREATE/START to its server id, which otherwise left
+ * a frozen local row on screen and never surfaced the server copy. [includesNewestHistory] opens
+ * the upper bound when the window reaches the newest entries, so a just-added entry appears.
  */
 internal object HistoryWindow {
     fun merge(
@@ -106,17 +110,26 @@ internal object HistoryWindow {
         displayed: List<TimeEntry>,
         collected: List<TimeEntry>,
         locallyMutatedEntryIds: Set<String> = emptySet(),
+        includesNewestHistory: Boolean = true,
     ): List<TimeEntry> = when (mode) {
         HistoryWindowMode.RECENT -> collected
         HistoryWindowMode.PAGINATED -> {
             val collectedById = collected.associateBy { it.id }
             val refreshed = displayed.mapNotNull { displayedEntry ->
                 collectedById[displayedEntry.id]
-                    ?: displayedEntry.takeUnless { it.id in locallyMutatedEntryIds }
+                    ?: displayedEntry.takeUnless { it.id in locallyMutatedEntryIds || isLocalTimeEntryId(it.id) }
             }
             val displayedIds = displayed.mapTo(mutableSetOf()) { it.id }
+            val oldestStart = displayed.minOfOrNull { it.start }
+            val newestStart = displayed.maxOfOrNull { it.start }
+            fun insideWindow(entry: TimeEntry): Boolean = oldestStart != null &&
+                newestStart != null &&
+                entry.start >= oldestStart &&
+                (includesNewestHistory || entry.start <= newestStart)
             val completedAdditions = collected.filter {
-                it.id in locallyMutatedEntryIds && it.id !in displayedIds && isCompletedTimeEntry(it)
+                it.id !in displayedIds &&
+                    isCompletedTimeEntry(it) &&
+                    (it.id in locallyMutatedEntryIds || insideWindow(it))
             }
 
             completedAdditions.fold(refreshed) { entries, addition ->
@@ -574,6 +587,7 @@ class TrackingViewModel @Inject constructor(
                     displayed = currentState.timeEntries,
                     collected = data.entries,
                     locallyMutatedEntryIds = resolvedMembershipChanges,
+                    includesNewestHistory = !currentState.canLoadNewerHistory,
                 )
                 resolvedMembershipChanges.forEach(pendingHistoryMembershipChanges::remove)
                 if (mode == HistoryWindowMode.RECENT) {
