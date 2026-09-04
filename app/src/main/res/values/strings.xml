@@ -22,6 +22,7 @@
     <string name="connection_failed">Could not connect to the server.</string>
     <string name="connection_test_failed">The connection test failed.</string>
     <string name="sync_entry_failed">This change has not reached the server.</string>
+    <string name="sync_retry_entry">Retry sync</string>
     <string name="search_and_filter">Search &amp; filter</string>
     <string name="search_options">Search options</string>
     <string name="hide_search_options">Hide search options</string>

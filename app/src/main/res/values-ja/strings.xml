@@ -22,6 +22,7 @@
     <string name="connection_failed">サーバーに接続できませんでした。</string>
     <string name="connection_test_failed">接続テストに失敗しました。</string>
     <string name="sync_entry_failed">この変更はサーバーに届いていません。</string>
+    <string name="sync_retry_entry">同期を再試行</string>
     <string name="search_and_filter">検索と絞り込み</string>
     <string name="search_options">検索オプション</string>
     <string name="hide_search_options">検索オプションを非表示</string>

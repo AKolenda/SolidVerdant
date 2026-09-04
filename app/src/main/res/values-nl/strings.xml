@@ -22,6 +22,7 @@
     <string name="connection_failed">Er kon geen verbinding met de server worden gemaakt.</string>
     <string name="connection_test_failed">De verbindingstest is mislukt.</string>
     <string name="sync_entry_failed">Deze wijziging heeft de server niet bereikt.</string>
+    <string name="sync_retry_entry">Synchronisatie opnieuw proberen</string>
     <string name="search_and_filter">Zoeken en filteren</string>
     <string name="search_options">Zoekopties</string>
     <string name="hide_search_options">Zoekopties verbergen</string>

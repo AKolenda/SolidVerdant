@@ -76,6 +76,7 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
@@ -213,6 +214,8 @@ import dev.tricked.solidverdant.ui.components.SearchableSingleSelectDialog
 import dev.tricked.solidverdant.ui.components.SyncChip
 import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.theme.Dimens
+import dev.tricked.solidverdant.ui.theme.syncFailed
+import dev.tricked.solidverdant.ui.theme.syncPending
 import dev.tricked.solidverdant.util.IsoTimes
 import dev.tricked.solidverdant.util.NotificationPermissionHelper
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
@@ -1074,7 +1077,8 @@ fun TrackingScreen(
                                     syncStatusByEntryId = syncStatusByEntryId,
                                     onEdit = onHistoryEdit,
                                     onDelete = onHistoryDelete,
-                                    onDateClick = onHistoryDateClick
+                                    onDateClick = onHistoryDateClick,
+                                    onRetrySync = { onRetrySyncEntry(it.id) }
                                 )
                                 item { Spacer(Modifier.height(16.dp)) }
                             }
@@ -1683,7 +1687,8 @@ internal fun LazyListScope.trackingHistoryItems(
     syncStatusByEntryId: Map<String, TimeEntryRepository.EntrySyncStatus>,
     onEdit: (TimeEntry) -> Unit,
     onDelete: (TimeEntry) -> Unit,
-    onDateClick: (LocalDate) -> Unit
+    onDateClick: (LocalDate) -> Unit,
+    onRetrySync: (TimeEntry) -> Unit = {}
 ) {
     if (!uiState.hasLoadedTimeEntries && uiState.timeEntries.isEmpty()) {
         item(key = "history_loading_header") { HistoryLoadingHeader() }
@@ -1726,7 +1731,8 @@ internal fun LazyListScope.trackingHistoryItems(
                         tasksById = tasksById,
                         syncStatusByEntryId = syncStatusByEntryId,
                         onEdit = onEdit,
-                        onDelete = onDelete
+                        onDelete = onDelete,
+                        onRetrySync = onRetrySync
                     )
             }
         }
@@ -1770,6 +1776,7 @@ internal fun LazyListScope.trackingHistoryItems(
     onEdit: (TimeEntry) -> Unit,
     onDelete: (TimeEntry) -> Unit,
     onDateClick: (LocalDate) -> Unit,
+    onRetrySync: (TimeEntry) -> Unit = {},
 ) {
     val historyItems = buildList {
         groupedEntries.forEach { (date, entries) ->
@@ -1796,6 +1803,7 @@ internal fun LazyListScope.trackingHistoryItems(
         onEdit = onEdit,
         onDelete = onDelete,
         onDateClick = onDateClick,
+        onRetrySync = onRetrySync,
     )
 }
 
@@ -1815,6 +1823,10 @@ internal fun LazyListScope.trackingHistoryItems(
  }
 
 /** Keep every punch visible, even when multiple entries share the same project/task/description. */
+/** Statuses a user can act on from the card; PENDING is queued and will upload on its own. */
+internal fun canRetrySync(status: TimeEntryRepository.EntrySyncStatus): Boolean =
+    status == TimeEntryRepository.EntrySyncStatus.FAILED || status == TimeEntryRepository.EntrySyncStatus.RETRYING
+
 internal fun historyEntryGroups(entries: List<TimeEntry>): List<List<TimeEntry>> =
     entries.map(::listOf)
 
@@ -2609,7 +2621,8 @@ private fun CollapsibleTimeEntryGroup(
     tasksById: Map<String, Task>,
     syncStatusByEntryId: Map<String, TimeEntryRepository.EntrySyncStatus>,
     onEdit: (TimeEntry) -> Unit,
-    onDelete: (TimeEntry) -> Unit
+    onDelete: (TimeEntry) -> Unit,
+    onRetrySync: (TimeEntry) -> Unit
 ) {
     var isExpanded by remember { mutableStateOf(false) }
     val now = remember { Instant.now() }
@@ -2633,6 +2646,7 @@ private fun CollapsibleTimeEntryGroup(
                 syncStatus = syncStatusByEntryId[entries.first().id],
                 onEdit = { onEdit(entries.first()) },
                 onDelete = { onDelete(entries.first()) },
+                onRetrySync = { onRetrySync(entries.first()) },
                 count = null
             )
         } else {
@@ -2648,6 +2662,9 @@ private fun CollapsibleTimeEntryGroup(
                     syncStatus = worstSyncStatus,
                     onEdit = { isExpanded = true },
                     onDelete = { /* Don't allow deleting grouped entries */ },
+                    onRetrySync = {
+                        entries.filter { syncStatusByEntryId[it.id]?.let(::canRetrySync) == true }.forEach(onRetrySync)
+                    },
                     count = entries.size,
                     totalDuration = totalDuration
                 )
@@ -2663,6 +2680,7 @@ private fun CollapsibleTimeEntryGroup(
                         syncStatus = syncStatusByEntryId[entry.id],
                         onEdit = { onEdit(entry) },
                         onDelete = { onDelete(entry) },
+                        onRetrySync = { onRetrySync(entry) },
                         count = null,
                         isIndented = true
                     )
@@ -2810,6 +2828,7 @@ private fun CompactTimeEntryRow(
     syncStatus: TimeEntryRepository.EntrySyncStatus?,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onRetrySync: () -> Unit,
     count: Int? = null,
     totalDuration: Long? = null,
     isIndented: Boolean = false
@@ -2924,7 +2943,27 @@ private fun CompactTimeEntryRow(
         ) {
             // Kit chip renders nothing for SYNCED (and null); only PENDING /
             // RETRYING / FAILED surface, so a healthy row stays clutter-free.
-            syncStatus?.let { SyncChip(status = it, showLabel = false) }
+            // A change that has not reached the server gets a tappable retry instead of the
+            // passive chip, so recovery happens on the card rather than in the Sync center.
+            if (syncStatus != null && canRetrySync(syncStatus)) {
+                IconButton(
+                    onClick = onRetrySync,
+                    modifier = Modifier.size(48.dp).testTag(TrackingTestTags.entryRetrySyncButton(entry.id))
+                ) {
+                    Icon(
+                        Icons.Default.SyncProblem,
+                        contentDescription = stringResource(R.string.sync_retry_entry),
+                        tint = if (syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED) {
+                            MaterialTheme.colorScheme.syncFailed
+                        } else {
+                            MaterialTheme.colorScheme.syncPending
+                        },
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            } else {
+                syncStatus?.let { SyncChip(status = it, showLabel = false) }
+            }
             // Duration (use totalDuration if grouped, otherwise entry duration)
             Text(
                 text = durationText,
