@@ -11,6 +11,7 @@ import androidx.test.core.app.ApplicationProvider
 import dev.tricked.solidverdant.data.local.db.AppDatabase
 import dev.tricked.solidverdant.data.local.db.OutboxEntity
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
+import dev.tricked.solidverdant.data.local.db.RateLimitMarker
 import dev.tricked.solidverdant.data.local.db.SyncState
 import dev.tricked.solidverdant.data.local.db.toEntity
 import dev.tricked.solidverdant.data.model.Tag
@@ -1155,5 +1156,55 @@ class TimeEntryRepositoryWriteTest {
         assertFalse(restored!!.pendingDelete)
         assertEquals(SyncState.SYNCED, restored.syncState)
         assertTrue(db.outboxDao().peekAll().isEmpty())
+    }
+
+    @Test fun rate_limited_operation_reads_as_retrying_without_an_attempt() = runTest {
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = "server-1",
+                payloadJson = "{}",
+                createdAtMs = 1L,
+                lastError = RateLimitMarker.encode(45),
+            ),
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = "server-2",
+                payloadJson = "{}",
+                createdAtMs = 2L,
+            ),
+        )
+
+        val operations = repo.observeSyncOperations("org1").first().associateBy { it.entryId }
+
+        assertEquals(TimeEntryRepository.EntrySyncStatus.RETRYING, operations.getValue("server-1").status)
+        assertEquals(0, operations.getValue("server-1").attemptCount)
+        assertEquals("rate_limited:45", operations.getValue("server-1").error)
+        assertEquals(TimeEntryRepository.EntrySyncStatus.PENDING, operations.getValue("server-2").status)
+    }
+
+    @Test fun failed_count_outside_organization_ignores_current_org_and_pending_rows() = runTest {
+        suspend fun insert(org: String, entryId: String, deadLettered: Boolean) = db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = org,
+                timeEntryId = entryId,
+                payloadJson = "{}",
+                createdAtMs = 1L,
+                deadLettered = deadLettered,
+            ),
+        )
+        insert("org1", "current-failed", deadLettered = true)
+        insert("org2", "other-failed", deadLettered = true)
+        insert("org3", "other-failed-2", deadLettered = true)
+        insert("org2", "other-pending", deadLettered = false)
+
+        assertEquals(2, repo.observeFailedOperationCountOutsideOrganization("org1").first())
+        assertEquals(2, repo.observeFailedOperationCountOutsideOrganization("org2").first())
+        assertEquals(3, repo.observeFailedOperationCountOutsideOrganization("org-none").first())
     }
 }

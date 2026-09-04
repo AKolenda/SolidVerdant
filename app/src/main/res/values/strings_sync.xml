@@ -40,6 +40,10 @@
     </plurals>
     <string name="sync_status_icon_synced">Everything synced</string>
     <string name="sync_status_icon_warning">Attention needed</string>
+    <plurals name="sync_failed_outside_organization">
+        <item quantity="one">%1$d failed change in another organization. Switch organization to review it.</item>
+        <item quantity="other">%1$d failed changes in other organizations. Switch organization to review them.</item>
+    </plurals>
 
     <!-- Pending changes section -->
     <string name="sync_pending_section_title">Waiting to sync</string>
@@ -66,6 +70,7 @@
     <string name="sync_reason_offline">Your device was offline, so this change couldn\'t be sent.</string>
     <string name="sync_reason_server">The server had a problem accepting this change.</string>
     <string name="sync_reason_rejected">The server wouldn\'t accept this change.</string>
+    <string name="sync_reason_rate_limited">The server asked us to slow down; syncing resumes automatically.</string>
     <string name="sync_reason_generic">This change couldn\'t be sent. Retry it or discard it.</string>
 
     <!-- Empty state -->

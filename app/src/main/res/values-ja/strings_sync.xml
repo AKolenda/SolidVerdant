@@ -36,6 +36,9 @@
     </plurals>
     <string name="sync_status_icon_synced">すべて同期済み</string>
     <string name="sync_status_icon_warning">確認が必要です</string>
+    <plurals name="sync_failed_outside_organization">
+        <item quantity="other">他の組織で%1$d件の変更が失敗しました。組織を切り替えて確認してください。</item>
+    </plurals>
 
     <!-- 同期待ちの変更 -->
     <string name="sync_pending_section_title">同期待ち</string>
@@ -62,6 +65,7 @@
     <string name="sync_reason_offline">デバイスがオフラインだったため、この変更を送信できませんでした。</string>
     <string name="sync_reason_server">サーバーがこの変更の受け入れで問題が発生しました。</string>
     <string name="sync_reason_rejected">サーバーがこの変更を受け入れませんでした。</string>
+    <string name="sync_reason_rate_limited">サーバーから速度を落とすよう求められました。同期は自動的に再開します。</string>
     <string name="sync_reason_generic">この変更を送信できませんでした。再試行するか、破棄してください。</string>
 
     <!-- 空の状態 -->

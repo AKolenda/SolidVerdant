@@ -61,8 +61,9 @@ class SyncCenterViewModel @Inject constructor(
             combine(
                 repository.observeSyncOperations(orgId),
                 repository.observeSyncMeta(orgId),
+                repository.observeFailedOperationCountOutsideOrganization(orgId),
                 activeRecoveryEntryIds,
-            ) { operations, meta, activeRecoveryIds ->
+            ) { operations, meta, failedOutsideCount, activeRecoveryIds ->
                 val failed = operations.filter { it.status == EntrySyncStatus.FAILED }
                 val conflicts = operations.filter { it.status == EntrySyncStatus.CONFLICT }
                 val pending = operations.filter {
@@ -78,6 +79,7 @@ class SyncCenterViewModel @Inject constructor(
                     pending = pending,
                     failed = failed,
                     conflicts = conflicts,
+                    failedOutsideOrganizationCount = failedOutsideCount,
                     activeRecoveryEntryIds = activeRecoveryIds,
                     topLine = when {
                         failed.isNotEmpty() -> SyncCenterUiState.TopLine.FAILURES
@@ -188,6 +190,8 @@ data class SyncCenterUiState(
     val pending: List<SyncOperation> = emptyList(),
     val failed: List<SyncOperation> = emptyList(),
     val conflicts: List<SyncOperation> = emptyList(),
+    /** Dead-lettered changes in organizations other than [organizationId]; the worker drains them all but the lists above do not show them. */
+    val failedOutsideOrganizationCount: Int = 0,
     val activeRecoveryEntryIds: Set<String> = emptySet(),
     val topLine: TopLine = TopLine.SYNCED,
 ) {

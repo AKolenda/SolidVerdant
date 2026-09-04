@@ -40,6 +40,10 @@
     </plurals>
     <string name="sync_status_icon_synced">Alles gesynchroniseerd</string>
     <string name="sync_status_icon_warning">Aandacht vereist</string>
+    <plurals name="sync_failed_outside_organization">
+        <item quantity="one">%1$d mislukte wijziging in een andere organisatie. Wissel van organisatie om deze te bekijken.</item>
+        <item quantity="other">%1$d mislukte wijzigingen in andere organisaties. Wissel van organisatie om ze te bekijken.</item>
+    </plurals>
 
     <!-- Wachtende wijzigingen -->
     <string name="sync_pending_section_title">Wacht op synchronisatie</string>
@@ -66,6 +70,7 @@
     <string name="sync_reason_offline">Je apparaat was offline, dus deze wijziging kon niet worden verzonden.</string>
     <string name="sync_reason_server">De server had een probleem met het verwerken van deze wijziging.</string>
     <string name="sync_reason_rejected">De server accepteerde deze wijziging niet.</string>
+    <string name="sync_reason_rate_limited">De server vroeg ons om het rustiger aan te doen; synchroniseren gaat automatisch verder.</string>
     <string name="sync_reason_generic">Deze wijziging kon niet worden verzonden. Probeer het opnieuw of verwijder de wijziging.</string>
 
     <!-- Lege staat -->

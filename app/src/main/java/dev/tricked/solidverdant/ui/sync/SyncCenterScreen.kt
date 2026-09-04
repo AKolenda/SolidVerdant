@@ -48,6 +48,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
+import dev.tricked.solidverdant.data.local.db.RateLimitMarker
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository.EntrySyncStatus
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository.SyncOperation
 import dev.tricked.solidverdant.ui.components.SectionCard
 import dev.tricked.solidverdant.ui.theme.Dimens
@@ -97,6 +99,18 @@ fun SyncCenterScreen(onBack: () -> Unit, viewModel: SyncCenterViewModel = hiltVi
             )
             FreshnessSection(state = state, onSyncNow = viewModel::syncNow, nowMs = viewModel.nowMs())
             StatusSummarySection(state = state)
+            if (state.failedOutsideOrganizationCount > 0) {
+                Text(
+                    text = pluralStringResource(
+                        R.plurals.sync_failed_outside_organization,
+                        state.failedOutsideOrganizationCount,
+                        state.failedOutsideOrganizationCount,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("sync_failed_outside_organization"),
+                )
+            }
             if (state.pending.isNotEmpty()) {
                 PendingSection(state.pending)
             }
@@ -212,7 +226,7 @@ private fun PendingSection(pending: List<SyncOperation>) {
             Column {
                 Text(opLabel(op.type), style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    stringResource(R.string.sync_pending_item),
+                    stringResource(pendingReasonRes(op)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -316,6 +330,7 @@ internal fun failureReasonRes(error: String?): Int {
     val lower = error?.lowercase().orEmpty()
     return when {
         lower.isBlank() -> R.string.sync_reason_generic
+        RateLimitMarker.matches(error) -> R.string.sync_reason_rate_limited
         listOf("offline", "timeout", "unable to resolve host", "connect", "unreachable", "network")
             .any { it in lower } -> R.string.sync_reason_offline
         // The worker's own dead-letter message says "rejected"; match it before the server
@@ -327,6 +342,10 @@ internal fun failureReasonRes(error: String?): Int {
         else -> R.string.sync_reason_generic
     }
 }
+
+/** A queued change only earns an explanation once the worker has tried it and written why it is still waiting. */
+internal fun pendingReasonRes(op: SyncOperation): Int =
+    if (op.status == EntrySyncStatus.RETRYING && !op.error.isNullOrBlank()) failureReasonRes(op.error) else R.string.sync_pending_item
 
 @Composable
 private fun relativeTimeText(timeMs: Long?, neverRes: Int, nowMs: Long): String = when (RelativeTime.bucketOf(timeMs, nowMs)) {

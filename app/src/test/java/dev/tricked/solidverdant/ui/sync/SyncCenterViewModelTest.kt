@@ -297,4 +297,30 @@ class SyncCenterViewModelTest {
         const val MEMBER = "m1"
         const val NOW_MS = 1_000_000_000_000L
     }
+
+    @Test
+    fun `counts dead letters queued for other organizations`() = runTest(dispatcher.scheduler) {
+        seedOrg()
+        seedOp("e-pending", OutboxOpType.UPDATE, deadLettered = false)
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.CREATE,
+                organizationId = "org-other",
+                timeEntryId = "e-other-failed",
+                payloadJson = "{}",
+                createdAtMs = 1L,
+                attemptCount = 5,
+                lastError = "Server rejected this change",
+                deadLettered = true,
+            ),
+        )
+
+        val vm = viewModel()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        val state = vm.uiState.first { it.organizationId == ORG && it.failedOutsideOrganizationCount > 0 }
+        assertEquals(1, state.failedOutsideOrganizationCount)
+        assertTrue(state.failed.isEmpty())
+        assertEquals(SyncCenterUiState.TopLine.PENDING, state.topLine)
+    }
 }

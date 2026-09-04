@@ -12,6 +12,7 @@ import dev.tricked.solidverdant.data.local.db.CatalogDao
 import dev.tricked.solidverdant.data.local.db.OutboxDao
 import dev.tricked.solidverdant.data.local.db.OutboxEntity
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
+import dev.tricked.solidverdant.data.local.db.RateLimitMarker
 import dev.tricked.solidverdant.data.local.db.SyncMetaDao
 import dev.tricked.solidverdant.data.local.db.SyncMetaEntity
 import dev.tricked.solidverdant.data.local.db.SyncState
@@ -202,6 +203,10 @@ class TimeEntryRepository @Inject constructor(
 
     fun observeOutboxCount(): Flow<Int> = outboxDao.observeCount()
 
+    /** Terminal failures queued for organizations other than [organizationId]; [observeSyncOperations] hides them. */
+    fun observeFailedOperationCountOutsideOrganization(organizationId: String): Flow<Int> =
+        outboxDao.observeDeadLetteredOutsideOrganization(organizationId)
+
     /**
      * Reactive sync freshness for an org (last full pull + last successful push), for the dedicated
      * Sync Center screen (#33). Delegates to [SyncMetaDao.observe] so the UI never touches the DAO
@@ -221,7 +226,7 @@ class TimeEntryRepository @Inject constructor(
                 type = op.opType,
                 status = when {
                     op.deadLettered -> EntrySyncStatus.FAILED
-                    op.attemptCount > 0 -> EntrySyncStatus.RETRYING
+                    op.attemptCount > 0 || RateLimitMarker.matches(op.lastError) -> EntrySyncStatus.RETRYING
                     else -> EntrySyncStatus.PENDING
                 },
                 attemptCount = op.attemptCount,
