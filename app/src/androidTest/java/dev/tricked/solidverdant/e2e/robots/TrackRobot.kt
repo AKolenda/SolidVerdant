@@ -58,9 +58,15 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
             .assertIsDisplayed()
     }
 
-    fun entryRowCount(): Int = nodesWithTag(TestTags.TRACK_ENTRY_ROW).fetchSemanticsNodes().size
+    fun assertHistoryEntryVisible(): TrackRobot = apply {
+        composeRule.waitUntil(DEFAULT_TIMEOUT_MS) {
+            runCatching { scrollHistoryTo(TestTags.TRACK_ENTRY_ROW) }.isSuccess
+        }
+        firstNodeWithTag(TestTags.TRACK_ENTRY_ROW).assertIsDisplayed()
+    }
 
     fun tapStart(): TrackRobot = apply {
+        waitForPrimaryTag(TestTags.TRACK_START_BUTTON)
         waitUntilEnabledTagExists(TestTags.TRACK_START_BUTTON)
         firstEnabledNodeWithTag(TestTags.TRACK_START_BUTTON)
             .performScrollTo()
@@ -69,6 +75,7 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
     }
 
     fun tapStop(): TrackRobot = apply {
+        waitForPrimaryTag(TestTags.TRACK_STOP_BUTTON)
         waitUntilEnabledTagExists(TestTags.TRACK_STOP_BUTTON)
         firstEnabledNodeWithTag(TestTags.TRACK_STOP_BUTTON)
             .performScrollTo()
@@ -88,7 +95,9 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
     }
 
     fun openSyncDetails(): TrackRobot = apply {
-        scrollHistoryTo(TestTags.TRACK_SYNC_DETAILS_BUTTON)
+        composeRule.waitUntil(DEFAULT_TIMEOUT_MS) {
+            runCatching { scrollHistoryTo(TestTags.TRACK_SYNC_DETAILS_BUTTON) }.isSuccess
+        }
         waitUntilEnabledTagExists(TestTags.TRACK_SYNC_DETAILS_BUTTON)
         firstEnabledNodeWithTag(TestTags.TRACK_SYNC_DETAILS_BUTTON)
             .performScrollTo()
@@ -105,6 +114,7 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
     }
 
     fun assertStopButtonVisible(timeoutMs: Long = DEFAULT_TIMEOUT_MS): TrackRobot = apply {
+        waitForPrimaryTag(TestTags.TRACK_STOP_BUTTON, timeoutMs)
         waitUntilTagExists(TestTags.TRACK_STOP_BUTTON, timeoutMs)
         firstNodeWithTag(TestTags.TRACK_STOP_BUTTON).performScrollTo().assertIsDisplayed()
     }
@@ -135,6 +145,7 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
     }
 
     fun assertStartButtonVisible(): TrackRobot = apply {
+        waitForPrimaryTag(TestTags.TRACK_START_BUTTON)
         waitUntilTagExists(TestTags.TRACK_START_BUTTON)
         firstNodeWithTag(TestTags.TRACK_START_BUTTON).performScrollTo().assertIsDisplayed()
     }
@@ -401,6 +412,12 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
             TestTags.TRACK_HISTORY_LIST
         }
         firstNodeWithTag(containerTag).performScrollToNode(hasTestTag(tag))
+    }
+
+    private fun waitForPrimaryTag(tag: String, timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
+        composeRule.waitUntil(timeoutMs) {
+            runCatching { scrollPrimaryTo(tag) }.isSuccess
+        }
     }
 
     private fun scrollHistoryTo(tag: String) {

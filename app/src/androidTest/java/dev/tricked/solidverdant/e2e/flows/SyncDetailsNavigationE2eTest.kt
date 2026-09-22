@@ -40,7 +40,6 @@ class SyncDetailsNavigationE2eTest {
         e2e.launchApp()
 
         val track = TrackRobot(e2e.composeRule).waitForHistory()
-        e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.TRACK_SYNC_STATUS_CARD), WAIT_MS)
         track.openSyncDetails().closeSyncDetails()
     }
 
