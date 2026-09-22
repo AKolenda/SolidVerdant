@@ -64,8 +64,11 @@ fun TagsSelector(
     if (expanded && enabled) {
         val normalizedQuery = query.trim()
         val filteredTags = remember(availableTags, normalizedQuery) {
-            if (normalizedQuery.isBlank()) availableTags
-            else availableTags.filter { it.name.contains(normalizedQuery, ignoreCase = true) }
+            if (normalizedQuery.isBlank()) {
+                availableTags
+            } else {
+                availableTags.filter { it.name.contains(normalizedQuery, ignoreCase = true) }
+            }
         }
         PickerDialog(
             title = stringResource(R.string.tags),
@@ -96,8 +99,11 @@ fun TagsSelector(
                     selected = tag.id in selectedTagIds,
                     onClick = {
                         onTagsChanged(
-                            if (tag.id in selectedTagIds) selectedTagIds - tag.id
-                            else selectedTagIds + tag.id,
+                            if (tag.id in selectedTagIds) {
+                                selectedTagIds - tag.id
+                            } else {
+                                selectedTagIds + tag.id
+                            },
                         )
                     },
                     modifier = Modifier.testTag(EditTimeEntryTestTags.tagChip(tag.id)),
