@@ -55,7 +55,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -215,6 +214,7 @@ import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
 import dev.tricked.solidverdant.ui.components.SectionCard
 import dev.tricked.solidverdant.ui.components.SearchableSingleSelectDialog
 import dev.tricked.solidverdant.ui.components.SyncChip
+import dev.tricked.solidverdant.ui.components.TagsSelector
 import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.ui.theme.syncFailed
@@ -2078,6 +2078,13 @@ internal fun TrackingControls(
                 enabled = !uiState.isMutating
             )
 
+            TagsSelector(
+                selectedTagIds = uiState.editingTags,
+                availableTags = uiState.tags,
+                onTagsChanged = onTagsChange,
+                enabled = !uiState.isMutating,
+            )
+
             if (!autoClearEntryFieldsAfterStop && !uiState.isTracking && !uiState.isPaused &&
                 (uiState.editingDescription.isNotEmpty() || uiState.editingProjectId != null || uiState.editingTaskId != null)) {
                 OutlinedButton(
@@ -2093,16 +2100,6 @@ internal fun TrackingControls(
                     Spacer(Modifier.width(Dimens.Space8))
                     Text(stringResource(R.string.reset_entry_fields))
                 }
-            }
-
-            // Tags selector
-            if (uiState.tags.isNotEmpty()) {
-                TagsSelector(
-                    selectedTagIds = uiState.editingTags,
-                    availableTags = uiState.tags,
-                    onTagsChanged = onTagsChange,
-                    enabled = !uiState.isMutating
-                )
             }
 
             // Billable checkbox
@@ -2538,62 +2535,6 @@ internal fun ProjectTaskDropdown(
         onCreateProject = onCreateProject,
         onCreateTask = onCreateTask,
     )
-}
-
-/**
- * Tags selector with chips
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-internal fun TagsSelector(
-    selectedTagIds: List<String>,
-    availableTags: List<Tag>,
-    onTagsChanged: (List<String>) -> Unit,
-    enabled: Boolean,
-    onCreateTag: ((String) -> Unit)? = null,
-) {
-    Column(modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.SHEET_TAGS_SELECTOR)) {
-        Text(
-            text = stringResource(R.string.tags),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        LazyRow(
-            modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.SHEET_TAGS_LIST),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(availableTags, key = { it.id }) { tag ->
-                FilterChip(
-                    selected = tag.id in selectedTagIds,
-                    onClick = {
-                        if (enabled) {
-                            val newTags = if (tag.id in selectedTagIds) {
-                                selectedTagIds - tag.id
-                            } else {
-                                selectedTagIds + tag.id
-                            }
-                            onTagsChanged(newTags)
-                        }
-                    },
-                    label = { Text(tag.name) },
-                    enabled = enabled,
-                    border = null,
-                    shape = RoundedCornerShape(6.dp),
-                    modifier = Modifier.testTag(EditTimeEntryTestTags.tagChip(tag.id)),
-                )
-            }
-        }
-        onCreateTag?.let { createTag ->
-            OutlinedButton(
-                onClick = { createTag("") },
-                enabled = enabled,
-                modifier = Modifier.testTag(EditTimeEntryTestTags.CREATE_TAG),
-            ) {
-                Text(stringResource(R.string.create_tag))
-            }
-        }
-    }
 }
 
 /**
@@ -3374,14 +3315,12 @@ internal fun TimeEntryFormSheet(
                     enabled = true
                 )
 
-                if (tags.isNotEmpty()) {
-                    TagsSelector(
-                        selectedTagIds = selectedTags,
-                        availableTags = tags,
-                        onTagsChanged = { selectedTags = it },
-                        enabled = true
-                    )
-                }
+                TagsSelector(
+                    selectedTagIds = selectedTags,
+                    availableTags = tags,
+                    onTagsChanged = { selectedTags = it },
+                    enabled = true,
+                )
 
                 Row(
                     modifier = Modifier

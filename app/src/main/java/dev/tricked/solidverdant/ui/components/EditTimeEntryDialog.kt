@@ -78,7 +78,6 @@ import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.ui.tracking.EntryTimeValidator
 import dev.tricked.solidverdant.ui.tracking.EntryTrustRules
 import dev.tricked.solidverdant.ui.tracking.EntryValidationBanner
-import dev.tricked.solidverdant.ui.tracking.TagsSelector
 import java.time.Duration
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -386,15 +385,13 @@ fun EditTimeEntryDialog(
                     },
                 )
 
-                if (tags.isNotEmpty() || onCreateTag != null) {
-                    TagsSelector(
-                        selectedTagIds = selectedTags,
-                        availableTags = tags,
-                        onTagsChanged = { selectedTags = it },
-                        enabled = true,
-                        onCreateTag = onCreateTag?.let { { name -> beginCatalogCreation(CatalogCreationKind.TAG, name) } },
-                    )
-                }
+                TagsSelector(
+                    selectedTagIds = selectedTags,
+                    availableTags = tags,
+                    onTagsChanged = { selectedTags = it },
+                    enabled = true,
+                    onCreateTag = onCreateTag?.let { { name -> beginCatalogCreation(CatalogCreationKind.TAG, name) } },
+                )
 
                 Row(
                     modifier = Modifier

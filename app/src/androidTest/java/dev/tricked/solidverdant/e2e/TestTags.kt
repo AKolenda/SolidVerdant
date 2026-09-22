@@ -109,12 +109,15 @@ object TestTags {
     const val TRACK_SHEET_END_DATE = TrackingTestTags.SHEET_END_DATE
     const val TRACK_SHEET_TAGS_SELECTOR = TrackingTestTags.SHEET_TAGS_SELECTOR
     const val TRACK_SHEET_TAGS_LIST = TrackingTestTags.SHEET_TAGS_LIST
+    const val TRACK_SHEET_TAGS_CLOSE = TrackingTestTags.SHEET_TAGS_CLOSE
     const val ENTRY_DATE_PICKER = EditTimeEntryTestTags.DATE_PICKER
     const val ENTRY_DATE_PICKER_CONFIRM = EditTimeEntryTestTags.DATE_PICKER_CONFIRM
     const val ENTRY_SAVE = EditTimeEntryTestTags.SAVE_BUTTON
     const val ENTRY_DESCRIPTION = EditTimeEntryTestTags.DESCRIPTION_FIELD
     const val ENTRY_PROJECT_TASK_SELECTOR = EditTimeEntryTestTags.PROJECT_TASK_SELECTOR
     const val ENTRY_TASK_SELECTOR = EditTimeEntryTestTags.TASK_SELECTOR
+    const val ENTRY_TAGS_SELECTOR = EditTimeEntryTestTags.TAGS_SELECTOR
+    const val ENTRY_TAGS_LIST = EditTimeEntryTestTags.TAGS_LIST
     const val CATALOGUE_PROJECT_TASK_SEARCH = EditTimeEntryTestTags.PROJECT_TASK_SEARCH
     const val CATALOGUE_TASK_SEARCH = EditTimeEntryTestTags.TASK_SEARCH
     const val CATALOGUE_CLIENT_PICKER = EditTimeEntryTestTags.CLIENT_PICKER

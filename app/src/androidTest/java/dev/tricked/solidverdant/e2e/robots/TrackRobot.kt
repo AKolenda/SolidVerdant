@@ -278,11 +278,12 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
     fun selectSheetTag(tagId: String): TrackRobot = apply {
         val tag = TestTags.trackSheetTagChip(tagId)
         waitUntilSheetTagExists(TestTags.TRACK_SHEET_TAGS_SELECTOR)
-        firstSheetNodeWithTag(TestTags.TRACK_SHEET_TAGS_SELECTOR).performScrollTo()
-        waitUntilSheetTagExists(TestTags.TRACK_SHEET_TAGS_LIST)
-        firstSheetNodeWithTag(TestTags.TRACK_SHEET_TAGS_LIST).performScrollToNode(hasTestTag(tag))
-        waitUntilSheetTagExists(tag)
-        firstSheetNodeWithTag(tag).assertIsDisplayed().performClick()
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_TAGS_SELECTOR).performScrollTo().performClick()
+        waitUntilTagExists(TestTags.TRACK_SHEET_TAGS_LIST)
+        firstNodeWithTag(TestTags.TRACK_SHEET_TAGS_LIST).performScrollToNode(hasTestTag(tag))
+        waitUntilTagExists(tag)
+        firstNodeWithTag(tag).assertIsDisplayed().performClick()
+        firstNodeWithTag(TestTags.TRACK_SHEET_TAGS_CLOSE).performClick()
     }
 
     fun toggleSheetBillable(): TrackRobot = apply {
