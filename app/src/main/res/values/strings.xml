@@ -182,6 +182,14 @@
     <string name="select_project_first">Select a project first</string>
     <string name="search_projects">Search projects…</string>
     <string name="search_tasks">Search tasks…</string>
+    <string name="search_tags">Search tags…</string>
+    <string name="no_tags">No tags</string>
+    <string name="no_tags_available">No tags available</string>
+    <string name="clear_tags">Clear tags</string>
+    <plurals name="selected_tags">
+        <item quantity="one">%1$d tag</item>
+        <item quantity="other">%1$d tags</item>
+    </plurals>
     <string name="no_projects_available">No projects available</string>
     <string name="no_tasks_available">No tasks available for this project</string>
     <string name="no_client">No client</string>
