@@ -177,6 +177,14 @@
     <string name="select_project_first">Selecteer eerst een project</string>
     <string name="search_projects">Projecten zoeken…</string>
     <string name="search_tasks">Taken zoeken…</string>
+    <string name="search_tags">Tags zoeken…</string>
+    <string name="no_tags">Geen tags</string>
+    <string name="no_tags_available">Geen tags beschikbaar</string>
+    <string name="clear_tags">Tags wissen</string>
+    <plurals name="selected_tags">
+        <item quantity="one">%1$d tag</item>
+        <item quantity="other">%1$d tags</item>
+    </plurals>
     <string name="no_projects_available">Geen projecten beschikbaar</string>
     <string name="no_tasks_available">Geen taken beschikbaar voor dit project</string>
     <string name="no_client">Geen klant</string>

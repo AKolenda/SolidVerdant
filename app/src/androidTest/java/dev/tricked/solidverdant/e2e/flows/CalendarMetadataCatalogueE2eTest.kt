@@ -18,6 +18,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
@@ -175,6 +176,10 @@ class CalendarMetadataCatalogueE2eTest {
     }
 
     private fun createTag(composeRule: ComposeTestRule, tagName: String) {
+        composeRule.onNodeWithTag(TestTags.ENTRY_TAGS_SELECTOR, useUnmergedTree = true).performScrollTo().performClick()
+        composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.ENTRY_TAGS_LIST), WAIT_MS)
+        composeRule.onNodeWithTag(TestTags.ENTRY_TAGS_LIST, useUnmergedTree = true)
+            .performScrollToNode(hasTestTag(TestTags.CATALOGUE_CREATE_TAG))
         composeRule.onNodeWithTag(TestTags.CATALOGUE_CREATE_TAG, useUnmergedTree = true).performScrollTo().performClick()
         composeRule.onNodeWithTag(TestTags.CATALOGUE_NAME, useUnmergedTree = true).performTextInput(tagName)
         composeRule.onNodeWithTag(TestTags.CATALOGUE_CREATE_CONFIRM, useUnmergedTree = true).performClick()

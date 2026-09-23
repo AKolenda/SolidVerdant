@@ -8,12 +8,10 @@
 
 package dev.tricked.solidverdant.e2e.flows
 
-import androidx.compose.ui.test.hasTestTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
 import dev.tricked.solidverdant.e2e.E2eFixture
 import dev.tricked.solidverdant.e2e.E2eRule
-import dev.tricked.solidverdant.e2e.TestTags
 import dev.tricked.solidverdant.e2e.robots.TrackRobot
 import org.junit.Rule
 import org.junit.Test
@@ -40,7 +38,6 @@ class SyncDetailsNavigationE2eTest {
         e2e.launchApp()
 
         val track = TrackRobot(e2e.composeRule).waitForHistory()
-        e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.TRACK_SYNC_STATUS_CARD), WAIT_MS)
         track.openSyncDetails().closeSyncDetails()
     }
 
