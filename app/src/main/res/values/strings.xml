@@ -37,10 +37,6 @@
     <string name="widget_zero_time" translatable="false">00:00:00</string>
     <string name="running_entries">Running</string><string name="tracking_now">now</string>
     <string name="enable_notifications">Enable notifications</string>
-    <plurals name="collapse_entries">
-        <item quantity="one">Collapse %1$d entry</item>
-        <item quantity="other">Collapse %1$d entries</item>
-    </plurals>
     <string name="stats_empty">No tracked time in this range.</string><string name="stats_by_project">By project</string><string name="stats_trend">Trend</string><string name="stats_last_7_days">Last 7 days</string><string name="stats_last_week">Last week</string><string name="stats_this_week">This week</string><string name="stats_this_month">This month</string><string name="stats_previous_month">Previous month</string><string name="stats_custom">Custom</string><string name="apply">Apply</string><string name="stats_total">Total</string><string name="stats_entries">Entries</string><string name="stats_average_day">Avg / day</string><string name="calendar_show_month">Show month</string><string name="calendar_previous_month">Previous month</string><string name="calendar_next_month">Next month</string><string name="calendar_month_header">%1$s %2$d</string>
     <string name="calendar_drag_to_create">Tap to create an entry, or touch and hold before dragging to select a start and end time.</string>
     <string name="calendar_more_actions">More calendar actions</string>
@@ -213,7 +209,6 @@
     <string name="what_are_you_working_on">What are you working on?</string>
     <string name="project">Project</string>
     <string name="task">Task</string>
-    <string name="update">Update</string>
     <string name="no_time_entries">No time entries yet</string>
     <string name="edit">Edit</string>
     <string name="delete">Delete</string>
@@ -239,14 +234,6 @@
     <string name="decrease_15_minutes">Decrease by 15 minutes</string>
     <string name="increase_15_minutes">Increase by 15 minutes</string>
     <string name="done">Done</string>
-    <plurals name="customer_count">
-        <item quantity="one">%1$d customer</item>
-        <item quantity="other">%1$d customers</item>
-    </plurals>
-    <plurals name="project_count">
-        <item quantity="one">%1$d project</item>
-        <item quantity="other">%1$d projects</item>
-    </plurals>
 
     <!-- Notifications -->
     <string name="notification_channel_active_name">Active Timer</string>

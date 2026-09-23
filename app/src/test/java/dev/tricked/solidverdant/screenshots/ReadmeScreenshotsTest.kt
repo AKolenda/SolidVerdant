@@ -271,7 +271,46 @@ class ReadmeScreenshotsTest {
                 editingBillable = true,
                 syncOperations = syncOperations,
             )
-            LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                item {
+                    TrackingControls(
+                        uiState = state,
+                        elapsedSeconds = state.elapsedSeconds,
+                        onDescriptionChange = {},
+                        onProjectChange = {},
+                        onTaskChange = {},
+                        onTagsChange = {},
+                        onBillableChange = {},
+                        onStart = {},
+                        onStop = {},
+                        onPause = {},
+                        onResume = {},
+                    )
+                }
+                trackingHistoryItems(
+                    uiState = state,
+                    groupedEntries = groupedHistory(),
+                    onEdit = {},
+                    onDelete = {},
+                    onDateClick = {},
+                )
+            }
+        },
+        // 1b. Timer idle — composer for the next entry above the history.
+        Screen("track-idle") {
+            val state = TrackingUiState(
+                projects = projects,
+                tasks = tasks,
+                tags = tags,
+                clients = clients,
+                timeEntries = historyEntries,
+                hasLoadedTimeEntries = true,
+                editingDescription = "",
+                editingProjectId = "p1",
+                editingTaskId = "t2",
+                editingBillable = true,
+            )
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
                 item {
                     TrackingControls(
                         uiState = state,
@@ -284,7 +323,6 @@ class ReadmeScreenshotsTest {
                         onStop = {},
                         onPause = {},
                         onResume = {},
-                        onUpdate = {},
                     )
                 }
                 trackingHistoryItems(
@@ -306,7 +344,7 @@ class ReadmeScreenshotsTest {
                 hasLoadedTimeEntries = true,
                 syncOperations = syncOperations,
             )
-            LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
                 trackingHistoryItems(
                     uiState = state,
                     groupedEntries = groupedHistory(),

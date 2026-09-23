@@ -25,7 +25,6 @@ object TrackingTestTags {
     const val ADD_ENTRY_BUTTON = "track_add_entry_button"
     const val EDIT_ACTIVE_ENTRY = "track_edit_active_entry"
     const val ENTRY_EDIT_BUTTON = "track_entry_edit"
-    const val ENTRY_DELETE_BUTTON = "track_entry_delete"
     const val CONTINUE_BUTTON = "track_continue_last"
     const val SHEET = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.SHEET
     const val SHEET_PROJECT_TASK_SELECTOR = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.PROJECT_TASK_SELECTOR

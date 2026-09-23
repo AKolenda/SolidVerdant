@@ -42,10 +42,6 @@
     <string name="settings_section_data">Gegevens &amp; synchronisatie</string>
     <string name="running_entries">Lopend</string><string name="tracking_now">nu</string>
     <string name="enable_notifications">Meldingen inschakelen</string>
-    <plurals name="collapse_entries">
-        <item quantity="one">%1$d boeking inklappen</item>
-        <item quantity="other">%1$d boekingen inklappen</item>
-    </plurals>
     <string name="stats_empty">Geen geregistreerde tijd in deze periode.</string><string name="stats_by_project">Per project</string><string name="stats_trend">Trend</string><string name="stats_last_7_days">Afgelopen 7 dagen</string><string name="stats_last_week">Vorige week</string><string name="stats_this_week">Deze week</string><string name="stats_this_month">Deze maand</string><string name="stats_previous_month">Vorige maand</string><string name="stats_custom">Aangepast</string><string name="apply">Toepassen</string><string name="stats_total">Totaal</string><string name="stats_entries">Boekingen</string><string name="stats_average_day">Gem. / dag</string><string name="calendar_show_month">Maand tonen</string><string name="calendar_previous_month">Vorige maand</string><string name="calendar_next_month">Volgende maand</string><string name="calendar_month_header">%1$s %2$d</string>
     <string name="calendar_drag_to_create">Tik om een boeking te maken, of houd vast en sleep om een start- en eindtijd te selecteren.</string>
     <string name="calendar_more_actions">Meer kalenderacties</string>
@@ -210,7 +206,6 @@
     <string name="what_are_you_working_on">Waar werk je aan?</string>
     <string name="project">Project</string>
     <string name="task">Taak</string>
-    <string name="update">Bijwerken</string>
     <string name="no_time_entries">Nog geen tijdregistraties</string>
     <string name="edit">Bewerken</string>
     <string name="delete">Verwijderen</string>
@@ -233,14 +228,6 @@
     <string name="decrease_15_minutes">15 minuten verminderen</string>
     <string name="increase_15_minutes">15 minuten toevoegen</string>
     <string name="done">Gereed</string>
-    <plurals name="customer_count">
-        <item quantity="one">%1$d klant</item>
-        <item quantity="other">%1$d klanten</item>
-    </plurals>
-    <plurals name="project_count">
-        <item quantity="one">%1$d project</item>
-        <item quantity="other">%1$d projecten</item>
-    </plurals>
 
     <!-- Notifications -->
     <string name="notification_channel_active_name">Actieve Timer</string>

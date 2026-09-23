@@ -24,6 +24,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
 import androidx.test.espresso.Espresso
 import dev.tricked.solidverdant.e2e.TestTags
 import java.time.LocalDate
@@ -164,10 +166,11 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         waitUntilTagExists(TestTags.TRACK_SHEET_SAVE_BUTTON)
     }
 
+    /** History rows delete with an iOS-style swipe to the left. */
     fun tapFirstEntryDelete(): TrackRobot = apply {
-        scrollHistoryTo(TestTags.TRACK_ENTRY_DELETE_BUTTON)
-        waitUntilTagExists(TestTags.TRACK_ENTRY_DELETE_BUTTON)
-        firstNodeWithTag(TestTags.TRACK_ENTRY_DELETE_BUTTON).assertIsDisplayed().performClick()
+        scrollHistoryTo(TestTags.TRACK_ENTRY_ROW)
+        waitUntilTagExists(TestTags.TRACK_ENTRY_ROW)
+        firstNodeWithTag(TestTags.TRACK_ENTRY_ROW).assertIsDisplayed().performTouchInput { swipeLeft() }
     }
 
     fun openHistoryFilters(): TrackRobot = apply {

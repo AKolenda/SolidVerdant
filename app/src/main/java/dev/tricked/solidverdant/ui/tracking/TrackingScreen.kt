@@ -63,15 +63,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Inbox
@@ -110,8 +106,12 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.VerticalDivider
@@ -119,6 +119,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -146,19 +147,19 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.core.graphics.toColorInt
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -181,20 +182,25 @@ import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
 import dev.tricked.solidverdant.ui.components.EntryDateFieldButton
 import dev.tricked.solidverdant.ui.components.EntryDatePickerDialog
+import dev.tricked.solidverdant.ui.components.GroupedDivider
 import dev.tricked.solidverdant.ui.components.SearchableSingleSelectDialog
 import dev.tricked.solidverdant.ui.components.SectionCard
+import dev.tricked.solidverdant.ui.components.SelectorStyle
 import dev.tricked.solidverdant.ui.components.SyncChip
 import dev.tricked.solidverdant.ui.components.TagsSelector
 import dev.tricked.solidverdant.ui.components.retimedEnd
 import dev.tricked.solidverdant.ui.localization.appLocale
+import dev.tricked.solidverdant.ui.navigation.LocalFloatingBarInset
 import dev.tricked.solidverdant.ui.templates.FavoriteTemplatesRow
 import dev.tricked.solidverdant.ui.templates.ManageTemplatesViewModel
 import dev.tricked.solidverdant.ui.templates.TemplateDraft
 import dev.tricked.solidverdant.ui.templates.TemplateResolver
 import dev.tricked.solidverdant.ui.templates.templateDisplayLabel
 import dev.tricked.solidverdant.ui.theme.Dimens
+import dev.tricked.solidverdant.ui.theme.positive
 import dev.tricked.solidverdant.ui.theme.syncFailed
 import dev.tricked.solidverdant.ui.theme.syncPending
+import dev.tricked.solidverdant.ui.theme.tabular
 import dev.tricked.solidverdant.util.NotificationPermissionHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -241,7 +247,6 @@ fun TrackingScreen(
     onResetEntryFields: () -> Unit,
     onTagsChange: (List<String>) -> Unit,
     onBillableChange: (Boolean) -> Unit,
-    onUpdateCurrentEntry: () -> Unit,
     onUpdatePastEntry: (TimeEntry, String?, String?, String?, List<String>, Boolean, String, String?) -> Unit,
     onCreateEntry: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
     onDeleteEntry: (String) -> Unit,
@@ -446,7 +451,7 @@ fun TrackingScreen(
                 },
             )
         },
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = MaterialTheme.colorScheme.background,
     ) { paddingValues ->
         PullToRefreshBox(
             isRefreshing = uiState.isRefreshing,
@@ -554,8 +559,16 @@ fun TrackingScreen(
 
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val wideLayout = maxWidth >= 840.dp
+                val continueEntry: (TimeEntry) -> Unit = { entry ->
+                    onDescriptionChange(entry.description ?: "")
+                    onProjectChange(entry.projectId)
+                    onTaskChange(entry.taskId)
+                    onTagsChange(entry.tags.map { it.id })
+                    onBillableChange(entry.billable)
+                    onStartTracking()
+                }
+                val sectionInset = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space16, vertical = Dimens.Space8)
                 val primaryContent: LazyListScope.() -> Unit = {
-                    item { Spacer(Modifier.height(8.dp)) }
                     item {
                         val elapsed by elapsedSeconds.collectAsState()
                         TrackingControls(
@@ -572,7 +585,6 @@ fun TrackingScreen(
                             onStop = onStopTracking,
                             onPause = onPauseTracking,
                             onResume = onResumeTracking,
-                            onUpdate = onUpdateCurrentEntry,
                             onEditActiveEntry = {
                                 uiState.currentTimeEntry?.let { entry ->
                                     if (entry.id in uiState.conflictedEntryIds) showConflictLocked() else showEditDialog = entry
@@ -587,6 +599,7 @@ fun TrackingScreen(
                             elapsed >= longTimerSnoozedUntil
                         ) {
                             LongTimerWarning(
+                                modifier = sectionInset,
                                 hours = longTimerHours,
                                 onStop = onStopTracking,
                                 onKeepRunning = {
@@ -602,36 +615,33 @@ fun TrackingScreen(
                         templateState.quickStart.isNotEmpty()
                     ) {
                         item(key = "favorites_quick_start") {
-                            FavoriteTemplatesRow(
-                                templates = templateState.quickStart,
-                                projects = templateState.projects,
-                                tasks = templateState.tasks,
-                                tags = templateState.tags,
-                                onStart = { start ->
-                                    onDescriptionChange(start.description ?: "")
-                                    onProjectChange(start.projectId)
-                                    onTaskChange(start.taskId)
-                                    onTagsChange(start.tagIds)
-                                    onBillableChange(start.billable)
-                                    onStartTracking()
-                                },
-                            )
+                            Box(sectionInset) {
+                                FavoriteTemplatesRow(
+                                    templates = templateState.quickStart,
+                                    projects = templateState.projects,
+                                    tasks = templateState.tasks,
+                                    tags = templateState.tags,
+                                    onStart = { start ->
+                                        onDescriptionChange(start.description ?: "")
+                                        onProjectChange(start.projectId)
+                                        onTaskChange(start.taskId)
+                                        onTagsChange(start.tagIds)
+                                        onBillableChange(start.billable)
+                                        onStartTracking()
+                                    },
+                                )
+                            }
                         }
                     }
                     if (!uiState.isTracking && !uiState.isPaused && lastEntry != null) {
                         item(key = "continue_last") {
-                            ContinueLastEntryButton(
-                                entry = lastEntry,
-                                projects = uiState.projects,
-                                onContinue = {
-                                    onDescriptionChange(lastEntry.description ?: "")
-                                    onProjectChange(lastEntry.projectId)
-                                    onTaskChange(lastEntry.taskId)
-                                    onTagsChange(lastEntry.tags.map { it.id })
-                                    onBillableChange(lastEntry.billable)
-                                    onStartTracking()
-                                },
-                            )
+                            Box(sectionInset) {
+                                ContinueLastEntryButton(
+                                    entry = lastEntry,
+                                    projects = uiState.projects,
+                                    onContinue = { continueEntry(lastEntry) },
+                                )
+                            }
                         }
                     }
                 }
@@ -658,15 +668,17 @@ fun TrackingScreen(
                                 .weight(WIDE_HISTORY_WEIGHT)
                                 .fillMaxSize()
                                 .testTag(TrackingTestTags.HISTORY_LIST)
-                                .nestedScroll(historyScrollConnection)
-                                .padding(horizontal = 24.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                .nestedScroll(historyScrollConnection),
+                            contentPadding = PaddingValues(bottom = LocalFloatingBarInset.current + Dimens.Space16),
                         ) {
-                            item { Spacer(Modifier.height(8.dp)) }
-                            item(key = "history_filters") { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
+                            item(key = "history_filters") {
+                                Box(sectionInset) { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
+                            }
                             if (uiState.syncStatusVisible && uiState.syncOperations.isNotEmpty()) {
                                 item {
-                                    SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter)
+                                    Box(sectionInset) {
+                                        SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter)
+                                    }
                                 }
                             }
                             trackingHistoryItems(
@@ -679,8 +691,8 @@ fun TrackingScreen(
                                 onDelete = onHistoryDelete,
                                 onDateClick = onHistoryDateClick,
                                 onRetrySync = { onRetrySyncEntry(it.id) },
+                                onContinue = continueEntry.takeIf { !uiState.isTracking && !uiState.isPaused },
                             )
-                            item { Spacer(Modifier.height(16.dp)) }
                         }
                     }
                 } else {
@@ -689,16 +701,18 @@ fun TrackingScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .testTag(TrackingTestTags.HISTORY_LIST)
-                            .nestedScroll(historyScrollConnection)
-                            .padding(horizontal = 16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                            .nestedScroll(historyScrollConnection),
+                        contentPadding = PaddingValues(bottom = LocalFloatingBarInset.current + Dimens.Space16),
                     ) {
                         primaryContent()
-                        item(key = "history_filters") { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
+                        item(key = "history_filters") {
+                            Box(sectionInset) { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
+                        }
                         if (uiState.syncStatusVisible && uiState.syncOperations.isNotEmpty()) {
                             item {
-                                SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter)
+                                Box(sectionInset) {
+                                    SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter)
+                                }
                             }
                         }
                         trackingHistoryItems(
@@ -711,8 +725,8 @@ fun TrackingScreen(
                             onDelete = onHistoryDelete,
                             onDateClick = onHistoryDateClick,
                             onRetrySync = { onRetrySyncEntry(it.id) },
+                            onContinue = continueEntry.takeIf { !uiState.isTracking && !uiState.isPaused },
                         )
-                        item { Spacer(Modifier.height(16.dp)) }
                     }
                 }
             }
@@ -1116,8 +1130,14 @@ private fun SyncCenter(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun LongTimerWarning(hours: Int, onStop: () -> Unit, onKeepRunning: () -> Unit, onAdjust: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+private fun LongTimerWarning(
+    hours: Int,
+    onStop: () -> Unit,
+    onKeepRunning: () -> Unit,
+    onAdjust: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
         Column(Modifier.fillMaxWidth().padding(12.dp)) {
             Text(
                 pluralStringResource(R.plurals.timer_running_long, hours, hours),
@@ -1157,6 +1177,7 @@ internal fun LazyListScope.trackingHistoryItems(
     onDelete: (TimeEntry) -> Unit,
     onDateClick: (LocalDate) -> Unit,
     onRetrySync: (TimeEntry) -> Unit = {},
+    onContinue: ((TimeEntry) -> Unit)? = null,
 ) {
     if (!uiState.hasLoadedTimeEntries && uiState.timeEntries.isEmpty()) {
         item(key = "history_loading_header") { HistoryLoadingHeader() }
@@ -1185,23 +1206,28 @@ internal fun LazyListScope.trackingHistoryItems(
             is HistoryListItem.Header -> DateHeader(
                 date = historyItem.day.date,
                 entries = historyItem.day.entries,
-                projectsById = projectsById,
                 zone = uiState.zone,
                 onClick = { onDateClick(historyItem.day.date) },
             )
-            is HistoryListItem.Group -> {
-                val entriesForProject = historyItem.entries
-                CollapsibleTimeEntryGroup(
-                    entries = entriesForProject,
-                    date = historyItem.date,
-                    zone = uiState.zone,
-                    projectsById = projectsById,
-                    tasksById = tasksById,
-                    syncStatusByEntryId = syncStatusByEntryId,
-                    onEdit = onEdit,
-                    onDelete = onDelete,
-                    onRetrySync = onRetrySync,
-                )
+            is HistoryListItem.Group -> Column {
+                historyItem.entries.forEach { entry ->
+                    SwipeableHistoryRow(
+                        entry = entry,
+                        onDelete = { onDelete(entry) },
+                        onContinue = onContinue?.let { continueEntry -> { continueEntry(entry) } },
+                    ) {
+                        CompactTimeEntryRow(
+                            entry = entry,
+                            date = historyItem.date,
+                            zone = uiState.zone,
+                            project = projectsById[entry.projectId],
+                            task = tasksById[entry.taskId],
+                            syncStatus = syncStatusByEntryId[entry.id],
+                            onEdit = { onEdit(entry) },
+                            onRetrySync = { onRetrySync(entry) },
+                        )
+                    }
+                }
             }
         }
     }
@@ -1245,6 +1271,7 @@ internal fun LazyListScope.trackingHistoryItems(
     onDelete: (TimeEntry) -> Unit,
     onDateClick: (LocalDate) -> Unit,
     onRetrySync: (TimeEntry) -> Unit = {},
+    onContinue: ((TimeEntry) -> Unit)? = null,
 ) {
     val historyItems = buildList {
         groupedEntries.forEach { (date, entries) ->
@@ -1270,6 +1297,7 @@ internal fun LazyListScope.trackingHistoryItems(
         onDelete = onDelete,
         onDateClick = onDateClick,
         onRetrySync = onRetrySync,
+        onContinue = onContinue,
     )
 }
 
@@ -1393,319 +1421,6 @@ private fun HistoryLoadingEntry(index: Int) {
 /**
  * Tracking controls card with timer and input fields
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
-@Composable
-@Suppress("LongMethod")
-internal fun TrackingControls(
-    uiState: TrackingUiState,
-    elapsedSeconds: Long = 0L,
-    onDescriptionChange: (String) -> Unit,
-    onProjectChange: (String?) -> Unit,
-    onTaskChange: (String?) -> Unit,
-    onResetEntryFields: () -> Unit = {},
-    autoClearEntryFieldsAfterStop: Boolean = true,
-    onTagsChange: (List<String>) -> Unit,
-    onBillableChange: (Boolean) -> Unit,
-    onStart: () -> Unit,
-    onStop: () -> Unit,
-    onPause: () -> Unit,
-    onResume: () -> Unit,
-    onUpdate: () -> Unit,
-    onEditActiveEntry: () -> Unit = {},
-) {
-    val haptic = LocalHapticFeedback.current
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            // Timer display
-            if (uiState.isTracking) {
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = formatElapsedTime(elapsedSeconds),
-                        style = MaterialTheme.typography.displayMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontSize = 48.sp,
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .testTag(TrackingTestTags.ELAPSED_TIMER),
-                    )
-                    if (uiState.currentTimeEntry != null) {
-                        IconButton(
-                            onClick = onEditActiveEntry,
-                            enabled = !uiState.isMutating,
-                            modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .testTag(TrackingTestTags.EDIT_ACTIVE_ENTRY),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = stringResource(R.string.edit_start_time),
-                            )
-                        }
-                    }
-                }
-                HorizontalDivider(
-                    color = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.padding(vertical = 8.dp),
-                )
-            } else if (uiState.isPaused) {
-                Text(
-                    text = stringResource(R.string.paused),
-                    style = MaterialTheme.typography.displayMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.tertiary,
-                    fontSize = 36.sp,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                )
-                HorizontalDivider(
-                    color = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.padding(vertical = 8.dp),
-                )
-            }
-
-            // Description field with recent entry suggestions
-            DescriptionFieldWithSuggestions(
-                description = uiState.editingDescription,
-                onDescriptionChange = onDescriptionChange,
-                timeEntries = uiState.timeEntries,
-                projects = uiState.projects,
-                tags = uiState.tags,
-                enabled = !uiState.isMutating,
-                onEntryCopied = { entry ->
-                    onDescriptionChange(entry.description ?: "")
-                    onProjectChange(entry.projectId)
-                    onTaskChange(entry.taskId)
-                    onTagsChange(entry.tags.map { it.id })
-                    onBillableChange(entry.billable)
-                },
-            )
-
-            // Combined Project/Task selector
-            ProjectTaskDropdown(
-                selectedProjectId = uiState.editingProjectId,
-                selectedTaskId = uiState.editingTaskId,
-                projects = uiState.projects,
-                tasks = uiState.tasks,
-                onSelectionChanged = { projectId, taskId ->
-                    onProjectChange(projectId)
-                    onTaskChange(taskId)
-                },
-                enabled = !uiState.isMutating,
-            )
-
-            TagsSelector(
-                selectedTagIds = uiState.editingTags,
-                availableTags = uiState.tags,
-                onTagsChanged = onTagsChange,
-                enabled = !uiState.isMutating,
-            )
-
-            if (!autoClearEntryFieldsAfterStop &&
-                !uiState.isTracking &&
-                !uiState.isPaused &&
-                (uiState.editingDescription.isNotEmpty() || uiState.editingProjectId != null || uiState.editingTaskId != null)
-            ) {
-                OutlinedButton(
-                    onClick = onResetEntryFields,
-                    enabled = !uiState.isMutating,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = Dimens.MinTouchTarget)
-                        .testTag(TrackingTestTags.RESET_FIELDS_BUTTON),
-                    shape = RoundedCornerShape(Dimens.CornerRadius),
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null)
-                    Spacer(Modifier.width(Dimens.Space8))
-                    Text(stringResource(R.string.reset_entry_fields))
-                }
-            }
-
-            // Billable checkbox
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .toggleable(
-                        value = uiState.editingBillable,
-                        enabled = !uiState.isMutating,
-                        role = Role.Checkbox,
-                        onValueChange = onBillableChange,
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Checkbox(
-                    checked = uiState.editingBillable,
-                    onCheckedChange = null,
-                    enabled = !uiState.isMutating,
-                )
-                Text(
-                    text = stringResource(R.string.billable),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-
-            // Action buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (uiState.isTracking) {
-                    Button(
-                        onClick = onUpdate,
-                        modifier = Modifier.weight(1f),
-                        enabled = !uiState.isMutating,
-                        contentPadding = PaddingValues(horizontal = Dimens.Space8),
-                        shape = RoundedCornerShape(8.dp),
-                    ) {
-                        Text(
-                            stringResource(R.string.update),
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            softWrap = false,
-                        )
-                    }
-                    Button(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onPause()
-                        },
-                        modifier = Modifier.weight(1f),
-                        enabled = !uiState.isMutating,
-                        contentPadding = PaddingValues(horizontal = Dimens.Space8),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.tertiary,
-                            contentColor = MaterialTheme.colorScheme.onTertiary,
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.Pause,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            stringResource(R.string.pause),
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            softWrap = false,
-                        )
-                    }
-                    Button(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onStop()
-                        },
-                        modifier = Modifier.weight(1f).testTag(TrackingTestTags.STOP_BUTTON),
-                        enabled = !uiState.isMutating,
-                        contentPadding = PaddingValues(horizontal = Dimens.Space8),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError,
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.Stop,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            stringResource(R.string.stop),
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            softWrap = false,
-                        )
-                    }
-                } else if (uiState.isPaused) {
-                    Button(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onResume()
-                        },
-                        modifier = Modifier.weight(1f),
-                        enabled = !uiState.isMutating,
-                        contentPadding = PaddingValues(horizontal = Dimens.Space8),
-                        shape = RoundedCornerShape(8.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            stringResource(R.string.resume),
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            softWrap = false,
-                        )
-                    }
-                    Button(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onStop()
-                        },
-                        modifier = Modifier.weight(1f).testTag(TrackingTestTags.STOP_BUTTON),
-                        enabled = !uiState.isMutating,
-                        contentPadding = PaddingValues(horizontal = Dimens.Space8),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError,
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.Stop,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            stringResource(R.string.stop),
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            softWrap = false,
-                        )
-                    }
-                } else {
-                    Button(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onStart()
-                        },
-                        modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.START_BUTTON),
-                        enabled = !uiState.isMutating,
-                        shape = RoundedCornerShape(8.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.start), fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            }
-        }
-    }
-}
-
 /**
  * "Continue last entry" button that starts tracking with the same params as the last entry.
  */
@@ -1803,7 +1518,7 @@ private fun ContinueLastEntryButton(entry: TimeEntry, projects: List<Project>, o
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun DescriptionFieldWithSuggestions(
+internal fun DescriptionFieldWithSuggestions(
     description: String,
     onDescriptionChange: (String) -> Unit,
     timeEntries: List<TimeEntry>,
@@ -1811,8 +1526,10 @@ private fun DescriptionFieldWithSuggestions(
     tags: List<Tag>,
     enabled: Boolean,
     onEntryCopied: (TimeEntry) -> Unit,
+    borderless: Boolean = false,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val descriptionLabel = stringResource(R.string.description)
 
     // Compute last 5 unique recent entries, filtering out empty descriptions
     val recentEntries = remember(timeEntries) {
@@ -1831,24 +1548,47 @@ private fun DescriptionFieldWithSuggestions(
             if (enabled) expanded = it
         },
     ) {
-        OutlinedTextField(
-            value = description,
-            onValueChange = {
-                onDescriptionChange(it)
-                expanded = false
-            },
-            label = { Text(stringResource(R.string.description)) },
-            placeholder = { Text(stringResource(R.string.what_are_you_working_on)) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable, enabled = enabled)
-                .onFocusChanged {
-                    if (it.isFocused && enabled) expanded = true
-                },
-            singleLine = true,
-            enabled = enabled,
-            shape = RoundedCornerShape(8.dp),
-        )
+        val fieldModifier = Modifier
+            .fillMaxWidth()
+            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable, enabled = enabled)
+            .onFocusChanged {
+                if (it.isFocused && enabled) expanded = true
+            }
+        val onValueChange: (String) -> Unit = {
+            onDescriptionChange(it)
+            expanded = false
+        }
+        if (borderless) {
+            val transparent = androidx.compose.ui.graphics.Color.Transparent
+            TextField(
+                value = description,
+                onValueChange = onValueChange,
+                placeholder = { Text(stringResource(R.string.what_are_you_working_on)) },
+                modifier = fieldModifier.semantics { contentDescription = descriptionLabel },
+                singleLine = true,
+                enabled = enabled,
+                textStyle = MaterialTheme.typography.bodyLarge,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = transparent,
+                    unfocusedContainerColor = transparent,
+                    disabledContainerColor = transparent,
+                    focusedIndicatorColor = transparent,
+                    unfocusedIndicatorColor = transparent,
+                    disabledIndicatorColor = transparent,
+                ),
+            )
+        } else {
+            OutlinedTextField(
+                value = description,
+                onValueChange = onValueChange,
+                label = { Text(descriptionLabel) },
+                placeholder = { Text(stringResource(R.string.what_are_you_working_on)) },
+                modifier = fieldModifier,
+                singleLine = true,
+                enabled = enabled,
+                shape = RoundedCornerShape(8.dp),
+            )
+        }
 
         ExposedDropdownMenu(
             expanded = expanded && recentEntries.isNotEmpty(),
@@ -1949,6 +1689,7 @@ internal fun ProjectTaskDropdown(
     enabled: Boolean,
     onCreateProject: ((String) -> Unit)? = null,
     onCreateTask: ((String, String) -> Unit)? = null,
+    style: SelectorStyle = SelectorStyle.Field,
 ) {
     SharedProjectTaskDropdown(
         projects = projects,
@@ -1961,173 +1702,108 @@ internal fun ProjectTaskDropdown(
         rounded = true,
         onCreateProject = onCreateProject,
         onCreateTask = onCreateTask,
+        style = style,
     )
 }
 
-/**
- * Date header for time entries
- */
+/** Grey section band: "Today" / "Yesterday" / date on the left, the day total on the right. */
 @Composable
-private fun DateHeader(date: LocalDate, entries: List<TimeEntry>, projectsById: Map<String, Project>, zone: ZoneId, onClick: () -> Unit) {
+private fun DateHeader(date: LocalDate, entries: List<TimeEntry>, zone: ZoneId, onClick: () -> Unit) {
     val context = LocalContext.current
     val locale = appLocale()
-    val resources = LocalResources.current
     val now = remember { Instant.now() }
-    val headerStats = remember(entries, projectsById, date, zone, now) {
-        val projectIds = entries.mapNotNull { it.projectId }.toSet()
-        val customerCount = projectIds.mapNotNull { projectsById[it]?.clientId }.toSet().size
-        val totalDuration = entries.filter(::isWorkTimeEntry).sumOf { entryDurationOnDay(it, date, zone, now) }
-        val summary = buildList {
-            add(formatCompactDuration(totalDuration))
-            if (customerCount > 0) {
-                add(resources.getQuantityString(R.plurals.customer_count, customerCount, customerCount))
-            }
-            if (projectIds.isNotEmpty()) {
-                add(resources.getQuantityString(R.plurals.project_count, projectIds.size, projectIds.size))
-            }
-        }.joinToString(" · ")
-        summary
+    val total = remember(entries, date, zone, now) {
+        formatElapsedTime(entries.filter(::isWorkTimeEntry).sumOf { entryDurationOnDay(it, date, zone, now) })
     }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(top = 12.dp, bottom = 6.dp),
+            .background(MaterialTheme.colorScheme.background)
+            .clickable(onClickLabel = stringResource(R.string.jump_to_date), onClick = onClick)
+            .padding(horizontal = Dimens.Space16, vertical = Dimens.Space8),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
             text = formatDate(date, context, zone, locale),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-        )
-        Text(
-            text = headerStats,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
+        Text(
+            text = total,
+            style = MaterialTheme.typography.labelMedium.tabular(),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
 /**
- * Collapsible group of time entries with same project/task
+ * History row wrapped in iOS-style swipe actions: swipe left to delete, swipe right to continue the
+ * entry as a new timer (only offered while no timer runs). Both are also TalkBack custom actions.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CollapsibleTimeEntryGroup(
-    entries: List<TimeEntry>,
-    date: LocalDate,
-    zone: ZoneId,
-    projectsById: Map<String, Project>,
-    tasksById: Map<String, Task>,
-    syncStatusByEntryId: Map<String, TimeEntryRepository.EntrySyncStatus>,
-    onEdit: (TimeEntry) -> Unit,
-    onDelete: (TimeEntry) -> Unit,
-    onRetrySync: (TimeEntry) -> Unit,
-) {
-    var isExpanded by remember { mutableStateOf(false) }
-    val now = remember { Instant.now() }
-    val worstSyncStatus = remember(entries, syncStatusByEntryId) {
-        entries.mapNotNull { entry -> syncStatusByEntryId[entry.id] }
-            .maxByOrNull { it.ordinal }
+private fun SwipeableHistoryRow(entry: TimeEntry, onDelete: () -> Unit, onContinue: (() -> Unit)?, content: @Composable () -> Unit) {
+    val dismissState = rememberSwipeToDismissBoxState()
+    LaunchedEffect(dismissState.currentValue) {
+        when (dismissState.currentValue) {
+            SwipeToDismissBoxValue.EndToStart -> onDelete()
+            SwipeToDismissBoxValue.StartToEnd -> onContinue?.invoke()
+            SwipeToDismissBoxValue.Settled -> return@LaunchedEffect
+        }
+        // A refused delete (e.g. a conflict-locked entry) must not leave the row swiped away.
+        dismissState.snapTo(SwipeToDismissBoxValue.Settled)
     }
-    val totalDuration = remember(entries, date, zone, now) {
-        entries.filter(::isWorkTimeEntry).sumOf { entryDurationOnDay(it, date, zone, now) }
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (entries.size == 1) {
-            // Single entry, show normally
-            CompactTimeEntryRow(
-                entry = entries.first(),
-                date = date,
-                zone = zone,
-                project = projectsById[entries.first().projectId],
-                task = tasksById[entries.first().taskId],
-                syncStatus = syncStatusByEntryId[entries.first().id],
-                onEdit = { onEdit(entries.first()) },
-                onDelete = { onDelete(entries.first()) },
-                onRetrySync = { onRetrySync(entries.first()) },
-                count = null,
+    val deleteLabel = stringResource(R.string.delete)
+    val continueLabel = stringResource(R.string.resume)
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = onContinue != null,
+        modifier = Modifier.semantics {
+            customActions = listOfNotNull(
+                CustomAccessibilityAction(deleteLabel) {
+                    onDelete()
+                    true
+                },
+                onContinue?.let {
+                    CustomAccessibilityAction(continueLabel) {
+                        it()
+                        true
+                    }
+                },
             )
-        } else {
-            // Multiple entries, show collapsed or expanded
-            if (!isExpanded) {
-                // Show grouped entry
-                CompactTimeEntryRow(
-                    entry = entries.first(),
-                    date = date,
-                    zone = zone,
-                    project = projectsById[entries.first().projectId],
-                    task = tasksById[entries.first().taskId],
-                    syncStatus = worstSyncStatus,
-                    onEdit = { isExpanded = true },
-                    onDelete = { /* Don't allow deleting grouped entries */ },
-                    onRetrySync = {
-                        entries.filter { syncStatusByEntryId[it.id]?.let(::canRetrySync) == true }.forEach(onRetrySync)
-                    },
-                    count = entries.size,
-                    totalDuration = totalDuration,
-                )
-            } else {
-                // Show all entries
-                entries.forEach { entry ->
-                    CompactTimeEntryRow(
-                        entry = entry,
-                        date = date,
-                        zone = zone,
-                        project = projectsById[entry.projectId],
-                        task = tasksById[entry.taskId],
-                        syncStatus = syncStatusByEntryId[entry.id],
-                        onEdit = { onEdit(entry) },
-                        onDelete = { onDelete(entry) },
-                        onRetrySync = { onRetrySync(entry) },
-                        count = null,
-                        isIndented = true,
+        },
+        backgroundContent = {
+            val direction = dismissState.dismissDirection
+            val continuing = direction == SwipeToDismissBoxValue.StartToEnd
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        when (direction) {
+                            SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.error
+                            SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.colorScheme.primary
+                            SwipeToDismissBoxValue.Settled -> Color.Transparent
+                        },
                     )
-                }
-                // Collapse button
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            RoundedCornerShape(6.dp),
-                        )
-                        .heightIn(min = Dimens.MinTouchTarget)
-                        .clickable(role = Role.Button) { isExpanded = false }
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = pluralStringResource(R.plurals.collapse_entries, entries.size, entries.size),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    .padding(horizontal = Dimens.Space24),
+                contentAlignment = if (continuing) Alignment.CenterStart else Alignment.CenterEnd,
+            ) {
+                if (direction != SwipeToDismissBoxValue.Settled) {
+                    Icon(
+                        imageVector = if (continuing) Icons.Default.PlayArrow else Icons.Default.Delete,
+                        contentDescription = if (continuing) continueLabel else deleteLabel,
+                        tint = if (continuing) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onError,
                     )
                 }
             }
-        }
-    }
+        },
+        content = { content() },
+    )
 }
 
-/**
- * Track top-app-bar title: the "Time tracking" heading plus, on subordinate lines, the signed-in
- * user's name and their active organization.
- *
- * When [userName] and [organizationName] are identical (trimmed, case-sensitive) the two would read
- * as duplicated text / a rendering glitch, so we collapse them into a single line.
- *
- * The organization line only signals its interactivity when a real switch is possible
- * ([canSwitchOrganization]): it then gains a dropdown arrow plus [Role.Button] semantics with a
- * "Switch organization" content description and opens the membership picker on click. Otherwise it
- * is inert, plain [onSurfaceVariant] text with no click target and no affordance icon.
- */
 /**
  * Timer header: calendar on the left, the organization centred (tap to switch when allowed), and
  * refresh, review inbox and add-entry on the right.
@@ -2309,7 +1985,8 @@ private fun ReviewInboxButton(badgeCount: Int, onClick: () -> Unit) {
 }
 
 /**
- * Compact time entry row showing past entry details (collapsed view)
+ * One history entry: description, "● project · task", tag chips and time range on the left; the
+ * clock-style duration with sync and billable markers on the right. Tapping edits the entry.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -2322,11 +1999,7 @@ private fun CompactTimeEntryRow(
     task: Task?,
     syncStatus: TimeEntryRepository.EntrySyncStatus?,
     onEdit: () -> Unit,
-    onDelete: () -> Unit,
     onRetrySync: () -> Unit,
-    count: Int? = null,
-    totalDuration: Long? = null,
-    isIndented: Boolean = false,
 ) {
     val now = remember { Instant.now() }
     val locale = appLocale()
@@ -2335,170 +2008,108 @@ private fun CompactTimeEntryRow(
     val timeRange = remember(entry.start, entry.end, zone, locale, nowLabel, invalidTimeLabel) {
         formatTimeRange(entry.start, entry.end, zone, locale, nowLabel, invalidTimeLabel)
     }
-    val durationText = remember(totalDuration, entry, date, zone, now) {
-        formatDuration(totalDuration ?: entryDurationOnDay(entry, date, zone, now))
-    }
-    val projectColor = remember(project?.color) {
-        project?.let { runCatching { Color(it.color.toColorInt()) }.getOrNull() }
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(TrackingTestTags.ENTRY_ROW)
-            .then(if (isIndented) Modifier.padding(start = 16.dp) else Modifier)
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
-            .padding(horizontal = 12.dp, vertical = 10.dp)
-            .clickable(enabled = count != null && count > 1) { onEdit() },
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Count badge (if grouped)
-        if (count != null && count > 1) {
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
+    val durationText = remember(entry, date, zone, now) { formatElapsedTime(entryDurationOnDay(entry, date, zone, now)) }
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).testTag(TrackingTestTags.ENTRY_ROW)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(TrackingTestTags.ENTRY_EDIT_BUTTON)
+                .clickable(role = Role.Button, onClickLabel = stringResource(R.string.edit), onClick = onEdit)
+                .padding(start = Dimens.Space16, end = Dimens.Space12, top = Dimens.Space12, bottom = Dimens.Space12),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Space12),
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Dimens.Space2)) {
                 Text(
-                    text = count.toString(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    fontWeight = FontWeight.Bold,
+                    text = entry.description?.takeIf { it.isNotEmpty() } ?: stringResource(R.string.no_description),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (entry.description.isNullOrEmpty()) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-            }
-            Spacer(Modifier.width(8.dp))
-        }
-
-        // Left side: Description and project info
-        Column(modifier = Modifier.weight(1f)) {
-            // Description
-            Text(
-                text = entry.description?.takeIf { it.isNotEmpty() }
-                    ?: stringResource(R.string.no_description),
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (entry.description.isNullOrEmpty()) {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-
-            Spacer(Modifier.height(2.dp))
-
-            // Project â€¢ Task and time range on same line
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                // Project color dot + name
-                if (project != null) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(projectColor ?: MaterialTheme.colorScheme.outline),
-                    )
-                    val projectTaskText = remember(project.name, task?.name) {
-                        buildString {
-                            append(project.name)
-                            task?.let { append(" · ${it.name}") }
-                        }
+                ProjectTaskLine(project = project, task = task)
+                if (entry.tags.isNotEmpty()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.Space4),
+                        verticalArrangement = Arrangement.spacedBy(Dimens.Space4),
+                        modifier = Modifier.padding(vertical = Dimens.Space2),
+                    ) {
+                        entry.tags.forEach { tag -> TagChip(tag.name) }
                     }
-                    Text(
-                        text = projectTaskText,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                } else {
-                    Spacer(Modifier.weight(1f))
                 }
-
-                // Time range
                 Text(
                     text = timeRange,
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelSmall.tabular(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     modifier = Modifier.testTag(TrackingTestTags.entryTimeRange(entry.id)),
                 )
             }
-        }
-
-        Spacer(Modifier.width(8.dp))
-
-        // Right side: Duration and action icons
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Kit chip renders nothing for SYNCED (and null); only PENDING /
-            // RETRYING / FAILED surface, so a healthy row stays clutter-free.
-            // A change that has not reached the server gets a tappable retry instead of the
-            // passive chip, so recovery happens on the card rather than in the Sync center.
-            if (syncStatus != null && canRetrySync(syncStatus)) {
-                IconButton(
-                    onClick = onRetrySync,
-                    modifier = Modifier.size(48.dp).testTag(TrackingTestTags.entryRetrySyncButton(entry.id)),
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(Dimens.Space4)) {
+                Text(
+                    text = durationText,
+                    style = MaterialTheme.typography.bodyMedium.tabular(),
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Dimens.Space4),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        Icons.Default.SyncProblem,
-                        contentDescription = stringResource(R.string.sync_retry_entry),
-                        tint = if (syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED) {
-                            MaterialTheme.colorScheme.syncFailed
-                        } else {
-                            MaterialTheme.colorScheme.syncPending
-                        },
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-            } else {
-                syncStatus?.let { SyncChip(status = it, showLabel = false) }
-            }
-            // Duration (use totalDuration if grouped, otherwise entry duration)
-            Text(
-                text = durationText,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-
-            // Only show action buttons if not grouped or if expanded
-            if (count == null || count == 1) {
-                // Edit button
-                IconButton(
-                    onClick = onEdit,
-                    modifier = Modifier.size(48.dp).testTag(TrackingTestTags.ENTRY_EDIT_BUTTON),
-                ) {
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = stringResource(R.string.edit),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-
-                // Delete button
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(48.dp).testTag(TrackingTestTags.ENTRY_DELETE_BUTTON),
-                ) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = stringResource(R.string.delete),
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(16.dp),
-                    )
+                    // Healthy rows stay clean; only pending, retrying or failed changes surface, and a
+                    // change that has not reached the server gets a tappable retry.
+                    if (syncStatus != null && canRetrySync(syncStatus)) {
+                        IconButton(
+                            onClick = onRetrySync,
+                            modifier = Modifier.size(Dimens.MinTouchTarget).testTag(TrackingTestTags.entryRetrySyncButton(entry.id)),
+                        ) {
+                            Icon(
+                                Icons.Default.SyncProblem,
+                                contentDescription = stringResource(R.string.sync_retry_entry),
+                                tint = if (syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED) {
+                                    MaterialTheme.colorScheme.syncFailed
+                                } else {
+                                    MaterialTheme.colorScheme.syncPending
+                                },
+                                modifier = Modifier.size(Dimens.IconSmall),
+                            )
+                        }
+                    } else {
+                        syncStatus?.let { SyncChip(status = it, showLabel = false) }
+                    }
+                    if (entry.billable) {
+                        val billableLabel = stringResource(R.string.billable)
+                        Box(
+                            Modifier
+                                .size(Dimens.ProjectDotSmall)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.positive)
+                                .semantics { contentDescription = billableLabel },
+                        )
+                    }
                 }
             }
         }
+        GroupedDivider()
     }
+}
+
+@Composable
+private fun TagChip(name: String) {
+    Text(
+        text = name,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(MaterialTheme.shapes.extraSmall)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .padding(horizontal = Dimens.Space4 + Dimens.Space2, vertical = Dimens.Space2),
+    )
 }
 
 /**
@@ -3078,16 +2689,18 @@ private const val MAX_CROSS_MIDNIGHT_HOURS = 18L
 private const val LONG_DURATION_WARNING_HOURS = 12L
 private const val LAST_7_DAYS_OFFSET = 6L
 
-/**
- * Format elapsed time as HH:MM:SS
- */
+/** Clock-style duration like the iOS timer: "37:03" under an hour, "1:05:00" from an hour. */
 internal fun formatElapsedTime(seconds: Long): String {
     // Defensive floor: a device clock behind the entry's start must never render as "-1:-5:-3".
     val safeSeconds = seconds.coerceAtLeast(0)
     val hours = safeSeconds / SECONDS_PER_HOUR_LONG
     val minutes = (safeSeconds % SECONDS_PER_HOUR_LONG) / SECONDS_PER_MINUTE_LONG
     val secs = safeSeconds % SECONDS_PER_MINUTE_LONG
-    return String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, secs)
+    return if (hours > 0) {
+        String.format(Locale.ROOT, "%d:%02d:%02d", hours, minutes, secs)
+    } else {
+        String.format(Locale.ROOT, "%02d:%02d", minutes, secs)
+    }
 }
 
 /**

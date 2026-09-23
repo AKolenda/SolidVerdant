@@ -373,9 +373,6 @@ fun SolidVerdantApp(
                         onBillableChange = { billable ->
                             trackingViewModel.updateBillable(billable)
                         },
-                        onUpdateCurrentEntry = {
-                            trackingViewModel.updateCurrentTimeEntry()
-                        },
                         onUpdatePastEntry = {
                                 entry: TimeEntry,
                                 description: String?,

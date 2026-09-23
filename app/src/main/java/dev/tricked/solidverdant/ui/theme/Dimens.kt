@@ -69,6 +69,8 @@ object Dimens {
     val SettingsIconInset = 48.dp
     val AvatarSize = 48.dp
     val ProjectDot = 10.dp
+    val ProjectDotSmall = 8.dp
+    val TimerBarHeight = 64.dp
     val GroupedValueMaxWidth = 180.dp
 
     // --- Floating pill tab bar ---

@@ -8,6 +8,7 @@ package dev.tricked.solidverdant.ui.navigation
 
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,6 +64,7 @@ import dev.tricked.solidverdant.ui.review.ReviewDayPane
 import dev.tricked.solidverdant.ui.sync.SyncCenterScreen
 import dev.tricked.solidverdant.ui.templates.ManageTemplatesScreen
 import dev.tricked.solidverdant.ui.theme.Dimens
+import dev.tricked.solidverdant.ui.theme.isLight
 
 /**
  * Space the floating tab bar covers at the bottom of the window. Tab screens scroll underneath the
@@ -169,7 +171,9 @@ internal fun MainNavigationBar(selectedRoute: String?, onNavigate: (Screen) -> U
             .height(Dimens.TabBarHeight)
             .shadow(Dimens.TabBarShadow, CircleShape, clip = false),
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = TAB_BAR_ALPHA),
+        // Light: a white pill over grey; dark: one step lighter than the rows it floats over.
+        color = with(MaterialTheme.colorScheme) { if (isLight) surface else surfaceContainerHigh }.copy(alpha = TAB_BAR_ALPHA),
+        border = BorderStroke(Dimens.Hairline, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
             modifier = Modifier.padding(Dimens.Space4).selectableGroup(),

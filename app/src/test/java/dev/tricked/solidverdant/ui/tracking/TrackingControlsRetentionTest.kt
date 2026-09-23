@@ -47,7 +47,6 @@ class TrackingControlsRetentionTest {
                     onStop = {},
                     onPause = {},
                     onResume = {},
-                    onUpdate = {},
                 )
             }
         }
@@ -74,7 +73,6 @@ class TrackingControlsRetentionTest {
                     onStop = {},
                     onPause = {},
                     onResume = {},
-                    onUpdate = {},
                 )
             }
         }
@@ -98,7 +96,6 @@ class TrackingControlsRetentionTest {
                     onStop = {},
                     onPause = {},
                     onResume = {},
-                    onUpdate = {},
                 )
             }
         }
