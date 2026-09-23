@@ -20,20 +20,13 @@
     <string name="stats2_no">いいえ</string>
 
     <!-- エクスポート操作とフィードバック。 -->
-    <string name="stats2_export">CSVエクスポート</string>
     <string name="stats2_export_content_description">現在のフィルター範囲をCSVとしてエクスポート</string>
-    <string name="stats2_exporting">エクスポートを準備中…</string>
     <string name="stats2_export_empty">この範囲にはエクスポートするものがありません</string>
     <string name="stats2_export_error">エクスポートを作成できませんでした。もう一度お試しください。</string>
     <string name="stats2_export_chooser_title">タイムエントリを共有（CSV）</string>
 
     <!-- フィルターバーとフィルターシート。 -->
-    <string name="stats2_filters">フィルター</string>
-    <string name="stats2_date_range">日付範囲</string>
-    <string name="stats2_filters_content_description">統計フィルターを編集</string>
     <string name="stats2_filter_sheet_title">統計をフィルター</string>
-    <string name="stats2_active_scope_none">すべての記録時間を表示中</string>
-    <string name="stats2_clear_filters">クリア</string>
     <string name="stats2_clear_filters_content_description">すべての統計フィルターをクリア</string>
     <string name="stats2_reset">リセット</string>
     <string name="stats2_filter_projects">プロジェクト</string>
@@ -55,13 +48,6 @@
     </plurals>
 
     <!-- 前期間との比較。 -->
-    <string name="stats2_comparison_title">前期間との比較</string>
-    <string name="stats2_comparison_range">%1$s – %2$s</string>
-    <string name="stats2_comparison_no_data">前期間に記録時間はありません</string>
-    <string name="stats2_metric_total">合計</string>
-    <string name="stats2_metric_billable">請求可能</string>
-    <string name="stats2_metric_avg_per_day">1日平均</string>
-    <string name="stats2_top_changes">変化の大きいプロジェクト</string>
     <string name="stats2_delta_percent">%1$s%%</string>
     <string name="stats2_delta_new">新規</string>
     <string name="stats2_delta_increase_content_description">%1$s 増加</string>
@@ -87,4 +73,21 @@
     <string name="stats2_estimates_progress_content_description">%1$s: %3$s 中 %2$s 使用</string>
     <string name="stats2_estimates_over_content_description">%1$s: 見積もりを %2$s 超過</string>
     <string name="stats2_unknown_project">不明なプロジェクト</string>
+
+    <!-- Dashboard: period controls, total card and charts. -->
+    <string name="stats_period_day">日</string>
+    <string name="stats_period_week">週</string>
+    <string name="stats_period_month">月</string>
+    <string name="stats_period_half">半月</string>
+    <string name="stats_offset_current">現在</string>
+    <string name="stats_offset_previous">前回</string>
+    <string name="stats_all_projects">すべてのプロジェクト</string>
+    <string name="stats_by_day">日別</string>
+    <string name="stats_by_week">週別</string>
+    <string name="stats_summary_billable">請求可能 %1$s</string>
+    <string name="stats_summary_per_day">1日 %1$s</string>
+    <plurals name="stats_summary_entries">
+        <item quantity="other">%1$d件</item>
+    </plurals>
+    <string name="stats_vs_range">%1$sと比較</string>
 </resources>

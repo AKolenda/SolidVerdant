@@ -15,9 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -42,7 +40,6 @@ import dev.tricked.solidverdant.ui.calendar.DayBucket
 import dev.tricked.solidverdant.ui.calendar.MonthCalendarView
 import dev.tricked.solidverdant.ui.calendar.WeekCalendarView
 import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
-import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.review.InboxHeader
 import dev.tricked.solidverdant.ui.review.InboxIssueCard
 import dev.tricked.solidverdant.ui.review.InboxIssueCardActions
@@ -52,16 +49,15 @@ import dev.tricked.solidverdant.ui.review.ReviewItem
 import dev.tricked.solidverdant.ui.review.ReviewItemType
 import dev.tricked.solidverdant.ui.review.ReviewProject
 import dev.tricked.solidverdant.ui.settings.SettingsContent
-import dev.tricked.solidverdant.ui.statistics.InteractiveBarChart
-import dev.tricked.solidverdant.ui.statistics.KpiGrid
-import dev.tricked.solidverdant.ui.statistics.ProjectTotal
+import dev.tricked.solidverdant.ui.statistics.EstimateProgress
+import dev.tricked.solidverdant.ui.statistics.MetricDelta
+import dev.tricked.solidverdant.ui.statistics.PeriodComparison
 import dev.tricked.solidverdant.ui.statistics.StatCatalog
-import dev.tricked.solidverdant.ui.statistics.StatFilterBar
-import dev.tricked.solidverdant.ui.statistics.StatFilters
-import dev.tricked.solidverdant.ui.statistics.StatisticsSummary
-import dev.tricked.solidverdant.ui.statistics.TrendBucket
-import dev.tricked.solidverdant.ui.statistics.charts.DonutChart
-import dev.tricked.solidverdant.ui.statistics.hexToColor
+import dev.tricked.solidverdant.ui.statistics.StatRange
+import dev.tricked.solidverdant.ui.statistics.StatisticsAggregator
+import dev.tricked.solidverdant.ui.statistics.StatisticsContent
+import dev.tricked.solidverdant.ui.statistics.StatisticsUiState
+import dev.tricked.solidverdant.ui.statistics.TrendGranularity
 import dev.tricked.solidverdant.ui.templates.TemplateResolver
 import dev.tricked.solidverdant.ui.templates.TemplateRow
 import dev.tricked.solidverdant.ui.templates.templateDisplayLabel
@@ -80,7 +76,6 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.ZoneOffset
-import java.time.format.TextStyle
 import dev.tricked.solidverdant.ui.navigation.Screen as NavScreen
 
 /**
@@ -414,55 +409,81 @@ class ReadmeScreenshotsTest {
                 projects = projects,
             )
         },
-        // 5. Statistics — filter bar + KPI grid + charts.
+        // 5. Dashboard — a full week stacked by four projects.
         Screen("statistics") {
-            val locale = appLocale()
-            val summary = StatisticsSummary(
-                totalSeconds = 5 * 3600 + 45 * 60,
-                entryCount = 18,
-                avgSecondsPerDay = 4600,
-                billableSeconds = 4 * 3600 + 10 * 60,
-                nonBillableSeconds = 1 * 3600 + 35 * 60,
-                perProject = listOf(
-                    ProjectTotal("p1", "Website Redesign", "#386A20", 12_600),
-                    ProjectTotal("p2", "Internal Tools", "#386666", 5_400),
-                    ProjectTotal(null, "No project", "#8298AE", 2_700),
-                ),
-                trend = listOf(
-                    TrendBucket("Mon", LocalDate.of(2026, 6, 8), 12_600),
-                    TrendBucket("Tue", LocalDate.of(2026, 6, 9), 8_100),
-                    TrendBucket("Wed", LocalDate.of(2026, 6, 10), 13_800),
-                    TrendBucket("Thu", LocalDate.of(2026, 6, 11), 6_300),
-                    TrendBucket("Fri", LocalDate.of(2026, 6, 12), 9_900),
-                ),
+            val dashboardProjects = listOf(
+                Project(id = "d1", name = "Website Redesign", color = "#5E5CE6"),
+                Project(id = "d2", name = "Mobile App", color = "#FF9F0A"),
+                Project(id = "d3", name = "Client — Acme", color = "#30B0C7"),
+                Project(id = "d4", name = "Internal Tools", color = "#34C759"),
             )
-            Column(
-                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                StatFilterBar(
-                    filters = StatFilters(projectIds = setOf("p1")),
-                    catalog = StatCatalog(projects = projects, clients = clients, tasks = tasks, tags = tags),
-                    onFiltersChange = {},
-                    onClearFilters = {},
-                )
-                KpiGrid(summary)
-                DonutChart(
-                    slices = summary.perProject.map { hexToColor(it.colorHex) to it.seconds.toFloat() },
-                    modifier = Modifier.size(180.dp).align(Alignment.CenterHorizontally),
-                )
-                InteractiveBarChart(
-                    bars = summary.trend,
-                    barColor = MaterialTheme.colorScheme.primary,
-                    onBarClick = {},
-                    labelFor = { bucket ->
-                        bucket.startDate.dayOfWeek.getDisplayName(
-                            TextStyle.SHORT,
-                            locale,
-                        )
-                    },
-                )
+            // Minutes per project for Mon 8 – Sun 14 June 2026.
+            val minutesByDay = listOf(
+                listOf(210, 95, 60, 40),
+                listOf(150, 140, 0, 55),
+                listOf(240, 60, 90, 30),
+                listOf(120, 170, 45, 50),
+                listOf(180, 80, 75, 20),
+                listOf(0, 90, 0, 0),
+                listOf(0, 0, 0, 0),
+            )
+            val weekStart = LocalDate.of(2026, 6, 8)
+            val weekEntries = minutesByDay.flatMapIndexed { day, minutes ->
+                var cursor = weekStart.plusDays(day.toLong()).atTime(8, 30).toInstant(ZoneOffset.UTC)
+                minutes.mapIndexedNotNull { p, mins ->
+                    if (mins == 0) return@mapIndexedNotNull null
+                    val end = cursor.plusSeconds(mins * 60L)
+                    entry(
+                        "w$day$p",
+                        null,
+                        cursor.toString(),
+                        end.toString(),
+                        mins * 60,
+                        projectId = dashboardProjects[p].id,
+                        billable =
+                        p != 3,
+                    )
+                        .also { cursor = end.plusSeconds(15 * 60L) }
+                }
             }
+            val weekRange = weekStart..weekStart.plusDays(6)
+            val summary = StatisticsAggregator.compute(
+                entries = weekEntries,
+                projects = dashboardProjects,
+                rangeStart = weekRange.start,
+                rangeEnd = weekRange.endInclusive,
+                zone = zone,
+                granularity = TrendGranularity.DAY,
+                firstDayOfWeek = DayOfWeek.MONDAY,
+            )
+            StatisticsContent(
+                state = StatisticsUiState(
+                    isLoading = false,
+                    range = StatRange.LastWeek,
+                    catalog = StatCatalog(projects = dashboardProjects),
+                    summary = summary,
+                    comparison = PeriodComparison(
+                        total = MetricDelta(summary.totalSeconds, 29L * 3600L + 40L * 60L),
+                        previousStart = weekRange.start.minusWeeks(1),
+                        previousEnd = weekRange.endInclusive.minusWeeks(1),
+                    ),
+                    estimateProgress = listOf(
+                        EstimateProgress("d1", "Website Redesign", "#5E5CE6", estimatedSeconds = 60 * 3600, spentSeconds = 41 * 3600),
+                        EstimateProgress("d3", "Client — Acme", "#30B0C7", estimatedSeconds = 12 * 3600, spentSeconds = 13 * 3600),
+                    ),
+                    rangeStart = weekRange.start,
+                    rangeEnd = weekRange.endInclusive,
+                    granularity = TrendGranularity.DAY,
+                ),
+                exporting = false,
+                onRangeChange = {},
+                onFiltersChange = {},
+                onClearFilters = {},
+                onRefresh = {},
+                onExport = {},
+                onProjectClick = {},
+                onBucketClick = {},
+            )
         },
         // 6. Time Inbox — a few review issue cards.
         Screen("inbox") {

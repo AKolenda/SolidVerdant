@@ -11,6 +11,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -20,7 +22,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import java.util.concurrent.atomic.AtomicReference
+import java.time.LocalDate
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -29,25 +31,68 @@ class StatisticsRangeSelectorTest {
     @get:Rule
     val composeRule = createComposeRule()
 
-    @Test
-    fun rangeOptionsUseOneSelectorAndUpdateItsVisibleValue() {
-        val selected = AtomicReference<StatRange>(StatRange.Today)
+    private var selected: StatRange = StatRange.ThisWeek
+
+    private fun setControls(initial: StatRange) {
+        selected = initial
         composeRule.setContent {
-            var range by remember { mutableStateOf<StatRange>(StatRange.Today) }
+            var range by remember { mutableStateOf(initial) }
             MaterialTheme {
-                RangeSelector(
-                    current = range,
+                StatRangeControls(
+                    range = range,
                     onSelect = {
                         range = it
-                        selected.set(it)
+                        selected = it
                     },
                 )
             }
         }
+    }
 
-        composeRule.onNodeWithTag("stats_range_selector").performClick()
-        composeRule.onNodeWithTag("stats_range_option_ThisMonth").performClick()
+    @Test
+    fun periodThenOffsetSelectsThePreviousPreset() {
+        setControls(StatRange.ThisWeek)
 
-        assertEquals(StatRange.ThisMonth, selected.get())
+        composeRule.onNodeWithTag(StatRangeTestTags.period(StatPeriod.Month)).performClick()
+        assertEquals(StatRange.ThisMonth, selected)
+
+        composeRule.onNodeWithTag(StatRangeTestTags.offset(StatOffset.Previous)).performClick()
+        assertEquals(StatRange.PreviousMonth, selected)
+        composeRule.onNodeWithTag(StatRangeTestTags.period(StatPeriod.Month)).assertIsSelected()
+        composeRule.onNodeWithTag(StatRangeTestTags.offset(StatOffset.Previous)).assertIsSelected()
+    }
+
+    @Test
+    fun switchingPeriodKeepsThePreviousOffset() {
+        setControls(StatRange.LastWeek)
+
+        composeRule.onNodeWithTag(StatRangeTestTags.period(StatPeriod.Half)).performClick()
+        assertEquals(StatRange.PreviousHalfMonth, selected)
+
+        composeRule.onNodeWithTag(StatRangeTestTags.period(StatPeriod.Day)).performClick()
+        assertEquals(StatRange.Yesterday, selected)
+    }
+
+    @Test
+    fun customHidesTheOffsetControlAndLeavingItStartsAtCurrent() {
+        setControls(StatRange.Custom(LocalDate.parse("2026-06-01"), LocalDate.parse("2026-06-20")))
+
+        composeRule.onNodeWithTag(StatRangeTestTags.period(StatPeriod.Custom)).assertIsSelected()
+        composeRule.onNodeWithTag(StatRangeTestTags.offset(StatOffset.Current)).assertDoesNotExist()
+
+        composeRule.onNodeWithTag(StatRangeTestTags.period(StatPeriod.Week)).performClick()
+        assertEquals(StatRange.ThisWeek, selected)
+        composeRule.onNodeWithTag(StatRangeTestTags.offset(StatOffset.Current)).assertIsSelected()
+    }
+
+    @Test
+    fun customSegmentOpensThePickerWithoutChangingTheRange() {
+        setControls(StatRange.ThisWeek)
+
+        composeRule.onNodeWithTag(StatRangeTestTags.period(StatPeriod.Custom)).performClick()
+
+        composeRule.onNode(isDialog()).assertExists()
+        assertEquals(StatRange.ThisWeek, selected)
+        composeRule.onNodeWithTag(StatRangeTestTags.period(StatPeriod.Week)).assertIsSelected()
     }
 }

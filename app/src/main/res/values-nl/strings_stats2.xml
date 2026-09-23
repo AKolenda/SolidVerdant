@@ -20,20 +20,13 @@
     <string name="stats2_no">Nee</string>
 
     <!-- Exportactie en feedback. -->
-    <string name="stats2_export">CSV exporteren</string>
     <string name="stats2_export_content_description">Exporteer het huidige gefilterde bereik als CSV</string>
-    <string name="stats2_exporting">Export voorbereiden…</string>
     <string name="stats2_export_empty">Niets te exporteren voor dit bereik</string>
     <string name="stats2_export_error">Kan de export niet maken. Probeer het opnieuw.</string>
     <string name="stats2_export_chooser_title">Tijdregistraties delen (CSV)</string>
 
     <!-- Filterbalk en filtervenster. -->
-    <string name="stats2_filters">Filters</string>
-    <string name="stats2_date_range">Datumbereik</string>
-    <string name="stats2_filters_content_description">Statistiekfilters bewerken</string>
     <string name="stats2_filter_sheet_title">Statistieken filteren</string>
-    <string name="stats2_active_scope_none">Alle geregistreerde tijd wordt getoond</string>
-    <string name="stats2_clear_filters">Wissen</string>
     <string name="stats2_clear_filters_content_description">Alle statistiekfilters wissen</string>
     <string name="stats2_reset">Herstellen</string>
     <string name="stats2_filter_projects">Projecten</string>
@@ -56,13 +49,6 @@
     </plurals>
 
     <!-- Vergelijking met vorige periode. -->
-    <string name="stats2_comparison_title">t.o.v. vorige periode</string>
-    <string name="stats2_comparison_range">%1$s – %2$s</string>
-    <string name="stats2_comparison_no_data">Geen geregistreerde tijd in de vorige periode</string>
-    <string name="stats2_metric_total">Totaal</string>
-    <string name="stats2_metric_billable">Factureerbaar</string>
-    <string name="stats2_metric_avg_per_day">Gem. / dag</string>
-    <string name="stats2_top_changes">Grootste projectwijzigingen</string>
     <string name="stats2_delta_percent">%1$s%%</string>
     <string name="stats2_delta_new">nieuw</string>
     <string name="stats2_delta_increase_content_description">omhoog %1$s</string>
@@ -89,4 +75,22 @@
     <string name="stats2_estimates_progress_content_description">%1$s: %2$s van %3$s gebruikt</string>
     <string name="stats2_estimates_over_content_description">%1$s: %2$s boven schatting</string>
     <string name="stats2_unknown_project">Onbekend project</string>
+
+    <!-- Dashboard: period controls, total card and charts. -->
+    <string name="stats_period_day">Dag</string>
+    <string name="stats_period_week">Week</string>
+    <string name="stats_period_month">Maand</string>
+    <string name="stats_period_half">½ maand</string>
+    <string name="stats_offset_current">Huidig</string>
+    <string name="stats_offset_previous">Vorig</string>
+    <string name="stats_all_projects">Alle projecten</string>
+    <string name="stats_by_day">Per dag</string>
+    <string name="stats_by_week">Per week</string>
+    <string name="stats_summary_billable">%1$s factureerbaar</string>
+    <string name="stats_summary_per_day">%1$s / dag</string>
+    <plurals name="stats_summary_entries">
+        <item quantity="one">%1$d boeking</item>
+        <item quantity="other">%1$d boekingen</item>
+    </plurals>
+    <string name="stats_vs_range">t.o.v. %1$s</string>
 </resources>

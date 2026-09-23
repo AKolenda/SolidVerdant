@@ -6,29 +6,27 @@
 
 package dev.tricked.solidverdant.ui.statistics
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -48,13 +46,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.components.GroupedSection
 import dev.tricked.solidverdant.ui.theme.Dimens
 
 internal object StatisticsFilterTestTags {
     const val OPEN = "stats_filter_open"
+    const val CLEAR = "stats_filter_clear"
     const val PROJECT_SEARCH = "stats_project_filter_search"
     fun projectOption(id: String) = "stats_project_filter_$id"
     fun section(section: StatFilterSection) = "stats_filter_section_${section.name.lowercase()}"
@@ -82,9 +82,9 @@ internal fun filterProjectOptions(options: List<Pair<String, String>>, query: St
 }
 
 /**
- * Persistent filter bar: a "Filters" button that opens the editing sheet, a legible summary of the
- * active scope, and a one-tap clear. Active constraints are echoed as removable chips so the current
- * scope is always visible (AGENTS: preserve user context, make state legible, offer easy clearing).
+ * The Dashboard's filter row: a grouped card naming the current scope ("All projects", the single
+ * filtered project, or "N filters active") that opens the filter sheet, with a one-tap clear while
+ * any filter is active.
  */
 @Composable
 fun StatFilterBar(
@@ -95,56 +95,57 @@ fun StatFilterBar(
     modifier: Modifier = Modifier,
 ) {
     var showSheet by remember { mutableStateOf(false) }
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
+    val singleProjectName = filters.projectIds.singleOrNull()
+        ?.takeIf { filters.activeCount == 1 }
+        ?.let { id -> catalog.projects.firstOrNull { it.id == id }?.name }
+    val title = when {
+        !filters.isActive -> stringResource(R.string.stats_all_projects)
+        singleProjectName != null -> singleProjectName
+        else -> pluralStringResource(R.plurals.stats2_active_filters, filters.activeCount, filters.activeCount)
+    }
+    // A custom row rather than GroupedRow: the clear button's 48 dp target sits inside the row's
+    // own vertical padding, so the row keeps one height whether or not a filter is active.
+    GroupedSection(modifier) {
         Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = Dimens.MinTouchTarget)
+                .clickable(role = Role.Button) { showSheet = true }
+                .testTag(StatisticsFilterTestTags.OPEN)
+                .padding(start = Dimens.Space16, end = Dimens.Space12),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
-            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Space12),
         ) {
-            FilledTonalButton(
-                onClick = { showSheet = true },
-                modifier = Modifier.heightIn(min = Dimens.MinTouchTarget).testTag(StatisticsFilterTestTags.OPEN),
-            ) {
-                Icon(
-                    Icons.Default.FilterList,
-                    contentDescription = stringResource(R.string.stats2_filters_content_description),
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(Dimens.Space8))
-                Text(stringResource(R.string.stats2_filters))
-            }
-            Spacer(Modifier.weight(1f))
+            Icon(
+                Icons.Default.FilterList,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(Dimens.IconSmall),
+            )
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).padding(vertical = Dimens.Space12),
+            )
             if (filters.isActive) {
-                TextButton(
-                    onClick = onClearFilters,
-                    modifier = Modifier.heightIn(min = Dimens.MinTouchTarget),
-                ) {
+                IconButton(onClick = onClearFilters, modifier = Modifier.testTag(StatisticsFilterTestTags.CLEAR)) {
                     Icon(
                         Icons.Default.Close,
                         contentDescription = stringResource(R.string.stats2_clear_filters_content_description),
-                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(Dimens.IconSmall),
                     )
-                    Spacer(Modifier.width(Dimens.Space4))
-                    Text(stringResource(R.string.stats2_clear_filters))
                 }
             }
-        }
-        Text(
-            text = if (filters.isActive) {
-                pluralStringResource(
-                    R.plurals.stats2_active_filters,
-                    filters.activeCount,
-                    filters.activeCount,
-                )
-            } else {
-                stringResource(R.string.stats2_active_scope_none)
-            },
-            style = if (filters.isActive) MaterialTheme.typography.labelLarge else MaterialTheme.typography.bodySmall,
-            color = if (filters.isActive) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        if (filters.isActive) {
-            ActiveFilterChips(filters, catalog, onFiltersChange)
+            Icon(
+                Icons.Default.UnfoldMore,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.size(Dimens.IconSmall),
+            )
         }
     }
     if (showSheet) {
@@ -156,51 +157,6 @@ fun StatFilterBar(
             onDismiss = { showSheet = false },
         )
     }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ActiveFilterChips(filters: StatFilters, catalog: StatCatalog, onFiltersChange: (StatFilters) -> Unit) {
-    val projectName = catalog.projects.associate { it.id to it.name }
-    val clientName = catalog.clients.associate { it.id to it.name }
-    val taskName = catalog.tasks.associate { it.id to it.name }
-    val tagName = catalog.tags.associate { it.id to it.name }
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
-        if (filters.billable != BillableFilter.All) {
-            RemovableChip(billableLabel(filters.billable)) {
-                onFiltersChange(filters.copy(billable = BillableFilter.All))
-            }
-        }
-        filters.projectIds.forEach { id ->
-            RemovableChip(projectName[id] ?: stringResource(R.string.stats2_no_project)) {
-                onFiltersChange(filters.toggleProject(id))
-            }
-        }
-        filters.clientIds.forEach { id ->
-            RemovableChip(clientName[id] ?: id) { onFiltersChange(filters.toggleClient(id)) }
-        }
-        filters.taskIds.forEach { id ->
-            RemovableChip(taskName[id] ?: id) { onFiltersChange(filters.toggleTask(id)) }
-        }
-        filters.tagIds.forEach { id ->
-            RemovableChip(tagName[id] ?: id) { onFiltersChange(filters.toggleTag(id)) }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun RemovableChip(label: String, onRemove: () -> Unit) {
-    InputChip(
-        selected = true,
-        onClick = onRemove,
-        label = {
-            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        },
-        trailingIcon = {
-            Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
-        },
-    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
