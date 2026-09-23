@@ -7,6 +7,8 @@
 package dev.tricked.solidverdant.ui.statistics
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -53,5 +55,35 @@ class StatFilterBarInteractionTest {
         composeRule.onNodeWithTag(StatisticsFilterTestTags.projectOption("other")).assertDoesNotExist()
         composeRule.onNodeWithTag(StatisticsFilterTestTags.projectOption("matching")).performClick()
         assertEquals(setOf("matching"), selected.get().projectIds)
+    }
+
+    @Test
+    fun singleProjectFilterNamesTheProjectAndClears() {
+        val selected = AtomicReference(StatFilters(projectIds = setOf("matching")))
+        composeRule.setContent {
+            MaterialTheme {
+                StatFilterBar(
+                    filters = selected.get(),
+                    catalog = StatCatalog(projects = listOf(Project(id = "matching", name = "Precision milling", color = "#336699"))),
+                    onFiltersChange = { selected.set(it) },
+                    onClearFilters = { selected.set(StatFilters()) },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(StatisticsFilterTestTags.OPEN).assert(hasText("Precision milling"))
+        composeRule.onNodeWithTag(StatisticsFilterTestTags.CLEAR).performClick()
+        assertEquals(StatFilters(), selected.get())
+    }
+
+    @Test
+    fun noActiveFilterHasNoClearAction() {
+        composeRule.setContent {
+            MaterialTheme {
+                StatFilterBar(filters = StatFilters(), catalog = StatCatalog(), onFiltersChange = {}, onClearFilters = {})
+            }
+        }
+        composeRule.onNodeWithTag(StatisticsFilterTestTags.OPEN).assertExists()
+        composeRule.onNodeWithTag(StatisticsFilterTestTags.CLEAR).assertDoesNotExist()
     }
 }

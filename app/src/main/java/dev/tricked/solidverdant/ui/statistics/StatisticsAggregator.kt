@@ -23,7 +23,15 @@ enum class TrendGranularity { DAY, WEEK }
 /** [projectName] is null when the entry has no project or its project is missing from the catalogue. */
 data class ProjectTotal(val projectId: String?, val projectName: String?, val colorHex: String, val seconds: Long)
 
-data class TrendBucket(val label: String, val startDate: LocalDate, val seconds: Long)
+/** One project's share of a [TrendBucket]; [projectId] null is the "no project" bucket. */
+data class ProjectSegment(val projectId: String?, val colorHex: String, val seconds: Long)
+
+/**
+ * One bar of the trend chart. [segments] stack the bucket's non-zero time by project, ordered like
+ * [StatisticsSummary.perProject] (range total descending) so a project sits at the same height in
+ * every bar; their seconds sum to [seconds].
+ */
+data class TrendBucket(val label: String, val startDate: LocalDate, val seconds: Long, val segments: List<ProjectSegment> = emptyList())
 
 data class StatisticsSummary(
     val totalSeconds: Long,
@@ -229,7 +237,8 @@ object StatisticsAggregator {
         val days = ChronoUnit.DAYS.between(rangeStart, rangeEnd) + 1
         val avgPerDay = if (days > 0) totalSeconds / days else totalSeconds
 
-        val trend = buildTrend(counted.flatMap { it.daily }, rangeStart, rangeEnd, granularity, firstDayOfWeek)
+        val slices = counted.flatMap { c -> c.daily.map { (date, seconds) -> DaySlice(date, c.entry.projectId, seconds) } }
+        val trend = buildTrend(slices, perProject, rangeStart, rangeEnd, granularity, firstDayOfWeek)
 
         return StatisticsSummary(
             totalSeconds = totalSeconds,
@@ -292,39 +301,50 @@ object StatisticsAggregator {
         return out
     }
 
+    /** The in-range seconds one entry contributes to one local day. */
+    private data class DaySlice(val date: LocalDate, val projectId: String?, val seconds: Long)
+
+    /** Buckets [slices] and stacks each bucket by project in [perProject] order. */
     private fun buildTrend(
-        rows: List<Pair<LocalDate, Long>>,
+        slices: List<DaySlice>,
+        perProject: List<ProjectTotal>,
         rangeStart: LocalDate,
         rangeEnd: LocalDate,
         granularity: TrendGranularity,
         firstDayOfWeek: DayOfWeek,
-    ): List<TrendBucket> = when (granularity) {
-        TrendGranularity.DAY -> {
-            val byDay = rows.groupBy({ it.first }, { it.second }).mapValues { it.value.sum() }
-            generateSequence(rangeStart) { if (it < rangeEnd) it.plusDays(1) else null }
-                .map { d -> TrendBucket(d.format(dayLabelFmt), d, byDay[d] ?: 0L) }
-                .toList()
+    ): List<TrendBucket> {
+        fun bucket(label: String, start: LocalDate, rows: List<DaySlice>?): TrendBucket {
+            val secondsByProject = rows.orEmpty().groupBy({ it.projectId }, { it.seconds }).mapValues { it.value.sum() }
+            val segments = perProject.mapNotNull { p ->
+                secondsByProject[p.projectId]?.takeIf { it > 0 }?.let { ProjectSegment(p.projectId, p.colorHex, it) }
+            }
+            return TrendBucket(label, start, segments.sumOf { it.seconds }, segments)
         }
-        TrendGranularity.WEEK -> {
-            // Minimal-days pinned to ISO's 4 so a Monday firstDayOfWeek reproduces WeekFields.ISO
-            // byte-for-byte (same week-start grouping AND same W## week numbers); only the
-            // first-day-of-week shifts bucket boundaries for e.g. a Sunday-start account.
-            val wf = WeekFields.of(firstDayOfWeek, WEEK_MIN_DAYS)
-            val byWeekStart = rows.groupBy(
-                { it.first.with(wf.dayOfWeek(), 1) },
-                { it.second },
-            ).mapValues { it.value.sum() }
-            val firstWeek = rangeStart.with(wf.dayOfWeek(), 1)
-            generateSequence(firstWeek) { it.plusWeeks(1) }
-                .takeWhile { it <= rangeEnd }
-                .map { ws ->
-                    val week = ws.get(wf.weekOfWeekBasedYear())
-                    // Include the (week-based) year so labels don't collide across year
-                    // boundaries, e.g. W52 of 2025 vs W52 of 2026 in a multi-year range.
-                    val yy = ws.get(wf.weekBasedYear()) % PERCENT_YEAR_BASE
-                    TrendBucket("W$week '%02d".format(yy), ws, byWeekStart[ws] ?: 0L)
-                }
-                .toList()
+        return when (granularity) {
+            TrendGranularity.DAY -> {
+                val byDay = slices.groupBy { it.date }
+                generateSequence(rangeStart) { if (it < rangeEnd) it.plusDays(1) else null }
+                    .map { d -> bucket(d.format(dayLabelFmt), d, byDay[d]) }
+                    .toList()
+            }
+            TrendGranularity.WEEK -> {
+                // Minimal-days pinned to ISO's 4 so a Monday firstDayOfWeek reproduces WeekFields.ISO
+                // byte-for-byte (same week-start grouping AND same W## week numbers); only the
+                // first-day-of-week shifts bucket boundaries for e.g. a Sunday-start account.
+                val wf = WeekFields.of(firstDayOfWeek, WEEK_MIN_DAYS)
+                val byWeekStart = slices.groupBy { it.date.with(wf.dayOfWeek(), 1) }
+                val firstWeek = rangeStart.with(wf.dayOfWeek(), 1)
+                generateSequence(firstWeek) { it.plusWeeks(1) }
+                    .takeWhile { it <= rangeEnd }
+                    .map { ws ->
+                        val week = ws.get(wf.weekOfWeekBasedYear())
+                        // Include the (week-based) year so labels don't collide across year
+                        // boundaries, e.g. W52 of 2025 vs W52 of 2026 in a multi-year range.
+                        val yy = ws.get(wf.weekBasedYear()) % PERCENT_YEAR_BASE
+                        bucket("W$week '%02d".format(yy), ws, byWeekStart[ws])
+                    }
+                    .toList()
+            }
         }
     }
 }
