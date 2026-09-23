@@ -437,7 +437,6 @@ internal fun RangeSelector(current: StatRange, onSelect: (StatRange) -> Unit) {
     val options = listOf(
         R.string.today to StatRange.Today,
         R.string.yesterday to StatRange.Yesterday,
-        R.string.stats_last_7_days to StatRange.Last7Days,
         R.string.stats_last_week to StatRange.LastWeek,
         R.string.stats_this_week to StatRange.ThisWeek,
         R.string.stats_this_month to StatRange.ThisMonth,
@@ -504,7 +503,8 @@ internal fun RangeSelector(current: StatRange, onSelect: (StatRange) -> Unit) {
 private fun rangeLabel(range: StatRange, locale: java.util.Locale): String = when (range) {
     StatRange.Today -> stringResource(R.string.today)
     StatRange.Yesterday -> stringResource(R.string.yesterday)
-    StatRange.Last7Days -> stringResource(R.string.stats_last_7_days)
+    StatRange.ThisHalfMonth -> stringResource(R.string.stats_this_month)
+    StatRange.PreviousHalfMonth -> stringResource(R.string.stats_previous_month)
     StatRange.LastWeek -> stringResource(R.string.stats_last_week)
     StatRange.ThisWeek -> stringResource(R.string.stats_this_week)
     StatRange.ThisMonth -> stringResource(R.string.stats_this_month)

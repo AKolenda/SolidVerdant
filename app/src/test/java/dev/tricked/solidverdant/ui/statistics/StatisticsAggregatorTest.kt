@@ -443,4 +443,52 @@ class StatisticsAggregatorTest {
         assertEquals(1, summary.entryCount)
         assertEquals(3600L, summary.nonBillableSeconds)
     }
+
+    @Test
+    fun `trend segments stack by project in range-total order and sum to each bucket`() {
+        // Range totals: Beta 5h, no project 2h, Alpha 1h. Day 1 has Alpha before Beta in input
+        // order; the stack must still follow the range order.
+        val entries = listOf(
+            entry("a1", "2026-07-01T08:00:00Z", duration = 3600, projectId = "p1"),
+            entry("b1", "2026-07-01T09:00:00Z", duration = 2 * 3600, projectId = "p2"),
+            entry("n1", "2026-07-01T12:00:00Z", duration = 3600),
+            entry("b2", "2026-07-02T09:00:00Z", duration = 3 * 3600, projectId = "p2"),
+            entry("n2", "2026-07-02T13:00:00Z", duration = 3600),
+        )
+        val s = compute(entries, projects, LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-03"), utc, TrendGranularity.DAY)
+
+        assertEquals(listOf("p2", null, "p1"), s.perProject.map { it.projectId })
+        assertEquals(listOf("p2", null, "p1"), s.trend[0].segments.map { it.projectId })
+        assertEquals(listOf("p2", null), s.trend[1].segments.map { it.projectId })
+        assertEquals(emptyList<ProjectSegment>(), s.trend[2].segments)
+        s.trend.forEach { bucket -> assertEquals(bucket.seconds, bucket.segments.sumOf { it.seconds }) }
+        assertEquals("#00FF00", s.trend[0].segments[0].colorHex)
+        assertEquals("#9E9E9E", s.trend[0].segments[1].colorHex)
+    }
+
+    @Test
+    fun `trend segments split an entry crossing midnight across both days`() {
+        val e = entry("1", "2026-07-01T22:00:00Z", "2026-07-02T01:00:00Z", projectId = "p1")
+        val s = compute(listOf(e), projects, LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-02"), utc, TrendGranularity.DAY)
+
+        assertEquals(listOf(ProjectSegment("p1", "#FF0000", 2 * 3600L)), s.trend[0].segments)
+        assertEquals(listOf(ProjectSegment("p1", "#FF0000", 3600L)), s.trend[1].segments)
+    }
+
+    @Test
+    fun `week trend segments sum each project across the week`() {
+        val entries = listOf(
+            entry("1", "2026-07-06T09:00:00Z", duration = 600, projectId = "p1"),
+            entry("2", "2026-07-08T09:00:00Z", duration = 900, projectId = "p1"),
+            entry("3", "2026-07-09T09:00:00Z", duration = 300, projectId = "p2"),
+        )
+        val s = compute(entries, projects, LocalDate.parse("2026-07-06"), LocalDate.parse("2026-07-12"), utc, TrendGranularity.WEEK)
+
+        assertEquals(1, s.trend.size)
+        assertEquals(
+            listOf(ProjectSegment("p1", "#FF0000", 1500L), ProjectSegment("p2", "#00FF00", 300L)),
+            s.trend[0].segments,
+        )
+        assertEquals(1800L, s.trend[0].seconds)
+    }
 }
