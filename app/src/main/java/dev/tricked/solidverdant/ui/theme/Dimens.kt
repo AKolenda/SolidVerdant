@@ -71,6 +71,7 @@ object Dimens {
     val ProjectDot = 10.dp
     val ProjectDotSmall = 8.dp
     val TimerBarHeight = 64.dp
+    val DurationFieldWidth = 104.dp
     val GroupedValueMaxWidth = 180.dp
 
     // --- Floating pill tab bar ---

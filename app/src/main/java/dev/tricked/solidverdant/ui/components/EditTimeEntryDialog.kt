@@ -10,36 +10,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -58,12 +43,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Client
@@ -78,6 +59,7 @@ import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.ui.tracking.EntryTimeValidator
 import dev.tricked.solidverdant.ui.tracking.EntryTrustRules
 import dev.tricked.solidverdant.ui.tracking.EntryValidationBanner
+import dev.tricked.solidverdant.ui.tracking.formatElapsedTime
 import java.time.Duration
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -201,6 +183,17 @@ fun EditTimeEntryDialog(
         if (!returnToProject) returnToProjectName = ""
     }
 
+    val saveEntry = {
+        onSave(
+            description.ifEmpty { null },
+            projectId.takeUnless { isBreakEntry },
+            taskId.takeUnless { isBreakEntry },
+            selectedTags.takeUnless { isBreakEntry }.orEmpty(),
+            billable && !isBreakEntry,
+            formatTimeEntryInstant(startTime),
+            endTime.takeUnless { isRunningEntry }?.let(::formatTimeEntryInstant),
+        )
+    }
     val sheetContent: @Composable () -> Unit = {
         Column(
             modifier = Modifier
@@ -208,264 +201,130 @@ fun EditTimeEntryDialog(
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
                 .imePadding()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(bottom = Dimens.Space24),
+            verticalArrangement = Arrangement.spacedBy(Dimens.Space16),
         ) {
-            Text(
-                text = stringResource(
-                    when {
-                        isBreakEntry -> R.string.break_entry_title
-                        entry == null -> R.string.add_time_entry
-                        else -> R.string.edit_time_entry
-                    },
-                ),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
-
-            Text(
-                text = stringResource(R.string.time_and_duration),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
-            ) {
-                EntryDateFieldButton(
-                    label = stringResource(R.string.start_date),
-                    date = startTime.toLocalDate(),
-                    onClick = { editingDate = TimeField.Start },
-                    modifier = if (isRunningEntry) Modifier.fillMaxWidth() else Modifier.weight(1f),
-                    testTag = EditTimeEntryTestTags.START_DATE,
+            Box(Modifier.padding(horizontal = Dimens.Space8)) {
+                EntrySheetHeader(
+                    title = stringResource(
+                        when {
+                            isBreakEntry -> R.string.break_entry_title
+                            entry == null -> R.string.add_time_entry
+                            else -> R.string.edit_time_entry
+                        },
+                    ),
+                    onCancel = onDismiss,
+                    onSave = saveEntry,
+                    saveEnabled = durationIsValid && validation.canSave,
+                    cancelTag = EditTimeEntryTestTags.CANCEL_BUTTON,
+                    saveTag = EditTimeEntryTestTags.SAVE_BUTTON,
                 )
-                if (!isRunningEntry) {
-                    EntryDateFieldButton(
-                        label = stringResource(R.string.end_date),
-                        date = endTime.toLocalDate(),
-                        onClick = { editingDate = TimeField.End },
-                        modifier = Modifier.weight(1f),
-                        testTag = EditTimeEntryTestTags.END_DATE,
-                    )
-                }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
-            ) {
-                TimeFieldButton(
-                    label = stringResource(R.string.start_time),
-                    value = startTime,
-                    onClick = { editingTime = TimeField.Start },
-                    modifier = (if (isRunningEntry) Modifier.fillMaxWidth() else Modifier.weight(1f))
-                        .testTag(EditTimeEntryTestTags.START_TIME),
-                )
-                if (!isRunningEntry) {
-                    TimeFieldButton(
-                        label = stringResource(R.string.end_time),
-                        value = endTime,
-                        onClick = { editingTime = TimeField.End },
-                        modifier = Modifier.weight(1f).testTag(EditTimeEntryTestTags.END_TIME),
-                    )
-                }
-            }
-
-            if (isRunningEntry) {
-                Text(
-                    text = stringResource(R.string.running_entry_start_edit_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(16.dp),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(
-                                text = stringResource(R.string.total_time),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                text = formatEditableDuration(durationMinutes.toLongOrNull() ?: 0),
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            FilledTonalIconButton(
-                                onClick = {
-                                    setDuration(
-                                        (durationMinutes.toLongOrNull() ?: MINIMUM_DURATION_MINUTES) - DURATION_STEP_MINUTES,
-                                    )
-                                },
-                                modifier = Modifier.size(48.dp),
-                            ) {
-                                Icon(
-                                    Icons.Default.Remove,
-                                    contentDescription = stringResource(
-                                        R.string.decrease_15_minutes,
-                                    ),
-                                )
-                            }
-                            OutlinedTextField(
-                                value = durationMinutes,
-                                onValueChange = { value ->
-                                    if (value.all(Char::isDigit)) {
-                                        durationMinutes = value
-                                        value.toLongOrNull()
-                                            ?.takeIf { it >= MINIMUM_DURATION_MINUTES }
-                                            ?.let { endTime = startTime.plusMinutes(it) }
-                                    }
-                                },
-                                label = { Text(stringResource(R.string.minutes)) },
-                                suffix = { Text(stringResource(R.string.minutes_short)) },
-                                isError = !durationIsValid,
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                            )
-                            FilledTonalIconButton(
-                                onClick = { setDuration((durationMinutes.toLongOrNull() ?: 0) + DURATION_STEP_MINUTES) },
-                                modifier = Modifier.size(48.dp),
-                            ) {
-                                Icon(
-                                    Icons.Default.Add,
-                                    contentDescription = stringResource(R.string.increase_15_minutes),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            OutlinedTextField(
+            EntryDescriptionField(
                 value = description,
                 onValueChange = { description = it },
-                label = { Text(stringResource(R.string.description)) },
-                modifier = Modifier.fillMaxWidth().testTag(EditTimeEntryTestTags.DESCRIPTION_FIELD),
-                shape = RoundedCornerShape(8.dp),
+                testTag = EditTimeEntryTestTags.DESCRIPTION_FIELD,
             )
 
             if (!isBreakEntry) {
-                TrackingProjectTaskDropdown(
-                    selectedProjectId = projectId,
-                    selectedTaskId = taskId,
-                    projects = projects,
-                    tasks = tasks,
-                    onSelectionChanged = { newProjectId, newTaskId ->
-                        projectId = newProjectId
-                        taskId = newTaskId
-                    },
-                    enabled = true,
-                    onCreateProject = onCreateProject?.let { { name -> beginCatalogCreation(CatalogCreationKind.PROJECT, name) } },
-                    onCreateTask = onCreateTask?.let {
-                        { name, selectedId ->
-                            beginCatalogCreation(CatalogCreationKind.TASK, name, selectedId)
-                        }
-                    },
-                )
-
-                TagsSelector(
-                    selectedTagIds = selectedTags,
-                    availableTags = tags,
-                    onTagsChanged = { selectedTags = it },
-                    enabled = true,
-                    onCreateTag = onCreateTag?.let { { name -> beginCatalogCreation(CatalogCreationKind.TAG, name) } },
-                )
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .toggleable(
-                            value = billable,
-                            role = Role.Checkbox,
-                            onValueChange = { billable = it },
-                        ),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Checkbox(
-                        checked = billable,
-                        onCheckedChange = null,
+                GroupedSection {
+                    TrackingProjectTaskDropdown(
+                        selectedProjectId = projectId,
+                        selectedTaskId = taskId,
+                        projects = projects,
+                        tasks = tasks,
+                        onSelectionChanged = { newProjectId, newTaskId ->
+                            projectId = newProjectId
+                            taskId = newTaskId
+                        },
+                        enabled = true,
+                        onCreateProject = onCreateProject?.let { { name -> beginCatalogCreation(CatalogCreationKind.PROJECT, name) } },
+                        onCreateTask = onCreateTask?.let {
+                            { name, selectedId ->
+                                beginCatalogCreation(CatalogCreationKind.TASK, name, selectedId)
+                            }
+                        },
+                        style = SelectorStyle.Grouped,
                     )
-                    Text(
-                        text = stringResource(R.string.billable),
-                        style = MaterialTheme.typography.bodyMedium,
+                    GroupedDivider(inset = Dimens.SettingsIconInset)
+                    TagsSelector(
+                        selectedTagIds = selectedTags,
+                        availableTags = tags,
+                        onTagsChanged = { selectedTags = it },
+                        enabled = true,
+                        onCreateTag = onCreateTag?.let { { name -> beginCatalogCreation(CatalogCreationKind.TAG, name) } },
+                        style = SelectorStyle.Grouped,
+                    )
+                    GroupedDivider(inset = Dimens.SettingsIconInset)
+                    GroupedSwitchRow(
+                        title = stringResource(R.string.billable),
+                        leadingIcon = Icons.Outlined.AttachMoney,
+                        checked = billable,
+                        onCheckedChange = { billable = it },
+                        modifier = Modifier.testTag(EditTimeEntryTestTags.BILLABLE),
+                    )
+                }
+            }
+
+            GroupedSection(
+                header = stringResource(R.string.time_section),
+                footer = stringResource(R.string.running_entry_start_edit_hint).takeIf { isRunningEntry },
+            ) {
+                EntryTimeRow(
+                    label = stringResource(R.string.start),
+                    value = startTime,
+                    onDateClick = { editingDate = TimeField.Start },
+                    onTimeClick = { editingTime = TimeField.Start },
+                    dateTag = EditTimeEntryTestTags.START_DATE,
+                    timeTag = EditTimeEntryTestTags.START_TIME,
+                    dateLabel = stringResource(R.string.start_date),
+                    timeLabel = stringResource(R.string.start_time),
+                )
+                if (!isRunningEntry) {
+                    GroupedDivider()
+                    EntryTimeRow(
+                        label = stringResource(R.string.end),
+                        value = endTime,
+                        onDateClick = { editingDate = TimeField.End },
+                        onTimeClick = { editingTime = TimeField.End },
+                        dateTag = EditTimeEntryTestTags.END_DATE,
+                        timeTag = EditTimeEntryTestTags.END_TIME,
+                        dateLabel = stringResource(R.string.end_date),
+                        timeLabel = stringResource(R.string.end_time),
+                    )
+                    GroupedDivider()
+                    EntryDurationRow(
+                        minutesText = durationMinutes,
+                        totalLabel = formatElapsedTime((durationMinutes.toLongOrNull() ?: 0) * SECONDS_PER_MINUTE),
+                        isValid = durationIsValid,
+                        onMinutesTextChange = { value ->
+                            durationMinutes = value
+                            value.toLongOrNull()
+                                ?.takeIf { it >= MINIMUM_DURATION_MINUTES }
+                                ?.let { endTime = startTime.plusMinutes(it) }
+                        },
+                        onDecrease = {
+                            setDuration((durationMinutes.toLongOrNull() ?: MINIMUM_DURATION_MINUTES) - DURATION_STEP_MINUTES)
+                        },
+                        onIncrease = { setDuration((durationMinutes.toLongOrNull() ?: 0) + DURATION_STEP_MINUTES) },
+                        fieldTag = EditTimeEntryTestTags.DURATION_FIELD,
                     )
                 }
             }
 
             if (!isRunningEntry) {
-                EntryValidationBanner(result = validation, durationHours = durationHours)
+                Box(Modifier.padding(horizontal = Dimens.Space16)) {
+                    EntryValidationBanner(result = validation, durationHours = durationHours)
+                }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = if (onDelete != null) Arrangement.Start else Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (onDelete != null) {
-                    Button(
-                        onClick = onDelete,
-                        modifier = Modifier.testTag(EditTimeEntryTestTags.DELETE_BUTTON),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Transparent,
-                            contentColor = MaterialTheme.colorScheme.error,
-                        ),
-                    ) {
-                        Text(stringResource(R.string.delete))
-                    }
-                    Spacer(Modifier.weight(1f))
-                }
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier.testTag(EditTimeEntryTestTags.CANCEL_BUTTON),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Transparent,
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
-                ) {
-                    Text(stringResource(R.string.cancel))
-                }
-                Spacer(Modifier.width(8.dp))
-                Button(
-                    onClick = {
-                        onSave(
-                            description.ifEmpty { null },
-                            projectId.takeUnless { isBreakEntry },
-                            taskId.takeUnless { isBreakEntry },
-                            selectedTags.takeUnless { isBreakEntry }.orEmpty(),
-                            billable && !isBreakEntry,
-                            formatTimeEntryInstant(startTime),
-                            endTime.takeUnless { isRunningEntry }?.let(::formatTimeEntryInstant),
-                        )
-                    },
-                    enabled = durationIsValid && validation.canSave,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.testTag(EditTimeEntryTestTags.SAVE_BUTTON),
-                ) {
-                    Text(stringResource(R.string.save), fontWeight = FontWeight.SemiBold)
-                }
+            if (onDelete != null) {
+                DestructiveActionRow(
+                    label = stringResource(R.string.delete_entry),
+                    onClick = onDelete,
+                    testTag = EditTimeEntryTestTags.DELETE_BUTTON,
+                )
             }
         }
     }
@@ -480,8 +339,8 @@ fun EditTimeEntryDialog(
         ) {
             Surface(
                 modifier = Modifier.fillMaxWidth().fillMaxHeight(SHEET_HEIGHT_FRACTION),
-                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(topStart = Dimens.RadiusXl, topEnd = Dimens.RadiusXl),
+                color = MaterialTheme.colorScheme.background,
             ) {
                 sheetContent()
             }
@@ -490,7 +349,8 @@ fun EditTimeEntryDialog(
         ModalBottomSheet(
             onDismissRequest = onDismiss,
             sheetState = sheetState,
-            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            shape = RoundedCornerShape(topStart = Dimens.RadiusXl, topEnd = Dimens.RadiusXl),
+            containerColor = MaterialTheme.colorScheme.background,
         ) {
             sheetContent()
         }
@@ -732,23 +592,6 @@ private fun CatalogClientPicker(
     }
 }
 
-@Composable
-private fun TimeFieldButton(label: String, value: ZonedDateTime, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = modifier.height(64.dp),
-        shape = RoundedCornerShape(12.dp),
-        contentPadding = PaddingValues(horizontal = 12.dp),
-    ) {
-        Icon(Icons.Default.AccessTime, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Column(horizontalAlignment = Alignment.Start) {
-            Text(label, style = MaterialTheme.typography.labelSmall)
-            Text(value.format(DateTimeFormatter.ofPattern("HH:mm")), style = MaterialTheme.typography.titleMedium)
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EntryTimePickerDialog(title: String, initial: ZonedDateTime, onDismiss: () -> Unit, onConfirm: (Int, Int) -> Unit) {
@@ -766,17 +609,7 @@ private fun EntryTimePickerDialog(title: String, initial: ZonedDateTime, onDismi
 internal fun retimedEnd(previousStart: ZonedDateTime, newStart: ZonedDateTime, end: ZonedDateTime): ZonedDateTime =
     end.plus(Duration.between(previousStart, newStart))
 
-private fun formatEditableDuration(minutes: Long): String {
-    val hours = minutes / MINUTES_PER_HOUR
-    val remainingMinutes = minutes % MINUTES_PER_HOUR
-    return when {
-        hours > 0 && remainingMinutes > 0 -> "${hours}h ${remainingMinutes}m"
-        hours > 0 -> "${hours}h"
-        else -> "${remainingMinutes}m"
-    }
-}
-
 private const val DURATION_STEP_MINUTES = 15L
 private const val MINIMUM_DURATION_MINUTES = 1L
-private const val MINUTES_PER_HOUR = 60L
+private const val SECONDS_PER_MINUTE = 60L
 private const val SHEET_HEIGHT_FRACTION = 0.9f

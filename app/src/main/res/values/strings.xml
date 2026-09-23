@@ -224,6 +224,10 @@
     <string name="today">Today</string>
     <string name="yesterday">Yesterday</string>
     <string name="time_and_duration">Time and duration</string>
+    <string name="time_section">Time</string>
+    <string name="end">End</string>
+    <string name="duration">Duration</string>
+    <string name="delete_entry">Delete entry</string>
     <string name="running_entry_start_edit_hint">This timer is still running. Changing the start time updates its elapsed time.</string>
     <string name="start_time">Start time</string>
     <string name="end_time">End time</string>
