@@ -25,6 +25,8 @@ object TrackingTestTags {
     const val ADD_ENTRY_BUTTON = "track_add_entry_button"
     const val EDIT_ACTIVE_ENTRY = "track_edit_active_entry"
     const val ENTRY_EDIT_BUTTON = "track_entry_edit"
+    const val ENTRY_DUPLICATE_ACTION = "track_entry_duplicate"
+    const val ENTRY_DELETE_ACTION = "track_entry_delete"
     const val CONTINUE_BUTTON = "track_continue_last"
     const val SHEET = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.SHEET
     const val SHEET_PROJECT_TASK_SELECTOR = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.PROJECT_TASK_SELECTOR
@@ -55,7 +57,14 @@ object TrackingTestTags {
 
     fun entryTimeRange(entryId: String): String = "track_entry_time_range_$entryId"
 
+    /** Retry on a history card; a stacked card is keyed by its first entry and retries every failed one. */
     fun entryRetrySyncButton(entryId: String): String = "track_entry_retry_sync_$entryId"
+
+    fun entryActionsButton(entryId: String): String = "track_entry_actions_$entryId"
+
+    fun entryContinueButton(entryId: String): String = "track_entry_continue_$entryId"
+
+    fun entryGroupToggle(entryId: String): String = "track_entry_group_toggle_$entryId"
 
     fun sheetTagChip(tagId: String): String = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.tagChip(tagId)
 }

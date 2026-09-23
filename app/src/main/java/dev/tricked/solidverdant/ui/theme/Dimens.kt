@@ -74,6 +74,10 @@ object Dimens {
     val DurationFieldWidth = 104.dp
     val GroupedValueMaxWidth = 180.dp
 
+    // --- Timer history cards (stacked cards) ---
+    /** Height of the sliver that peeks below a collapsed stack of identical entries. */
+    val HistoryStackPeek = 6.dp
+
     // --- Segmented control (iOS UISegmentedControl proportions) ---
     /** Visible track height; the tappable row around it stays [MinTouchTarget] tall. */
     val SegmentedTrackHeight = 32.dp

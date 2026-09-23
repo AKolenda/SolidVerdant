@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Timer history list: week headers and stacked entry cards. -->
+    <string name="history_this_week">This week</string>
+    <string name="history_last_week">Last week</string>
+    <string name="history_week_range">%1$s – %2$s</string>
+    <string name="history_project_task">%1$s: %2$s</string>
+    <string name="history_client_suffix">" - %1$s"</string>
+    <string name="history_entry_actions">More actions</string>
+    <string name="history_hide_entries">Hide entries</string>
+    <plurals name="history_show_entries">
+        <item quantity="one">Show %1$d entry</item>
+        <item quantity="other">Show %1$d entries</item>
+    </plurals>
+    <string name="history_not_billable">Not billable</string>
+    <string name="history_no_tags">No tags</string>
+</resources>

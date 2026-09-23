@@ -58,13 +58,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.CallSplit
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.CalendarMonth
@@ -103,8 +101,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -116,10 +112,8 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -147,10 +141,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -160,6 +152,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.core.graphics.toColorInt
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
@@ -168,7 +161,6 @@ import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.repository.EntryTemplate
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
-import dev.tricked.solidverdant.domain.time.clipTimeEntryToLocalDay
 import dev.tricked.solidverdant.domain.time.formatTimeEntryInstant
 import dev.tricked.solidverdant.domain.time.isCompletedTimeEntry
 import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
@@ -200,10 +192,6 @@ import dev.tricked.solidverdant.ui.templates.TemplateDraft
 import dev.tricked.solidverdant.ui.templates.TemplateResolver
 import dev.tricked.solidverdant.ui.templates.templateDisplayLabel
 import dev.tricked.solidverdant.ui.theme.Dimens
-import dev.tricked.solidverdant.ui.theme.positive
-import dev.tricked.solidverdant.ui.theme.syncFailed
-import dev.tricked.solidverdant.ui.theme.syncPending
-import dev.tricked.solidverdant.ui.theme.tabular
 import dev.tricked.solidverdant.util.NotificationPermissionHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -471,14 +459,15 @@ fun TrackingScreen(
                     it.organizationId == currentMembership?.organizationId
                 }
             }
-            val preparedHistory by produceState(
-                initialValue = PreparedHistory.Empty,
+            val historyListItems by produceState(
+                initialValue = emptyList<HistoryListItem>(),
                 uiState.timeEntries,
                 uiState.projects,
                 uiState.tasks,
                 uiState.clients,
                 historyFilter,
                 uiState.zone,
+                uiState.firstDayOfWeek,
             ) {
                 value = withContext(Dispatchers.Default) {
                     val filtered = EntryTrustRules.filter(
@@ -490,37 +479,19 @@ fun TrackingScreen(
                         syncOperations = uiState.syncOperations,
                         zone = uiState.zone,
                     )
-                    val grouped = groupCompletedEntriesByLocalDay(
-                        filtered,
-                        uiState.zone,
-                        Instant.now(),
-                    )
-                    val days = grouped.mapNotNull { (date, entries) ->
-                        if (entries.isEmpty()) {
-                            null
-                        } else {
-                            HistoryDay(
-                                date = date,
-                                entries = entries,
-                                groups = historyEntryGroups(entries),
-                            )
-                        }
-                    }
-                    PreparedHistory(
-                        groupedEntries = grouped,
-                        listItems = buildList {
-                            days.forEach { day ->
-                                add(HistoryListItem.Header(day))
-                                day.groups.forEach { add(HistoryListItem.Group(day.date, it)) }
-                            }
-                        },
+                    val now = Instant.now()
+                    buildHistoryListItems(
+                        days = groupCompletedEntriesByLocalDay(filtered, uiState.zone, now),
+                        firstDayOfWeek = uiState.firstDayOfWeek,
+                        today = LocalDate.now(uiState.zone),
+                        zone = uiState.zone,
+                        now = now,
                     )
                 }
             }
-            val groupedEntries = preparedHistory.groupedEntries
-            val historyListItems = preparedHistory.listItems
             val historyProjectsById = remember(uiState.projects) { uiState.projects.associateBy { it.id } }
             val historyTasksById = remember(uiState.tasks) { uiState.tasks.associateBy { it.id } }
+            val historyClientsById = remember(uiState.clients) { uiState.clients.associateBy { it.id } }
             val visibleSyncOperations = remember(uiState.syncOperations, uiState.syncStatusVisible) {
                 if (uiState.syncStatusVisible) uiState.syncOperations else emptyList()
             }
@@ -547,9 +518,9 @@ fun TrackingScreen(
             }
             val onHistoryDateClick = remember<(LocalDate) -> Unit> { { date -> calendarInitialDate = date } }
 
-            LaunchedEffect(uiState.historyJumpDate, groupedEntries) {
+            LaunchedEffect(uiState.historyJumpDate, historyListItems) {
                 val target = uiState.historyJumpDate ?: return@LaunchedEffect
-                val historyIndex = historyHeaderIndex(target, groupedEntries)
+                val historyIndex = historyHeaderIndex(target, historyListItems)
                 if (historyIndex >= 0) {
                     val primaryItemCount = 2 +
                         (if (uiState.error != null) 1 else 0) +
@@ -689,12 +660,14 @@ fun TrackingScreen(
                                 historyItems = historyListItems,
                                 projectsById = historyProjectsById,
                                 tasksById = historyTasksById,
+                                clientsById = historyClientsById,
                                 syncStatusByEntryId = syncStatusByEntryId,
                                 onEdit = onHistoryEdit,
                                 onDelete = onHistoryDelete,
                                 onDateClick = onHistoryDateClick,
                                 onRetrySync = { onRetrySyncEntry(it.id) },
                                 onContinue = continueEntry.takeIf { !uiState.isTracking && !uiState.isPaused },
+                                onDuplicate = { onDuplicateEntry(it.id) },
                             )
                         }
                     }
@@ -723,12 +696,14 @@ fun TrackingScreen(
                             historyItems = historyListItems,
                             projectsById = historyProjectsById,
                             tasksById = historyTasksById,
+                            clientsById = historyClientsById,
                             syncStatusByEntryId = syncStatusByEntryId,
                             onEdit = onHistoryEdit,
                             onDelete = onHistoryDelete,
                             onDateClick = onHistoryDateClick,
                             onRetrySync = { onRetrySyncEntry(it.id) },
                             onContinue = continueEntry.takeIf { !uiState.isTracking && !uiState.isPaused },
+                            onDuplicate = { onDuplicateEntry(it.id) },
                         )
                     }
                 }
@@ -1162,29 +1137,20 @@ private fun LongTimerWarning(
 private const val HISTORY_PREFETCH_ITEMS = 75
 private const val HISTORY_INITIAL_PREFETCH_MAX_ENTRIES = 250
 
-private fun historyHeaderIndex(requestedDate: LocalDate, groupedEntries: Map<LocalDate, List<TimeEntry>>): Int {
-    val groups = groupedEntries.filterValues { it.isNotEmpty() }
-    val targetDate = groups.keys.minByOrNull { kotlin.math.abs(it.toEpochDay() - requestedDate.toEpochDay()) }
-        ?: return -1
-    var index = 0
-    for ((date, entries) in groups) {
-        if (date == targetDate) return index
-        index += 1 + historyEntryGroups(entries).size
-    }
-    return -1
-}
-
+@Suppress("LongParameterList")
 internal fun LazyListScope.trackingHistoryItems(
     uiState: TrackingUiState,
     historyItems: List<HistoryListItem>,
     projectsById: Map<String, Project>,
     tasksById: Map<String, Task>,
+    clientsById: Map<String, Client>,
     syncStatusByEntryId: Map<String, TimeEntryRepository.EntrySyncStatus>,
     onEdit: (TimeEntry) -> Unit,
     onDelete: (TimeEntry) -> Unit,
     onDateClick: (LocalDate) -> Unit,
     onRetrySync: (TimeEntry) -> Unit = {},
     onContinue: ((TimeEntry) -> Unit)? = null,
+    onDuplicate: ((TimeEntry) -> Unit)? = null,
 ) {
     if (!uiState.hasLoadedTimeEntries && uiState.timeEntries.isEmpty()) {
         item(key = "history_loading_header") { HistoryLoadingHeader() }
@@ -1196,45 +1162,37 @@ internal fun LazyListScope.trackingHistoryItems(
 
     items(
         items = historyItems,
-        key = {
-            when (it) {
-                is HistoryListItem.Header -> "header_${it.day.date}"
-                is HistoryListItem.Group -> "group_${it.date}_${it.entries.first().id}"
-            }
-        },
+        key = { it.key },
         contentType = {
             when (it) {
+                is HistoryListItem.Week -> "history_week"
                 is HistoryListItem.Header -> "history_header"
                 is HistoryListItem.Group -> "history_group"
             }
         },
     ) { historyItem ->
         when (historyItem) {
-            is HistoryListItem.Header -> DateHeader(
-                date = historyItem.day.date,
-                entries = historyItem.day.entries,
+            is HistoryListItem.Week -> HistoryWeekHeader(week = historyItem)
+            is HistoryListItem.Header -> HistoryDayHeader(
+                day = historyItem.day,
                 zone = uiState.zone,
                 onClick = { onDateClick(historyItem.day.date) },
             )
-            is HistoryListItem.Group -> Column {
-                historyItem.entries.forEach { entry ->
-                    SwipeableHistoryRow(
-                        entry = entry,
-                        onDelete = { onDelete(entry) },
-                        onContinue = onContinue?.let { continueEntry -> { continueEntry(entry) } },
-                    ) {
-                        CompactTimeEntryRow(
-                            entry = entry,
-                            date = historyItem.date,
-                            zone = uiState.zone,
-                            project = projectsById[entry.projectId],
-                            task = tasksById[entry.taskId],
-                            syncStatus = syncStatusByEntryId[entry.id],
-                            onEdit = { onEdit(entry) },
-                            onRetrySync = { onRetrySync(entry) },
-                        )
-                    }
-                }
+            is HistoryListItem.Group -> {
+                val project = projectsById[historyItem.lead.projectId]
+                HistoryEntryCard(
+                    group = historyItem,
+                    zone = uiState.zone,
+                    project = project,
+                    task = tasksById[historyItem.lead.taskId],
+                    client = project?.clientId?.let(clientsById::get),
+                    syncStatusByEntryId = syncStatusByEntryId,
+                    onEdit = onEdit,
+                    onDelete = onDelete,
+                    onDuplicate = onDuplicate,
+                    onRetrySync = onRetrySync,
+                    onContinue = onContinue,
+                )
             }
         }
     }
@@ -1279,77 +1237,29 @@ internal fun LazyListScope.trackingHistoryItems(
     onDateClick: (LocalDate) -> Unit,
     onRetrySync: (TimeEntry) -> Unit = {},
     onContinue: ((TimeEntry) -> Unit)? = null,
+    onDuplicate: ((TimeEntry) -> Unit)? = null,
 ) {
-    val historyItems = buildList {
-        groupedEntries.forEach { (date, entries) ->
-            val completed = entries.filter(::isCompletedTimeEntry)
-            if (completed.isNotEmpty()) {
-                val day = HistoryDay(
-                    date = date,
-                    entries = completed,
-                    groups = historyEntryGroups(completed),
-                )
-                add(HistoryListItem.Header(day))
-                day.groups.forEach { add(HistoryListItem.Group(day.date, it)) }
-            }
-        }
-    }
+    val now = Instant.now()
     trackingHistoryItems(
         uiState = uiState,
-        historyItems = historyItems,
+        historyItems = buildHistoryListItems(
+            days = groupedEntries,
+            firstDayOfWeek = uiState.firstDayOfWeek,
+            today = LocalDate.now(uiState.zone),
+            zone = uiState.zone,
+            now = now,
+        ),
         projectsById = uiState.projects.associateBy { it.id },
         tasksById = uiState.tasks.associateBy { it.id },
+        clientsById = uiState.clients.associateBy { it.id },
         syncStatusByEntryId = worstSyncStatusByEntryId(uiState.syncOperations),
         onEdit = onEdit,
         onDelete = onDelete,
         onDateClick = onDateClick,
         onRetrySync = onRetrySync,
         onContinue = onContinue,
+        onDuplicate = onDuplicate,
     )
-}
-
-/**
- * One chip per entry: a dead-lettered UPDATE queued behind a pending STOP must not read as merely
- * queued, so the entry shows its worst operation.
- */
-private val syncStatusSeverity = listOf(
-    TimeEntryRepository.EntrySyncStatus.FAILED,
-    TimeEntryRepository.EntrySyncStatus.CONFLICT,
-    TimeEntryRepository.EntrySyncStatus.RETRYING,
-    TimeEntryRepository.EntrySyncStatus.PENDING,
-    TimeEntryRepository.EntrySyncStatus.SYNCED,
-)
-
-internal fun worstSyncStatusByEntryId(
-    operations: List<TimeEntryRepository.SyncOperation>,
-): Map<String, TimeEntryRepository.EntrySyncStatus> = operations
-    .groupBy { it.entryId }
-    .mapValues { (_, entryOperations) -> entryOperations.minBy { syncStatusSeverity.indexOf(it.status) }.status }
-
-@Immutable
-internal data class HistoryDay(val date: LocalDate, val entries: List<TimeEntry>, val groups: List<List<TimeEntry>>)
-
-@Immutable
-internal sealed interface HistoryListItem {
-    @Immutable
-    data class Header(val day: HistoryDay) : HistoryListItem
-
-    @Immutable
-    data class Group(val date: LocalDate, val entries: List<TimeEntry>) : HistoryListItem
-}
-
-/** Keep every punch visible, even when multiple entries share the same project/task/description. */
-/** Statuses a user can act on from the card; PENDING is queued and will upload on its own. */
-internal fun canRetrySync(status: TimeEntryRepository.EntrySyncStatus): Boolean =
-    status == TimeEntryRepository.EntrySyncStatus.FAILED || status == TimeEntryRepository.EntrySyncStatus.RETRYING
-
-internal fun historyEntryGroups(entries: List<TimeEntry>): List<List<TimeEntry>> = entries.map(::listOf)
-
-@Immutable
-private data class PreparedHistory(val groupedEntries: Map<LocalDate, List<TimeEntry>>, val listItems: List<HistoryListItem>) {
-    companion object {
-        val Empty = PreparedHistory(emptyMap(), emptyList())
-    }
 }
 
 @Composable
@@ -1713,104 +1623,6 @@ internal fun ProjectTaskDropdown(
     )
 }
 
-/** Grey section band: "Today" / "Yesterday" / date on the left, the day total on the right. */
-@Composable
-private fun DateHeader(date: LocalDate, entries: List<TimeEntry>, zone: ZoneId, onClick: () -> Unit) {
-    val context = LocalContext.current
-    val locale = appLocale()
-    val now = remember { Instant.now() }
-    val total = remember(entries, date, zone, now) {
-        formatElapsedTime(entries.filter(::isWorkTimeEntry).sumOf { entryDurationOnDay(it, date, zone, now) })
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
-            .clickable(onClickLabel = stringResource(R.string.jump_to_date), onClick = onClick)
-            .padding(horizontal = Dimens.Space16, vertical = Dimens.Space8),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = formatDate(date, context, zone, locale),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = total,
-            style = MaterialTheme.typography.labelMedium.tabular(),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-/**
- * History row wrapped in iOS-style swipe actions: swipe left to delete, swipe right to continue the
- * entry as a new timer (only offered while no timer runs). Both are also TalkBack custom actions.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SwipeableHistoryRow(entry: TimeEntry, onDelete: () -> Unit, onContinue: (() -> Unit)?, content: @Composable () -> Unit) {
-    val dismissState = rememberSwipeToDismissBoxState()
-    LaunchedEffect(dismissState.currentValue) {
-        when (dismissState.currentValue) {
-            SwipeToDismissBoxValue.EndToStart -> onDelete()
-            SwipeToDismissBoxValue.StartToEnd -> onContinue?.invoke()
-            SwipeToDismissBoxValue.Settled -> return@LaunchedEffect
-        }
-        // A refused delete (e.g. a conflict-locked entry) must not leave the row swiped away.
-        dismissState.snapTo(SwipeToDismissBoxValue.Settled)
-    }
-    val deleteLabel = stringResource(R.string.delete)
-    val continueLabel = stringResource(R.string.resume)
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = onContinue != null,
-        modifier = Modifier.semantics {
-            customActions = listOfNotNull(
-                CustomAccessibilityAction(deleteLabel) {
-                    onDelete()
-                    true
-                },
-                onContinue?.let {
-                    CustomAccessibilityAction(continueLabel) {
-                        it()
-                        true
-                    }
-                },
-            )
-        },
-        backgroundContent = {
-            val direction = dismissState.dismissDirection
-            val continuing = direction == SwipeToDismissBoxValue.StartToEnd
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        when (direction) {
-                            SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.error
-                            SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.colorScheme.primary
-                            SwipeToDismissBoxValue.Settled -> Color.Transparent
-                        },
-                    )
-                    .padding(horizontal = Dimens.Space24),
-                contentAlignment = if (continuing) Alignment.CenterStart else Alignment.CenterEnd,
-            ) {
-                if (direction != SwipeToDismissBoxValue.Settled) {
-                    Icon(
-                        imageVector = if (continuing) Icons.Default.PlayArrow else Icons.Default.Delete,
-                        contentDescription = if (continuing) continueLabel else deleteLabel,
-                        tint = if (continuing) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onError,
-                    )
-                }
-            }
-        },
-        content = { content() },
-    )
-}
-
 /**
  * Timer header: calendar on the left, the organization centred (tap to switch when allowed), and
  * refresh, review inbox and add-entry on the right.
@@ -1989,134 +1801,6 @@ private fun ReviewInboxButton(badgeCount: Int, onClick: () -> Unit) {
             Icon(imageVector = Icons.Outlined.Inbox, contentDescription = stringResource(R.string.nav_review))
         }
     }
-}
-
-/**
- * One history entry: description, "● project · task", tag chips and time range on the left; the
- * clock-style duration with sync and billable markers on the right. Tapping edits the entry.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-@Suppress("LongMethod")
-private fun CompactTimeEntryRow(
-    entry: TimeEntry,
-    date: LocalDate,
-    zone: ZoneId,
-    project: Project?,
-    task: Task?,
-    syncStatus: TimeEntryRepository.EntrySyncStatus?,
-    onEdit: () -> Unit,
-    onRetrySync: () -> Unit,
-) {
-    val now = remember { Instant.now() }
-    val locale = appLocale()
-    val nowLabel = stringResource(R.string.tracking_now)
-    val invalidTimeLabel = stringResource(R.string.tracking_invalid_time)
-    val timeRange = remember(entry.start, entry.end, zone, locale, nowLabel, invalidTimeLabel) {
-        formatTimeRange(entry.start, entry.end, zone, locale, nowLabel, invalidTimeLabel)
-    }
-    val durationText = remember(entry, date, zone, now) { formatElapsedTime(entryDurationOnDay(entry, date, zone, now)) }
-    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).testTag(TrackingTestTags.ENTRY_ROW)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag(TrackingTestTags.ENTRY_EDIT_BUTTON)
-                .clickable(role = Role.Button, onClickLabel = stringResource(R.string.edit), onClick = onEdit)
-                .padding(start = Dimens.Space16, end = Dimens.Space12, top = Dimens.Space12, bottom = Dimens.Space12),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Space12),
-        ) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Dimens.Space2)) {
-                Text(
-                    text = entry.description?.takeIf { it.isNotEmpty() } ?: stringResource(R.string.no_description),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = if (entry.description.isNullOrEmpty()) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                ProjectTaskLine(project = project, task = task)
-                if (entry.tags.isNotEmpty()) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(Dimens.Space4),
-                        verticalArrangement = Arrangement.spacedBy(Dimens.Space4),
-                        modifier = Modifier.padding(vertical = Dimens.Space2),
-                    ) {
-                        entry.tags.forEach { tag -> TagChip(tag.name) }
-                    }
-                }
-                Text(
-                    text = timeRange,
-                    style = MaterialTheme.typography.labelSmall.tabular(),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    modifier = Modifier.testTag(TrackingTestTags.entryTimeRange(entry.id)),
-                )
-            }
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(Dimens.Space4)) {
-                Text(
-                    text = durationText,
-                    style = MaterialTheme.typography.bodyMedium.tabular(),
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(Dimens.Space4),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // Healthy rows stay clean; only pending, retrying or failed changes surface, and a
-                    // change that has not reached the server gets a tappable retry.
-                    if (syncStatus != null && canRetrySync(syncStatus)) {
-                        IconButton(
-                            onClick = onRetrySync,
-                            modifier = Modifier.size(Dimens.MinTouchTarget).testTag(TrackingTestTags.entryRetrySyncButton(entry.id)),
-                        ) {
-                            Icon(
-                                Icons.Default.SyncProblem,
-                                contentDescription = stringResource(R.string.sync_retry_entry),
-                                tint = if (syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED) {
-                                    MaterialTheme.colorScheme.syncFailed
-                                } else {
-                                    MaterialTheme.colorScheme.syncPending
-                                },
-                                modifier = Modifier.size(Dimens.IconSmall),
-                            )
-                        }
-                    } else {
-                        syncStatus?.let { SyncChip(status = it, showLabel = false) }
-                    }
-                    if (entry.billable) {
-                        val billableLabel = stringResource(R.string.billable)
-                        Box(
-                            Modifier
-                                .size(Dimens.ProjectDotSmall)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.positive)
-                                .semantics { contentDescription = billableLabel },
-                        )
-                    }
-                }
-            }
-        }
-        GroupedDivider()
-    }
-}
-
-@Composable
-private fun TagChip(name: String) {
-    Text(
-        text = name,
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        modifier = Modifier
-            .clip(MaterialTheme.shapes.extraSmall)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = Dimens.Space4 + Dimens.Space2, vertical = Dimens.Space2),
-    )
 }
 
 /**
@@ -2689,7 +2373,7 @@ internal fun EntryValidationBanner(result: EntryTimeValidator.Result, durationHo
 /**
  * Format date for display
  */
-private fun formatDate(date: LocalDate, context: android.content.Context, zone: ZoneId, locale: Locale): String {
+internal fun formatDate(date: LocalDate, context: android.content.Context, zone: ZoneId, locale: Locale): String {
     val today = LocalDate.now(zone)
     return when {
         date == today -> context.getString(R.string.today)
@@ -2732,9 +2416,6 @@ internal fun formatTimeRange(
         "$startFormatted - $nowLabel"
     }
 }
-
-private fun entryDurationOnDay(entry: TimeEntry, date: LocalDate, zone: ZoneId, now: Instant): Long =
-    clipTimeEntryToLocalDay(entry, date, zone, now)?.seconds ?: 0L
 
 internal fun groupCompletedEntriesByLocalDay(entries: List<TimeEntry>, zone: ZoneId, now: Instant): Map<LocalDate, List<TimeEntry>> =
     entries
