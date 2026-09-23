@@ -72,10 +72,6 @@
     <string name="calendar_settings_minutes">%1$d min</string>
     <string name="calendar_settings_hour">%1$02d:00</string>
     <string name="long_timer_warning">Long-timer warning</string>
-    <plurals name="long_timer_warning_description">
-        <item quantity="one">Warn after %1$d hour. Stored only on this device.</item>
-        <item quantity="other">Warn after %1$d hours. Stored only on this device.</item>
-    </plurals>
     <plurals name="hours_short">
         <item quantity="one">%1$dh</item>
         <item quantity="other">%1$dh</item>
@@ -223,7 +219,6 @@
     <string name="split_entry_title">Split at time</string>
     <string name="today">Today</string>
     <string name="yesterday">Yesterday</string>
-    <string name="time_and_duration">Time and duration</string>
     <string name="time_section">Time</string>
     <string name="end">End</string>
     <string name="duration">Duration</string>
@@ -278,7 +273,6 @@
     <string name="clear_description_after_stop_description">Keep the project and task selected for the next entry</string>
     <string name="reset_entry_fields">Reset entry fields</string>
     <string name="theme">Theme</string>
-    <string name="theme_description">Choose the app color style</string>
     <string name="theme_system">System</string>
     <string name="theme_light">Light</string>
     <string name="theme_neo">Neo</string>
@@ -300,7 +294,6 @@
     <!-- About / Verification -->
     <string name="about">About</string>
     <string name="app_version">Version %1$s</string>
-    <string name="verification_info">Verification Info</string>
     <string name="package_id_label">Package ID</string>
     <string name="signing_certificate_label">Signing Certificate (SHA-256)</string>
     <string name="copied_to_clipboard">Copied to clipboard</string>

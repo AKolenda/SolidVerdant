@@ -76,9 +76,6 @@
     <string name="calendar_settings_minutes">%1$d分</string>
     <string name="calendar_settings_hour">%1$02d:00</string>
     <string name="long_timer_warning">長時間タイマーの警告</string>
-    <plurals name="long_timer_warning_description">
-        <item quantity="other">%1$d時間後に警告します。この端末にのみ保存されます。</item>
-    </plurals>
     <plurals name="hours_short">
         <item quantity="other">%1$d時間</item>
     </plurals>
@@ -207,7 +204,6 @@
     <string name="split_entry_title">時刻で分割</string>
     <string name="today">今日</string>
     <string name="yesterday">昨日</string>
-    <string name="time_and_duration">時刻と期間</string>
     <string name="time_section">時間</string>
     <string name="end">終了</string>
     <string name="duration">所要時間</string>
@@ -261,7 +257,6 @@
     <string name="clear_description_after_stop_description">次の入力用にプロジェクトとタスクを保持します</string>
     <string name="reset_entry_fields">入力内容をリセット</string>
     <string name="theme">テーマ</string>
-    <string name="theme_description">アプリの配色を選択</string>
     <string name="theme_system">システム</string>
     <string name="theme_light">ライト</string>
     <string name="theme_neo">ネオ</string>
@@ -283,7 +278,6 @@
     <!-- About / Verification -->
     <string name="about">概要</string>
     <string name="app_version">バージョン %1$s</string>
-    <string name="verification_info">検証情報</string>
     <string name="package_id_label">パッケージID</string>
     <string name="signing_certificate_label">署名証明書 (SHA-256)</string>
     <string name="copied_to_clipboard">クリップボードにコピーしました</string>

@@ -18,19 +18,16 @@ class ScreenTest {
     }
 
     @Test
-    fun pushedDestinations_belongToTheTabThatOpenedThem() {
-        assertEquals("track", selectedTabRoute(listOf(null, "track", TimerRoutes.CALENDAR)))
-        assertEquals("track", selectedTabRoute(listOf(null, "track", TimerRoutes.REVIEW, ReviewRoutes.END_OF_DAY)))
-        assertEquals(
-            "settings",
-            selectedTabRoute(listOf(null, "track", "settings", SyncRoutes.SYNC_CENTER)),
-        )
-        assertEquals("stats", selectedTabRoute(listOf(null, "track", "stats")))
+    fun pushedDestinations_keepTheTabThatOpenedThem() {
+        assertEquals("track", nextSelectedTab("track", TimerRoutes.CALENDAR))
+        assertEquals("track", nextSelectedTab("track", ReviewRoutes.END_OF_DAY))
+        assertEquals("settings", nextSelectedTab("settings", SyncRoutes.SYNC_CENTER))
     }
 
     @Test
-    fun deepLinkWithoutATabFallsBackToTimer() {
-        assertEquals("track", selectedTabRoute(listOf(null, ReviewRoutes.REMINDER_SETTINGS)))
-        assertEquals("track", selectedTabRoute(emptyList()))
+    fun tabDestinationsSelectThemselves() {
+        assertEquals("stats", nextSelectedTab("track", "stats"))
+        assertEquals("track", nextSelectedTab("settings", "track"))
+        assertEquals("settings", nextSelectedTab("settings", null))
     }
 }

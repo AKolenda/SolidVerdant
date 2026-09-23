@@ -39,9 +39,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,6 +60,7 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.ui.privacy.PrivacyScreen
 import dev.tricked.solidverdant.ui.review.ReminderSettingsScreen
@@ -72,9 +76,12 @@ import dev.tricked.solidverdant.ui.theme.isLight
  */
 val LocalFloatingBarInset = compositionLocalOf<Dp> { 0.dp }
 
-/** The tab that owns a back stack (oldest route first): the most recent tab route in it. */
-internal fun selectedTabRoute(routes: List<String?>): String =
-    routes.lastOrNull { route -> bottomNavScreens.any { it.route == route } } ?: Screen.Track.route
+/**
+ * The highlighted tab after navigating to [destinationRoute]: a tab route selects itself; a pushed
+ * destination (calendar, review, sync center...) keeps the tab it was opened from.
+ */
+internal fun nextSelectedTab(current: String, destinationRoute: String?): String =
+    destinationRoute?.takeIf { route -> bottomNavScreens.any { it.route == route } } ?: current
 
 @Composable
 fun MainNavHost(
@@ -89,8 +96,10 @@ fun MainNavHost(
         SyncCenterScreen(onBack = { navController.popBackStack() })
     },
 ) {
-    val backStack by navController.currentBackStack.collectAsState()
-    val selectedRoute = selectedTabRoute(backStack.map { it.destination.route })
+    var selectedRoute by rememberSaveable { mutableStateOf(Screen.Track.route) }
+    val currentEntry by navController.currentBackStackEntryAsState()
+    val destinationRoute = currentEntry?.destination?.route
+    LaunchedEffect(destinationRoute) { selectedRoute = nextSelectedTab(selectedRoute, destinationRoute) }
     val barInset = Dimens.TabBarHeight + Dimens.TabBarBottomGap +
         WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
@@ -139,7 +148,9 @@ fun MainNavHost(
         MainNavigationBar(
             selectedRoute = selectedRoute,
             onNavigate = { screen ->
-                if (screen.route == selectedRoute) {
+                val reselected = screen.route == selectedRoute
+                selectedRoute = screen.route
+                if (reselected) {
                     // Re-tapping the current tab returns to its root, like a UITabBar.
                     navController.popBackStack(screen.route, inclusive = false)
                 } else {
