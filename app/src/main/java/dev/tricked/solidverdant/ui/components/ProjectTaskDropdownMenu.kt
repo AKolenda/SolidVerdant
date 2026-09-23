@@ -52,6 +52,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.graphics.toColorInt
@@ -166,7 +168,7 @@ fun ProjectTaskDropdown(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SearchableSelectorField(
+internal fun SearchableSelectorField(
     value: String,
     label: String,
     expanded: Boolean,
@@ -339,10 +341,17 @@ private fun LazyListScope.emptyResultItem(searchQuery: String, emptyMessage: Int
 }
 
 @Composable
-private fun PickerItem(text: String, selected: Boolean, onClick: () -> Unit, leadingContent: (@Composable () -> Unit)? = null) {
+internal fun PickerItem(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    leadingContent: (@Composable () -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
     DropdownMenuItem(
         text = { Text(text, style = MaterialTheme.typography.bodyLarge) },
         onClick = onClick,
+        modifier = modifier.semantics { this.selected = selected },
         leadingIcon = leadingContent,
         trailingIcon = if (selected) {
             { Icon(Icons.Default.Check, contentDescription = null) }
@@ -353,7 +362,7 @@ private fun PickerItem(text: String, selected: Boolean, onClick: () -> Unit, lea
 }
 
 @Composable
-private fun PickerDialog(
+internal fun PickerDialog(
     title: String,
     searchPlaceholder: String,
     searchQuery: String,
@@ -361,6 +370,7 @@ private fun PickerDialog(
     onClose: () -> Unit,
     listTestTag: String,
     searchTestTag: String,
+    closeTestTag: String? = null,
     content: LazyListScope.() -> Unit,
 ) {
     Dialog(
@@ -397,7 +407,12 @@ private fun PickerDialog(
                             style = MaterialTheme.typography.titleLarge,
                             modifier = Modifier.weight(1f),
                         )
-                        IconButton(onClick = onClose, modifier = Modifier.size(Dimens.MinTouchTarget)) {
+                        IconButton(
+                            onClick = onClose,
+                            modifier = Modifier
+                                .size(Dimens.MinTouchTarget)
+                                .then(closeTestTag?.let(Modifier::testTag) ?: Modifier),
+                        ) {
                             Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close))
                         }
                     }

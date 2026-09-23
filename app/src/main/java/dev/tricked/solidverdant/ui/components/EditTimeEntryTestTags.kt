@@ -10,8 +10,13 @@ object EditTimeEntryTestTags {
     const val SHEET = "entry_edit_sheet"
     const val PROJECT_SELECTOR = "project_task_selector"
     const val TASK_SELECTOR = "task_selector"
+    const val TAGS_SELECTOR = "entry_tags_selector"
     const val PROJECT_LIST = "project_task_list"
     const val TASK_LIST = "task_list"
+    const val TAGS_LIST = "entry_tags_list"
+    const val TAGS_SEARCH = "entry_tags_search"
+    const val TAGS_CLOSE = "entry_tags_close"
+    const val TAGS_CLEAR = "entry_tags_clear"
     const val PROJECT_TASK_SELECTOR = PROJECT_SELECTOR
     const val PROJECT_TASK_LIST = PROJECT_LIST
     const val CREATE_PROJECT = "create_project"

@@ -167,6 +167,13 @@
     <string name="select_project_first">先にプロジェクトを選択してください</string>
     <string name="search_projects">プロジェクトを検索…</string>
     <string name="search_tasks">タスクを検索…</string>
+    <string name="search_tags">タグを検索…</string>
+    <string name="no_tags">タグなし</string>
+    <string name="no_tags_available">利用可能なタグがありません</string>
+    <string name="clear_tags">タグを解除</string>
+    <plurals name="selected_tags">
+        <item quantity="other">%1$d件のタグ</item>
+    </plurals>
     <string name="no_projects_available">利用可能なプロジェクトはありません</string>
     <string name="no_tasks_available">このプロジェクトに利用可能なタスクはありません</string>
     <string name="no_client">クライアントなし</string>

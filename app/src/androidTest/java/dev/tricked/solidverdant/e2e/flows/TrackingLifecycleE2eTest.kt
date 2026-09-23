@@ -82,7 +82,7 @@ class TrackingLifecycleE2eTest {
         // first-login window where Stop used to see a null currentTimeEntry and silently return.
         robot.tapStart().tapStop().assertStartButtonVisible()
 
-        e2e.composeRule.waitUntil(WAIT_MS) { robot.entryRowCount() > 0 }
+        robot.assertHistoryEntryVisible()
     }
 
     companion object {
