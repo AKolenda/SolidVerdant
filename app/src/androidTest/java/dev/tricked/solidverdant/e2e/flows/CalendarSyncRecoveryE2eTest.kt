@@ -48,7 +48,7 @@ class CalendarSyncRecoveryE2eTest {
         val serverId = requireNotNull(fixture.serverId)
         e2e.launchApp()
 
-        e2e.composeRule.onNodeWithTag("main_nav_calendar", useUnmergedTree = true).performClick()
+        e2e.composeRule.onNodeWithTag("track_open_calendar", useUnmergedTree = true).performClick()
         val entryTag = "week-entry-$serverId"
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_CONTENT_READY), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(entryTag), WAIT_MS)
@@ -80,7 +80,7 @@ class CalendarSyncRecoveryE2eTest {
         val serverId = requireNotNull(fixture.serverId)
         e2e.launchApp()
 
-        e2e.composeRule.onNodeWithTag("main_nav_calendar", useUnmergedTree = true).performClick()
+        e2e.composeRule.onNodeWithTag("track_open_calendar", useUnmergedTree = true).performClick()
         val entryTag = "week-entry-$serverId"
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_CONTENT_READY), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(entryTag), WAIT_MS)

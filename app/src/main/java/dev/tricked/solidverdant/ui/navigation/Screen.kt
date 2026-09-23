@@ -8,28 +8,36 @@ package dev.tricked.solidverdant.ui.navigation
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BarChart
-import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.tricked.solidverdant.R
 
+/** The three bottom tabs. Route strings are stable: deep links and device tests depend on them. */
 sealed class Screen(val route: String, val labelRes: Int, val icon: ImageVector) {
-    data object Track : Screen("track", R.string.nav_track, Icons.Outlined.Timer)
-    data object Calendar : Screen("calendar", R.string.nav_calendar, Icons.Outlined.CalendarMonth)
-    data object Stats : Screen("stats", R.string.nav_stats, Icons.Outlined.BarChart)
-
-    /** Review-loop home (Time Inbox + end-of-day review). Fourth bottom-nav destination. */
-    data object Review : Screen("review", R.string.nav_review, Icons.Outlined.Inbox)
+    data object Track : Screen("track", R.string.nav_timer, Icons.Outlined.Timer)
+    data object Stats : Screen("stats", R.string.nav_dashboard, Icons.Outlined.BarChart)
+    data object Settings : Screen("settings", R.string.settings_menu, Icons.Outlined.Settings)
 }
 
-val bottomNavScreens: List<Screen> =
-    listOf(Screen.Track, Screen.Calendar, Screen.Stats, Screen.Review)
+val bottomNavScreens: List<Screen> = listOf(Screen.Track, Screen.Stats, Screen.Settings)
+
+/** Test tag of a bottom tab, shared by production UI and device robots. */
+fun mainNavTag(route: String): String = "main_nav_$route"
 
 /**
- * Routes for review-loop destinations that are pushed on top of the bottom-nav graph rather than
- * being tabs themselves. They are reached from the Review tab, its overflow menu, or a reminder /
- * end-of-day notification, and each renders full-screen with its own back navigation.
+ * Destinations pushed on top of the Timer tab. Calendar and Review used to be tabs; they keep their
+ * route strings so calendar deep links and review notifications still resolve.
+ */
+object TimerRoutes {
+    const val CALENDAR: String = "calendar"
+    const val REVIEW: String = "review"
+}
+
+/**
+ * Routes for review-loop destinations pushed on top of a tab. They are reached from Review's overflow
+ * menu, Settings, or a reminder / end-of-day notification, and each renders full-screen with its own
+ * back navigation.
  */
 object ReviewRoutes {
     /** Compact end-of-day review flow (opened from the end-of-day notification). */
@@ -44,7 +52,7 @@ object ReviewRoutes {
 
 /**
  * Routes for the sync surface (#33). The dedicated Sync Center is pushed full-screen on top of the
- * tab graph with its own back navigation, reached from the Track screen's sync summary.
+ * tab graph with its own back navigation, reached from the Timer sync summary or Settings.
  */
 object SyncRoutes {
     /** Dedicated Sync Center: freshness, pending changes, failures + retry/discard. */
@@ -53,8 +61,7 @@ object SyncRoutes {
 
 /**
  * Routes for the settings surface. The privacy & data-management screen (#48) is pushed full-screen
- * on top of the tab graph with its own back navigation, reached from the Track screen's settings
- * drawer.
+ * on top of the tab graph with its own back navigation, reached from the Settings tab.
  */
 object SettingsRoutes {
     /** Privacy & data-management: what is stored/sent, token protection, permissions, data controls. */

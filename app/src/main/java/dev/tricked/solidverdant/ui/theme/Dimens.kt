@@ -61,6 +61,21 @@ object Dimens {
     val MinTouchTarget = 48.dp
     val ControlHeightLarge = 64.dp
     val IconMedium = 24.dp
+    val IconSmall = 20.dp
+    val Hairline = 0.5.dp
+
+    // --- Grouped lists (iOS-style settings rows) ---
+    /** Divider inset that lines up with row titles: row padding 16 + icon 20 + gap 12. */
+    val SettingsIconInset = 48.dp
+    val AvatarSize = 48.dp
+    val ProjectDot = 10.dp
+    val GroupedValueMaxWidth = 180.dp
+
+    // --- Floating pill tab bar ---
+    val TabBarHeight = 64.dp
+    val TabBarItemWidth = 84.dp
+    val TabBarBottomGap = 12.dp
+    val TabBarShadow = 12.dp
     val NarrowCalendarWidth = 600.dp
     val PickerMaxWidth = 560.dp
     val PickerMaxHeight = 640.dp

@@ -125,18 +125,18 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
     }
 
     fun openSettings(): TrackRobot = apply {
-        waitUntilTagExists(TestTags.TRACK_SETTINGS_BUTTON)
-        firstNodeWithTag(TestTags.TRACK_SETTINGS_BUTTON).performClick()
-        waitUntilTagExists(TestTags.TRACK_LOGOUT_BUTTON)
+        waitUntilTagExists(TestTags.NAV_SETTINGS)
+        firstNodeWithTag(TestTags.NAV_SETTINGS).performClick()
+        waitUntilTagExists(TestTags.SETTINGS_LOGOUT_BUTTON)
     }
 
     fun assertLiveUpdateSettingVisible(): TrackRobot = apply {
-        waitUntilTagExists(TestTags.TRACK_LIVE_UPDATE_SWITCH)
-        firstNodeWithTag(TestTags.TRACK_LIVE_UPDATE_SWITCH).performScrollTo().assertIsDisplayed()
+        waitUntilTagExists(TestTags.SETTINGS_LIVE_UPDATE_SWITCH)
+        firstNodeWithTag(TestTags.SETTINGS_LIVE_UPDATE_SWITCH).performScrollTo().assertIsDisplayed()
     }
 
     fun logout(): TrackRobot = apply {
-        firstNodeWithTag(TestTags.TRACK_LOGOUT_BUTTON).performClick()
+        firstNodeWithTag(TestTags.SETTINGS_LOGOUT_BUTTON).performScrollTo().performClick()
     }
 
     fun assertLoginVisible(): TrackRobot = apply {

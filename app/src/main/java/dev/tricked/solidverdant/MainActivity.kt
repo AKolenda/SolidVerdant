@@ -42,12 +42,13 @@ import dev.tricked.solidverdant.ui.components.AppStatusOverlay
 import dev.tricked.solidverdant.ui.login.LoginScreen
 import dev.tricked.solidverdant.ui.navigation.MainNavHost
 import dev.tricked.solidverdant.ui.navigation.ReviewRoutes
-import dev.tricked.solidverdant.ui.navigation.Screen
 import dev.tricked.solidverdant.ui.navigation.SettingsRoutes
 import dev.tricked.solidverdant.ui.navigation.SyncRoutes
+import dev.tricked.solidverdant.ui.navigation.TimerRoutes
 import dev.tricked.solidverdant.ui.navigation.calendarDateFromUri
 import dev.tricked.solidverdant.ui.review.ReviewBadgeViewModel
 import dev.tricked.solidverdant.ui.review.ReviewScreen
+import dev.tricked.solidverdant.ui.settings.SettingsScreen
 import dev.tricked.solidverdant.ui.statistics.StatisticsScreen
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 import dev.tricked.solidverdant.ui.tracking.TrackingScreen
@@ -289,19 +290,17 @@ fun SolidVerdantApp(
             }
             LaunchedEffect(calendarInitialDate, currentMembership?.organizationId) {
                 if (calendarInitialDate != null && currentMembership != null) {
-                    navController.navigate(Screen.Calendar.route) {
-                        popUpTo(Screen.Track.route) { saveState = true }
+                    navController.navigate(TimerRoutes.CALENDAR) {
                         launchSingleTop = true
-                        restoreState = true
                     }
                 }
             }
             MainNavHost(
                 navController = navController,
-                inboxBadgeCount = inboxBadgeCount,
                 onPrivacyLogout = { authViewModel.logout() },
                 reviewContent = {
                     ReviewScreen(
+                        onBack = { navController.popBackStack() },
                         onOpenReminderSettings = {
                             navController.navigate(ReviewRoutes.REMINDER_SETTINGS)
                         },
@@ -318,28 +317,12 @@ fun SolidVerdantApp(
                         user = authUiState.user,
                         memberships = authUiState.memberships,
                         currentMembership = authUiState.currentMembership,
-                        serverEndpoint = configState.endpoint,
-                        clientId = configState.clientId,
                         uiState = trackingUiState,
                         elapsedSeconds = trackingViewModel.elapsedSeconds,
-                        alwaysShowNotifications = alwaysShowNotifications,
-                        appTheme = appTheme,
-                        optimisticRefresh = optimisticRefresh,
-                        liveUpdateEnabled = liveUpdateEnabled,
                         autoClearEntryFieldsAfterStop = autoClearEntryFieldsAfterStop,
-                        clearDescriptionAfterStop = clearDescriptionAfterStop,
                         longTimerHours = longTimerHours,
                         editActiveEntryRequested = editActiveEntryRequested,
                         onEditActiveEntryConsumed = onEditActiveEntryConsumed,
-                        onAlwaysShowNotificationsChange = { enabled ->
-                            trackingViewModel.setAlwaysShowNotifications(enabled)
-                        },
-                        onAppThemeChange = trackingViewModel::setAppTheme,
-                        onOptimisticRefreshChange = trackingViewModel::setOptimisticRefresh,
-                        onLiveUpdateEnabledChange = trackingViewModel::setLiveUpdateEnabled,
-                        onAutoClearEntryFieldsAfterStopChange = trackingViewModel::setAutoClearEntryFieldsAfterStop,
-                        onClearDescriptionAfterStopChange = trackingViewModel::setClearDescriptionAfterStop,
-                        onLongTimerHoursChange = trackingViewModel::setLongTimerHours,
                         onRefresh = {
                             authUiState.currentMembership?.let { membership ->
                                 trackingViewModel.loadAllData(
@@ -348,9 +331,6 @@ fun SolidVerdantApp(
                                     userInitiated = true,
                                 )
                             }
-                        },
-                        onLogout = {
-                            authViewModel.logout()
                         },
                         onMembershipChange = authViewModel::selectMembership,
                         onStartTracking = {
@@ -462,14 +442,46 @@ fun SolidVerdantApp(
                         onOpenSyncCenter = {
                             navController.navigate(SyncRoutes.SYNC_CENTER)
                         },
-                        onOpenPrivacy = {
-                            navController.navigate(SettingsRoutes.PRIVACY)
-                        },
+                        onOpenCalendar = { navController.navigate(TimerRoutes.CALENDAR) },
+                        onOpenReview = { navController.navigate(TimerRoutes.REVIEW) },
+                        reviewBadgeCount = inboxBadgeCount,
                         onLoadMoreEntries = trackingViewModel::loadMoreTimeEntries,
                         onLoadNewerEntries = trackingViewModel::loadNewerTimeEntries,
                         onJumpToDate = trackingViewModel::jumpToHistoryDate,
                         onHistoryJumpConsumed = trackingViewModel::consumeHistoryJump,
                         onClearError = trackingViewModel::clearError,
+                    )
+                },
+                settingsContent = {
+                    SettingsScreen(
+                        user = authUiState.user,
+                        memberships = authUiState.memberships,
+                        currentMembership = authUiState.currentMembership,
+                        canSwitchOrganization = authUiState.memberships.size > 1 &&
+                            !trackingUiState.isTracking &&
+                            !trackingUiState.isPaused,
+                        serverEndpoint = configState.endpoint,
+                        clientId = configState.clientId,
+                        appTheme = appTheme,
+                        alwaysShowNotifications = alwaysShowNotifications,
+                        optimisticRefresh = optimisticRefresh,
+                        liveUpdateEnabled = liveUpdateEnabled,
+                        autoClearEntryFieldsAfterStop = autoClearEntryFieldsAfterStop,
+                        clearDescriptionAfterStop = clearDescriptionAfterStop,
+                        longTimerHours = longTimerHours,
+                        onMembershipChange = authViewModel::selectMembership,
+                        onAppThemeChange = trackingViewModel::setAppTheme,
+                        onAlwaysShowNotificationsChange = trackingViewModel::setAlwaysShowNotifications,
+                        onOptimisticRefreshChange = trackingViewModel::setOptimisticRefresh,
+                        onLiveUpdateEnabledChange = trackingViewModel::setLiveUpdateEnabled,
+                        onAutoClearEntryFieldsAfterStopChange = trackingViewModel::setAutoClearEntryFieldsAfterStop,
+                        onClearDescriptionAfterStopChange = trackingViewModel::setClearDescriptionAfterStop,
+                        onLongTimerHoursChange = trackingViewModel::setLongTimerHours,
+                        onOpenReminderSettings = { navController.navigate(ReviewRoutes.REMINDER_SETTINGS) },
+                        onOpenManageTemplates = { navController.navigate(ReviewRoutes.MANAGE_TEMPLATES) },
+                        onOpenSyncCenter = { navController.navigate(SyncRoutes.SYNC_CENTER) },
+                        onOpenPrivacy = { navController.navigate(SettingsRoutes.PRIVACY) },
+                        onLogout = authViewModel::logout,
                     )
                 },
                 calendarContent = {

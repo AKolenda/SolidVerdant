@@ -15,22 +15,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -39,7 +34,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalConfiguration
@@ -53,9 +47,12 @@ import com.github.takahirom.roborazzi.RoborazziComposeOptions
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.size
 import dev.tricked.solidverdant.data.local.AppThemeMode
+import dev.tricked.solidverdant.ui.navigation.LocalFloatingBarInset
 import dev.tricked.solidverdant.ui.navigation.MainNavigationBar
 import dev.tricked.solidverdant.ui.navigation.Screen
+import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
+import dev.tricked.solidverdant.ui.tracking.TimerTopBar
 import java.io.File
 import java.util.Locale
 
@@ -121,6 +118,7 @@ object ScreenshotHost {
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    val glyph = MaterialTheme.colorScheme.onBackground
                     Canvas(
                         modifier = Modifier.size(16.dp),
                     ) {
@@ -130,7 +128,7 @@ object ScreenshotHost {
                         val centerX = size.width / 2f
                         val bottom = size.height - 2.dp.toPx()
                         drawArc(
-                            color = Color.White,
+                            color = glyph,
                             startAngle = 225f,
                             sweepAngle = 90f,
                             useCenter = false,
@@ -139,7 +137,7 @@ object ScreenshotHost {
                             style = Stroke(strokeWidth, cap = StrokeCap.Round),
                         )
                         drawArc(
-                            color = Color.White,
+                            color = glyph,
                             startAngle = 225f,
                             sweepAngle = 90f,
                             useCenter = false,
@@ -150,7 +148,7 @@ object ScreenshotHost {
                             ),
                             style = Stroke(strokeWidth, cap = StrokeCap.Round),
                         )
-                        drawCircle(Color.White, dotRadius, Offset(centerX, bottom))
+                        drawCircle(glyph, dotRadius, Offset(centerX, bottom))
                     }
                     Text(
                         text = "87%",
@@ -176,83 +174,55 @@ object ScreenshotHost {
         }
     }
 
-    /** Hosts feature content inside the same app scaffold and bottom navigation used in production. */
+    /**
+     * Hosts feature content inside the production floating tab bar. Tab roots draw their own
+     * headers (the Timer tab uses the real [TimerTopBar]); pushed destinations get a back-arrow
+     * title bar from [titleRes].
+     */
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    fun AppShell(destination: Screen, inboxBadgeCount: Int = 0, content: @Composable () -> Unit) {
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            contentWindowInsets = WindowInsets(0),
-            topBar = {
-                if (destination == Screen.Track) {
-                    TopAppBar(
-                        title = {
-                            Column {
-                                Text(
-                                    text = stringResource(dev.tricked.solidverdant.R.string.time_tracking),
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                Text(
-                                    text = "Alex Morgan",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Text(
-                                    text = "Acme Studio",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = {}) {
-                                Icon(
-                                    imageVector = Icons.Default.Menu,
-                                    contentDescription = stringResource(
-                                        dev.tricked.solidverdant.R.string.settings_menu,
-                                    ),
-                                )
-                            }
-                        },
-                        actions = {
-                            IconButton(onClick = {}) {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = stringResource(
-                                        dev.tricked.solidverdant.R.string.add_time_entry,
-                                    ),
-                                )
-                            }
-                            IconButton(onClick = {}) {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = stringResource(
-                                        dev.tricked.solidverdant.R.string.refresh,
-                                    ),
-                                )
-                            }
-                        },
-                    )
-                } else {
-                    TopAppBar(
-                        title = { Text(stringResource(destination.labelRes)) },
-                    )
+    fun AppShell(tab: Screen, titleRes: Int? = null, content: @Composable () -> Unit) {
+        val barInset = Dimens.TabBarHeight + Dimens.TabBarBottomGap
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            CompositionLocalProvider(LocalFloatingBarInset provides barInset) {
+                Column(Modifier.fillMaxSize()) {
+                    when {
+                        titleRes != null -> TopAppBar(
+                            title = { Text(stringResource(titleRes)) },
+                            navigationIcon = {
+                                IconButton(onClick = {}) {
+                                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null)
+                                }
+                            },
+                        )
+                        tab == Screen.Track -> TimerTopBar(
+                            organizationName = "Acme Studio",
+                            canSwitchOrganization = true,
+                            memberships = emptyList(),
+                            currentMembershipId = null,
+                            onMembershipChange = {},
+                            onOpenCalendar = {},
+                            onAddEntry = {},
+                            reviewBadgeCount = 4,
+                            onOpenReview = {},
+                            syncing = false,
+                            onRefresh = {},
+                            onRequestNotifications = null,
+                        )
+                    }
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(bottom = if (titleRes != null) barInset else 0.dp),
+                    ) { content() }
                 }
-            },
-            bottomBar = {
-                MainNavigationBar(
-                    currentRoute = destination.route,
-                    inboxBadgeCount = inboxBadgeCount,
-                    onNavigate = {},
-                )
-            },
-        ) { innerPadding ->
-            Surface(
-                modifier = Modifier.fillMaxSize().padding(innerPadding),
-                color = MaterialTheme.colorScheme.background,
-            ) {
-                content()
             }
+            MainNavigationBar(
+                selectedRoute = tab.route,
+                onNavigate = {},
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = Dimens.TabBarBottomGap),
+            )
         }
     }
 

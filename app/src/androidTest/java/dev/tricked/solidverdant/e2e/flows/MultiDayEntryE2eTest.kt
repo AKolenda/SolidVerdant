@@ -50,7 +50,7 @@ class MultiDayEntryE2eTest {
         e2e.launchApp()
         TrackRobot(e2e.composeRule).waitForHistory().assertEntryVisible(fixture.entry.description!!)
 
-        e2e.composeRule.onAllNodes(hasTestTag("main_nav_calendar"), useUnmergedTree = true)
+        e2e.composeRule.onAllNodes(hasTestTag("track_open_calendar"), useUnmergedTree = true)
             .onFirst()
             .performClick()
         e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_MODE_MONTH, useUnmergedTree = true)

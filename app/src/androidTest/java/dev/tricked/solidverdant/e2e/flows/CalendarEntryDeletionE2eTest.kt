@@ -96,8 +96,8 @@ class CalendarEntryDeletionE2eTest {
 
     private fun openCalendar(serverId: String?) {
         requireNotNull(serverId)
-        e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag("main_nav_calendar"), WAIT_MS)
-        e2e.composeRule.onNodeWithTag("main_nav_calendar", useUnmergedTree = true).performClick()
+        e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag("track_open_calendar"), WAIT_MS)
+        e2e.composeRule.onNodeWithTag("track_open_calendar", useUnmergedTree = true).performClick()
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_WEEK_GRID), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag("week-entry-$serverId"), WAIT_MS)
     }

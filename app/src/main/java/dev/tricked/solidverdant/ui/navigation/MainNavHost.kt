@@ -8,38 +8,71 @@ package dev.tricked.solidverdant.ui.navigation
 
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.ui.privacy.PrivacyScreen
 import dev.tricked.solidverdant.ui.review.ReminderSettingsScreen
 import dev.tricked.solidverdant.ui.review.ReviewDayPane
 import dev.tricked.solidverdant.ui.sync.SyncCenterScreen
 import dev.tricked.solidverdant.ui.templates.ManageTemplatesScreen
+import dev.tricked.solidverdant.ui.theme.Dimens
+
+/**
+ * Space the floating tab bar covers at the bottom of the window. Tab screens scroll underneath the
+ * bar and add this as trailing content padding; pushed screens are laid out above it.
+ */
+val LocalFloatingBarInset = compositionLocalOf<Dp> { 0.dp }
+
+/** The tab that owns a back stack (oldest route first): the most recent tab route in it. */
+internal fun selectedTabRoute(routes: List<String?>): String =
+    routes.lastOrNull { route -> bottomNavScreens.any { it.route == route } } ?: Screen.Track.route
 
 @Composable
 fun MainNavHost(
@@ -47,121 +80,133 @@ fun MainNavHost(
     trackContent: @Composable () -> Unit,
     calendarContent: @Composable () -> Unit,
     statsContent: @Composable () -> Unit,
+    settingsContent: @Composable () -> Unit,
     reviewContent: @Composable () -> Unit = {},
-    inboxBadgeCount: Int = 0,
     onPrivacyLogout: () -> Unit = {},
     syncCenterContent: @Composable () -> Unit = {
         SyncCenterScreen(onBack = { navController.popBackStack() })
     },
 ) {
-    Scaffold(
-        contentWindowInsets = WindowInsets(0),
-        bottomBar = {
-            val backStackEntry by navController.currentBackStackEntryAsState()
-            val currentRoute = backStackEntry?.destination?.route
-            MainNavigationBar(
-                currentRoute = currentRoute,
-                inboxBadgeCount = inboxBadgeCount,
-                onNavigate = { screen ->
-                    if (currentRoute != screen.route) {
-                        val isNestedDestination = currentRoute != null && bottomNavScreens.none { it.route == currentRoute }
-                        val returnedToExistingTab = isNestedDestination &&
-                            navController.popBackStack(screen.route, inclusive = false)
-                        if (!returnedToExistingTab) {
-                            navController.navigate(screen.route) {
-                                popUpTo(Screen.Track.route) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        }
-                    }
-                },
-            )
-        },
-    ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = Screen.Track.route,
-            modifier = Modifier.fillMaxSize().padding(innerPadding),
-            enterTransition = { EnterTransition.None },
-            exitTransition = { ExitTransition.None },
-            popEnterTransition = { EnterTransition.None },
-            popExitTransition = { ExitTransition.None },
-        ) {
-            composable(Screen.Track.route) { trackContent() }
-            composable(Screen.Calendar.route) { calendarContent() }
-            composable(Screen.Stats.route) { statsContent() }
-            composable(Screen.Review.route) { reviewContent() }
+    val backStack by navController.currentBackStack.collectAsState()
+    val selectedRoute = selectedTabRoute(backStack.map { it.destination.route })
+    val barInset = Dimens.TabBarHeight + Dimens.TabBarBottomGap +
+        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
-            // Full-screen review-loop destinations pushed on top of the tab graph. They render the
-            // feature agents' stub screens/panes with their own back navigation.
-            composable(ReviewRoutes.END_OF_DAY) {
-                EndOfDayReviewHost(onBack = { navController.popBackStack() })
-            }
-            composable(ReviewRoutes.REMINDER_SETTINGS) {
-                ReminderSettingsScreen(onBack = { navController.popBackStack() })
-            }
-            composable(ReviewRoutes.MANAGE_TEMPLATES) {
-                ManageTemplatesScreen(onBack = { navController.popBackStack() })
-            }
-            composable(SyncRoutes.SYNC_CENTER) {
-                syncCenterContent()
-            }
-            composable(SettingsRoutes.PRIVACY) {
-                PrivacyScreen(
-                    onBack = { navController.popBackStack() },
-                    onLogout = {
-                        navController.popBackStack()
-                        onPrivacyLogout()
-                    },
-                )
-            }
-        }
-    }
-}
+    Box(Modifier.fillMaxSize()) {
+        CompositionLocalProvider(LocalFloatingBarInset provides barInset) {
+            NavHost(
+                navController = navController,
+                startDestination = Screen.Track.route,
+                modifier = Modifier.fillMaxSize(),
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+            ) {
+                composable(Screen.Track.route) { trackContent() }
+                composable(Screen.Stats.route) { statsContent() }
+                composable(Screen.Settings.route) { settingsContent() }
 
-/** Shared production bottom navigation, also used by full-app screenshot rendering. */
-@Composable
-internal fun MainNavigationBar(currentRoute: String?, inboxBadgeCount: Int, onNavigate: (Screen) -> Unit) {
-    NavigationBar {
-        bottomNavScreens.forEach { screen ->
-            NavigationBarItem(
-                modifier = Modifier.testTag("main_nav_${screen.route}"),
-                selected = currentRoute == screen.route,
-                onClick = { onNavigate(screen) },
-                icon = {
-                    if (screen == Screen.Review && inboxBadgeCount > 0) {
-                        BadgedBox(
-                            badge = {
-                                Badge {
-                                    Text(
-                                        text = if (inboxBadgeCount > 99) {
-                                            stringResource(R.string.review_badge_overflow)
-                                        } else {
-                                            inboxBadgeCount.toString()
-                                        },
-                                    )
-                                }
+                composable(TimerRoutes.CALENDAR) { AboveTabBar { calendarContent() } }
+                composable(TimerRoutes.REVIEW) { AboveTabBar { reviewContent() } }
+                composable(ReviewRoutes.END_OF_DAY) {
+                    AboveTabBar { EndOfDayReviewHost(onBack = { navController.popBackStack() }) }
+                }
+                composable(ReviewRoutes.REMINDER_SETTINGS) {
+                    AboveTabBar { ReminderSettingsScreen(onBack = { navController.popBackStack() }) }
+                }
+                composable(ReviewRoutes.MANAGE_TEMPLATES) {
+                    AboveTabBar { ManageTemplatesScreen(onBack = { navController.popBackStack() }) }
+                }
+                composable(SyncRoutes.SYNC_CENTER) {
+                    AboveTabBar { syncCenterContent() }
+                }
+                composable(SettingsRoutes.PRIVACY) {
+                    AboveTabBar {
+                        PrivacyScreen(
+                            onBack = { navController.popBackStack() },
+                            onLogout = {
+                                navController.popBackStack()
+                                onPrivacyLogout()
                             },
-                        ) {
-                            Icon(
-                                screen.icon,
-                                contentDescription = pluralStringResource(
-                                    R.plurals.review_pending_badge_description,
-                                    inboxBadgeCount,
-                                    inboxBadgeCount,
-                                ),
-                            )
-                        }
-                    } else {
-                        Icon(screen.icon, contentDescription = null)
+                        )
                     }
-                },
-                label = { Text(stringResource(screen.labelRes)) },
-            )
+                }
+            }
+        }
+        MainNavigationBar(
+            selectedRoute = selectedRoute,
+            onNavigate = { screen ->
+                if (screen.route == selectedRoute) {
+                    // Re-tapping the current tab returns to its root, like a UITabBar.
+                    navController.popBackStack(screen.route, inclusive = false)
+                } else {
+                    navController.navigate(screen.route) {
+                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = Dimens.TabBarBottomGap),
+        )
+    }
+}
+
+@Composable
+private fun AboveTabBar(content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize().padding(bottom = LocalFloatingBarInset.current)) { content() }
+}
+
+/** Floating pill tab bar, shared by production and full-app screenshot rendering. */
+@Composable
+internal fun MainNavigationBar(selectedRoute: String?, onNavigate: (Screen) -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier
+            .height(Dimens.TabBarHeight)
+            .shadow(Dimens.TabBarShadow, CircleShape, clip = false),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = TAB_BAR_ALPHA),
+    ) {
+        Row(
+            modifier = Modifier.padding(Dimens.Space4).selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
+        ) {
+            bottomNavScreens.forEach { screen ->
+                val selected = screen.route == selectedRoute
+                val tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                Column(
+                    modifier = Modifier
+                        .testTag(mainNavTag(screen.route))
+                        .width(Dimens.TabBarItemWidth)
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                        .background(
+                            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = SELECTED_PILL_ALPHA) else Color.Transparent,
+                        )
+                        .selectable(selected = selected, role = Role.Tab, onClick = { onNavigate(screen) }),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Icon(screen.icon, contentDescription = null, tint = tint, modifier = Modifier.size(Dimens.IconSmall))
+                    Text(
+                        text = stringResource(screen.labelRes),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = tint,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         }
     }
 }
+
+private const val TAB_BAR_ALPHA = 0.94f
+private const val SELECTED_PILL_ALPHA = 0.12f
 
 /**
  * Full-screen host for the end-of-day review flow (opened from the end-of-day notification). Wraps

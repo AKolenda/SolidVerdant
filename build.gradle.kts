@@ -36,7 +36,7 @@ spotless {
         suppressLintsFor {
             step = "ktlint"
             shortCode = "standard:max-line-length"
-            path = "app/src/main/java/dev/tricked/solidverdant/ui/tracking/TrackingScreen.kt"
+            path = "app/src/main/java/dev/tricked/solidverdant/ui/settings/ObtainiumLinks.kt"
         }
     }
     kotlinGradle {

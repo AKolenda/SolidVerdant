@@ -22,8 +22,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Every bottom-nav destination must compose against real (stress-sized) data without crashing,
- * and returning to Track must restore the history. Guards the nav graph and each screen's
+ * Every tab, plus Calendar and Review pushed from the Timer header, must compose against real
+ * (stress-sized) data without crashing, and returning to Timer must restore the history. Guards the nav graph and each screen's
  * initial composition — the cheapest way to catch "screen X dies on launch" regressions.
  */
 @HiltAndroidTest
@@ -39,22 +39,31 @@ class TabNavigationE2eTest {
         e2e.launchApp()
         TrackRobot(e2e.composeRule).waitForHistory()
 
-        openTab("calendar")
+        tap(TestTags.TRACK_OPEN_CALENDAR)
         // Renders either the month grid (day-cell-<date>) or the week view (week-day-*).
         waitForTagPrefix("day-cell-", "week-day-")
 
-        openTab("stats")
+        tap(TestTags.NAV_DASHBOARD)
         waitForTag(TestTags.STATS_SCREEN)
 
-        openTab("review")
+        tap(TestTags.NAV_SETTINGS)
+        waitForTag(TestTags.SETTINGS_SCREEN)
+
+        // Timer restores its pushed Calendar; tapping Timer again pops back to its root.
+        tap(TestTags.NAV_TIMER)
+        waitForTagPrefix("day-cell-", "week-day-")
+        tap(TestTags.NAV_TIMER)
+        waitForTag(TestTags.TRACK_HISTORY_LIST)
+
+        tap(TestTags.TRACK_OPEN_REVIEW)
         waitForTag("review_more_actions")
 
-        openTab("track")
+        tap(TestTags.NAV_TIMER)
         waitForTag(TestTags.TRACK_HISTORY_LIST)
     }
 
-    private fun openTab(route: String) {
-        e2e.composeRule.onAllNodes(hasTestTag("main_nav_$route")).onFirst().performClick()
+    private fun tap(tag: String) {
+        e2e.composeRule.onAllNodes(hasTestTag(tag)).onFirst().performClick()
         e2e.composeRule.waitForIdle()
     }
 

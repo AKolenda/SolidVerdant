@@ -8,26 +8,20 @@ package dev.tricked.solidverdant.ui.tracking
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Build
-import android.provider.Settings
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -39,19 +33,18 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -62,185 +55,162 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.SyncProblem
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.SyncProblem
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.produceState
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.core.graphics.toColorInt
-import androidx.core.net.toUri
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import dev.tricked.solidverdant.BuildConfig
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import dev.tricked.solidverdant.R
-import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Membership
+import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.User
+import dev.tricked.solidverdant.data.repository.EntryTemplate
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.time.clipTimeEntryToLocalDay
 import dev.tricked.solidverdant.domain.time.formatTimeEntryInstant
 import dev.tricked.solidverdant.domain.time.isCompletedTimeEntry
 import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.domain.time.isWorkTimeEntry
 import dev.tricked.solidverdant.domain.time.timeEntryLocalDaySlices
-import dev.tricked.solidverdant.data.repository.TimeEntryRepository
-import dev.tricked.solidverdant.data.repository.EntryTemplate
-import dev.tricked.solidverdant.data.model.User
-import dev.tricked.solidverdant.service.LIVE_UPDATES_API_LEVEL
-import dev.tricked.solidverdant.service.ACTION_MANAGE_APP_PROMOTED_NOTIFICATIONS
+import dev.tricked.solidverdant.service.TimeTrackingNotificationService
+import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
+import dev.tricked.solidverdant.ui.components.EntryDateFieldButton
+import dev.tricked.solidverdant.ui.components.EntryDatePickerDialog
+import dev.tricked.solidverdant.ui.components.SearchableSingleSelectDialog
+import dev.tricked.solidverdant.ui.components.SectionCard
+import dev.tricked.solidverdant.ui.components.SyncChip
+import dev.tricked.solidverdant.ui.components.TagsSelector
+import dev.tricked.solidverdant.ui.components.retimedEnd
+import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.templates.FavoriteTemplatesRow
 import dev.tricked.solidverdant.ui.templates.ManageTemplatesViewModel
 import dev.tricked.solidverdant.ui.templates.TemplateDraft
 import dev.tricked.solidverdant.ui.templates.TemplateResolver
 import dev.tricked.solidverdant.ui.templates.templateDisplayLabel
-import androidx.compose.runtime.collectAsState
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import dev.tricked.solidverdant.data.local.AppThemeMode
-import dev.tricked.solidverdant.ui.components.ProjectTaskDropdown as SharedProjectTaskDropdown
-import dev.tricked.solidverdant.ui.components.EntryDateFieldButton
-import dev.tricked.solidverdant.ui.components.EntryDatePickerDialog
-import dev.tricked.solidverdant.ui.components.retimedEnd
-import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
-import dev.tricked.solidverdant.ui.components.SectionCard
-import dev.tricked.solidverdant.ui.components.SearchableSingleSelectDialog
-import dev.tricked.solidverdant.ui.components.SyncChip
-import dev.tricked.solidverdant.ui.components.TagsSelector
-import dev.tricked.solidverdant.ui.localization.appLocale
-import dev.tricked.solidverdant.ui.theme.labelRes
-import dev.tricked.solidverdant.ui.theme.selectableThemeModes
 import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.ui.theme.syncFailed
 import dev.tricked.solidverdant.ui.theme.syncPending
-import dev.tricked.solidverdant.util.IsoTimes
 import dev.tricked.solidverdant.util.NotificationPermissionHelper
-import dev.tricked.solidverdant.service.TimeTrackingNotificationService
-import dev.tricked.solidverdant.service.canPostPromotedNotifications
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.time.LocalDate
-import java.time.ZonedDateTime
-import java.time.ZoneId
-import java.time.Instant
-import java.time.ZoneOffset
-import java.time.DayOfWeek
-import java.time.format.DateTimeFormatter
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
-import java.time.format.TextStyle
 import java.util.Locale
+import dev.tricked.solidverdant.ui.components.ProjectTaskDropdown as SharedProjectTaskDropdown
 
 /**
  * Tracking screen displaying current time tracking state and history
@@ -253,28 +223,13 @@ fun TrackingScreen(
     user: User?,
     memberships: List<Membership>,
     currentMembership: Membership?,
-    serverEndpoint: String,
-    clientId: String,
     uiState: TrackingUiState,
     elapsedSeconds: StateFlow<Long> = MutableStateFlow(uiState.elapsedSeconds),
-    alwaysShowNotifications: Boolean,
-    appTheme: AppThemeMode,
-    optimisticRefresh: Boolean,
-    liveUpdateEnabled: Boolean,
     autoClearEntryFieldsAfterStop: Boolean,
-    clearDescriptionAfterStop: Boolean,
     longTimerHours: Int,
     editActiveEntryRequested: Boolean,
     onEditActiveEntryConsumed: () -> Unit,
-    onAlwaysShowNotificationsChange: (Boolean) -> Unit,
-    onAppThemeChange: (AppThemeMode) -> Unit,
-    onOptimisticRefreshChange: (Boolean) -> Unit,
-    onLiveUpdateEnabledChange: (Boolean) -> Unit,
-    onAutoClearEntryFieldsAfterStopChange: (Boolean) -> Unit,
-    onClearDescriptionAfterStopChange: (Boolean) -> Unit,
-    onLongTimerHoursChange: (Int) -> Unit,
     onRefresh: () -> Unit,
-    onLogout: () -> Unit,
     onMembershipChange: (Membership) -> Unit,
     onStartTracking: () -> Unit,
     onStopTracking: () -> Unit,
@@ -297,7 +252,9 @@ fun TrackingScreen(
     onRetrySync: () -> Unit,
     onRetrySyncEntry: (String) -> Unit,
     onOpenSyncCenter: () -> Unit,
-    onOpenPrivacy: () -> Unit = {},
+    onOpenCalendar: () -> Unit,
+    onOpenReview: () -> Unit,
+    reviewBadgeCount: Int,
     onLoadMoreEntries: () -> Unit,
     onLoadNewerEntries: () -> Unit,
     onJumpToDate: (LocalDate) -> Unit,
@@ -313,33 +270,19 @@ fun TrackingScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var longTimerSnoozedUntil by remember { mutableLongStateOf(0L) }
     val context = LocalContext.current
-    val liveUpdatesSupported = Build.VERSION.SDK_INT >= LIVE_UPDATES_API_LEVEL
-    var systemLiveUpdatesEnabled by remember(context, liveUpdatesSupported) {
-        mutableStateOf(canPostPromotedNotifications(context))
-    }
-    val lifecycleOwner = LocalLifecycleOwner.current
-
-    DisposableEffect(context, lifecycleOwner, liveUpdatesSupported) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                systemLiveUpdatesEnabled = canPostPromotedNotifications(context)
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
     val templatesSavedMessage = stringResource(R.string.templates_saved)
     val entryDeletedMessage = stringResource(R.string.entry_deleted)
     val conflictEditLockedMessage = stringResource(R.string.sync_conflict_edit_locked)
     val undoLabel = stringResource(R.string.undo)
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val wideHistoryListState = rememberLazyListState()
     val compactListState = rememberLazyListState()
-    val routineSyncInProgress = uiState.isLoading || uiState.isRefreshing || uiState.syncOperations.any { operation ->
-        operation.status == TimeEntryRepository.EntrySyncStatus.PENDING ||
-            operation.status == TimeEntryRepository.EntrySyncStatus.RETRYING
-    }
+    val routineSyncInProgress = uiState.isLoading ||
+        uiState.isRefreshing ||
+        uiState.syncOperations.any { operation ->
+            operation.status == TimeEntryRepository.EntrySyncStatus.PENDING ||
+                operation.status == TimeEntryRepository.EntrySyncStatus.RETRYING
+        }
 
     // Favorites & templates (gap analysis #1, #9). The template ViewModel resolves the current
     // organization itself; its catalogue includes archived/done items so availability can be shown.
@@ -406,7 +349,8 @@ fun TrackingScreen(
     LaunchedEffect(wideHistoryListState, uiState.timeEntries.size, uiState.hasMoreTimeEntries) {
         snapshotFlow {
             val info = wideHistoryListState.layoutInfo
-            hasUserScrolledHistory && info.totalItemsCount > 0 &&
+            hasUserScrolledHistory &&
+                info.totalItemsCount > 0 &&
                 (info.visibleItemsInfo.lastOrNull()?.index ?: -1) >=
                 info.totalItemsCount - HISTORY_PREFETCH_ITEMS
         }.filter { it }.collect { onLoadMoreEntries() }
@@ -414,7 +358,8 @@ fun TrackingScreen(
     LaunchedEffect(compactListState, uiState.timeEntries.size, uiState.hasMoreTimeEntries) {
         snapshotFlow {
             val info = compactListState.layoutInfo
-            hasUserScrolledHistory && info.totalItemsCount > 0 &&
+            hasUserScrolledHistory &&
+                info.totalItemsCount > 0 &&
                 (info.visibleItemsInfo.lastOrNull()?.index ?: -1) >=
                 info.totalItemsCount - HISTORY_PREFETCH_ITEMS
         }.filter { it }.collect { onLoadMoreEntries() }
@@ -435,29 +380,35 @@ fun TrackingScreen(
     LaunchedEffect(
         wideHistoryListState,
         uiState.timeEntries.size,
-        uiState.canLoadNewerHistory
+        uiState.canLoadNewerHistory,
     ) {
         snapshotFlow {
-            hasUserScrolledHistory && uiState.canLoadNewerHistory &&
-                (wideHistoryListState.layoutInfo.visibleItemsInfo.firstOrNull()?.index
-                    ?: Int.MAX_VALUE) <= HISTORY_PREFETCH_ITEMS
+            hasUserScrolledHistory &&
+                uiState.canLoadNewerHistory &&
+                (
+                    wideHistoryListState.layoutInfo.visibleItemsInfo.firstOrNull()?.index
+                        ?: Int.MAX_VALUE
+                    ) <= HISTORY_PREFETCH_ITEMS
         }.filter { it }.collect { onLoadNewerEntries() }
     }
     LaunchedEffect(
         compactListState,
         uiState.timeEntries.size,
-        uiState.canLoadNewerHistory
+        uiState.canLoadNewerHistory,
     ) {
         snapshotFlow {
-            hasUserScrolledHistory && uiState.canLoadNewerHistory &&
-                (compactListState.layoutInfo.visibleItemsInfo.firstOrNull()?.index
-                    ?: Int.MAX_VALUE) <= HISTORY_PREFETCH_ITEMS
+            hasUserScrolledHistory &&
+                uiState.canLoadNewerHistory &&
+                (
+                    compactListState.layoutInfo.visibleItemsInfo.firstOrNull()?.index
+                        ?: Int.MAX_VALUE
+                    ) <= HISTORY_PREFETCH_ITEMS
         }.filter { it }.collect { onLoadNewerEntries() }
     }
 
     // Permission launcher for notification permission (Android 13+)
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
+        contract = ActivityResultContracts.RequestPermission(),
     ) { isGranted ->
         // Permission result is handled, no action needed
     }
@@ -468,659 +419,250 @@ fun TrackingScreen(
     // "Always show notifications" toggle opt-in (see onCheckedChange on that Switch). The
     // persistent notification still shows normally if permission is already granted.
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ModalDrawerSheet {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
+    Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing.only(
+            WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
+        ),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            TimerTopBar(
+                organizationName = currentMembership?.organization?.name,
+                canSwitchOrganization = memberships.size > 1 && !uiState.isTracking && !uiState.isPaused,
+                memberships = memberships,
+                currentMembershipId = currentMembership?.id,
+                onMembershipChange = onMembershipChange,
+                onOpenCalendar = onOpenCalendar,
+                onAddEntry = { showAddDialog = true },
+                reviewBadgeCount = reviewBadgeCount,
+                onOpenReview = onOpenReview,
+                syncing = routineSyncInProgress,
+                onRefresh = onRefresh,
+                onRequestNotifications = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    !NotificationPermissionHelper.hasNotificationPermission(context)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(16.dp)
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        user?.let { account ->
-                            var profileImageFailed by remember(account.profilePhotoUrl) { mutableStateOf(false) }
-                            val profileDescription = stringResource(R.string.profile_picture)
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (account.profilePhotoUrl.isNotBlank() && !profileImageFailed) {
-                                    AsyncImage(
-                                        model = account.profilePhotoUrl,
-                                        contentDescription = profileDescription,
-                                        onError = { profileImageFailed = true },
-                                        modifier = Modifier.size(48.dp).clip(CircleShape)
-                                    )
-                                } else {
-                                    Surface(
-                                        modifier = Modifier.size(48.dp).semantics { contentDescription = profileDescription },
-                                        shape = CircleShape,
-                                        color = MaterialTheme.colorScheme.primaryContainer
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Text(
-                                                account.name.split(Regex("\\s+")).mapNotNull { it.firstOrNull() }
-                                                    .take(2).joinToString("").uppercase(),
-                                                style = MaterialTheme.typography.titleMedium
-                                            )
-                                        }
-                                    }
-                                }
-                                Column(Modifier.padding(start = 12.dp)) {
-                                    Text(account.name, style = MaterialTheme.typography.titleMedium)
-                                    Text(account.email, style = MaterialTheme.typography.bodySmall)
-                                    val locale = appLocale()
-                                    val weekStart = remember(account.weekStart, locale) {
-                                        runCatching { DayOfWeek.valueOf(account.weekStart.uppercase()) }
-                                            .getOrNull()?.getDisplayName(TextStyle.FULL, locale)
-                                    }
-                                    val profileDetails = listOfNotNull(
-                                        account.timezone.takeIf { it.isNotBlank() }, weekStart,
-                                    ).joinToString(" · ")
-                                    if (profileDetails.isNotBlank()) {
-                                        Text(
-                                            profileDetails,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        Text(
-                            text = stringResource(R.string.settings_menu),
-                            style = MaterialTheme.typography.headlineSmall,
-                            modifier = Modifier.padding(bottom = 16.dp)
-                        )
-
-                        OutlinedButton(
-                            onClick = {
-                                val appUri = "package:${context.packageName}".toUri()
-                                val languageIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                    Intent(Settings.ACTION_APP_LOCALE_SETTINGS, appUri)
-                                } else {
-                                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, appUri)
-                                }
-                                runCatching { context.startActivity(languageIntent) }
-                                    .onFailure {
-                                        context.startActivity(
-                                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, appUri)
-                                        )
-                                    }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Language,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(stringResource(R.string.choose_language))
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        OutlinedButton(
-                            onClick = {
-                                scope.launch { drawerState.close() }
-                                onOpenPrivacy()
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Lock,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(stringResource(R.string.privacy_menu_entry))
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        HorizontalDivider()
-                        Text(
-                            stringResource(R.string.long_timer_warning),
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(top = 16.dp),
-                        )
-                        Text(
-                            pluralStringResource(R.plurals.long_timer_warning_description, longTimerHours, longTimerHours),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            LONG_TIMER_OPTIONS.forEach { hours ->
-                                FilterChip(
-                                    selected = longTimerHours == hours,
-                                    onClick = { onLongTimerHoursChange(hours) },
-                                    label = { Text(pluralStringResource(R.plurals.hours_short, hours, hours)) },
-                                )
-                            }
-                        }
-                        HorizontalDivider()
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Text(
-                            text = stringResource(R.string.server_information),
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                        Text(
-                            text = stringResource(R.string.server_endpoint),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                        Text(
-                            text = serverEndpoint,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = Dimens.MinTouchTarget)
-                                .clickable(role = Role.Button) {
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    clipboard.setPrimaryClip(ClipData.newPlainText("Server endpoint", serverEndpoint))
-                                    Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
-                                }
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                                .wrapContentHeight()
-                        )
-                        Text(
-                            text = stringResource(R.string.client_id),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                        Text(
-                            text = clientId,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = Dimens.MinTouchTarget)
-                                .clickable(role = Role.Button) {
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    clipboard.setPrimaryClip(ClipData.newPlainText("Client ID", clientId))
-                                    Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
-                                }
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                                .wrapContentHeight()
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-                        HorizontalDivider()
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.always_show_notifications),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    text = stringResource(R.string.always_show_notifications_description),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Switch(
-                                checked = alwaysShowNotifications,
-                                onCheckedChange = { enabled ->
-                                    // SV-014: request POST_NOTIFICATIONS only when the user opts in here,
-                                    // never automatically when tracking starts.
-                                    if (enabled && !NotificationPermissionHelper.hasNotificationPermission(context)) {
-                                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                    }
-                                    onAlwaysShowNotificationsChange(enabled)
-                                }
-                            )
-                        }
-
-                        if (liveUpdatesSupported) {
-                            HorizontalDivider()
-                            LiveUpdateSettingRow(
-                                enabled = liveUpdateEnabled,
-                                systemEnabled = systemLiveUpdatesEnabled,
-                                onEnabledChange = { enabled ->
-                                    if (enabled && !NotificationPermissionHelper.hasNotificationPermission(context)) {
-                                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                    }
-                                    onLiveUpdateEnabledChange(enabled)
-                                },
-                                onOpenSystemSettings = {
-                                    val intent = Intent(ACTION_MANAGE_APP_PROMOTED_NOTIFICATIONS).apply {
-                                        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                                    }
-                                    runCatching { context.startActivity(intent) }.onFailure {
-                                        context.startActivity(
-                                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(
-                                                Settings.EXTRA_APP_PACKAGE,
-                                                context.packageName,
-                                            ),
-                                        )
-                                    }
-                                },
-                            )
-                        }
-
-                        HorizontalDivider()
-                        AutoClearEntryFieldsSettings(
-                            autoClearEntryFieldsAfterStop = autoClearEntryFieldsAfterStop,
-                            clearDescriptionAfterStop = clearDescriptionAfterStop,
-                            onAutoClearEntryFieldsAfterStopChange = onAutoClearEntryFieldsAfterStopChange,
-                            onClearDescriptionAfterStopChange = onClearDescriptionAfterStopChange,
-                        )
-
-                        HorizontalDivider()
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(stringResource(R.string.optimistic_refresh), style = MaterialTheme.typography.bodyLarge)
-                                Text(
-                                    stringResource(R.string.optimistic_refresh_description),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Switch(checked = optimisticRefresh, onCheckedChange = onOptimisticRefreshChange)
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-                        HorizontalDivider()
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Text(
-                            text = stringResource(R.string.theme),
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                        Text(
-                            text = stringResource(R.string.theme_description),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                        FlowRow(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            selectableThemeModes().forEach { theme ->
-                                FilterChip(
-                                    selected = appTheme == theme,
-                                    onClick = { onAppThemeChange(theme) },
-                                    label = { Text(stringResource(theme.labelRes)) }
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-                        HorizontalDivider()
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // About / Verification section
-                        AboutSection(context = context)
-                    }
-
-                    // Keep logout visible without turning the drawer footer into a large block.
-                    TextButton(
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            onLogout()
-                        },
-                        modifier = Modifier
-                            .align(Alignment.End)
-                            .testTag(TrackingTestTags.LOGOUT_BUTTON)
-                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.logout),
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+                    { notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
+                } else {
+                    null
+                },
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) { paddingValues ->
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier.padding(paddingValues),
+        ) {
+            val serverLastEntry = remember(uiState.timeEntries) {
+                uiState.timeEntries
+                    .filter { isCompletedTimeEntry(it) && !it.description.isNullOrBlank() }
+                    .maxByOrNull { it.start }
+            }
+            val lastEntry = remember(serverLastEntry, uiState.cachedContinueEntry, currentMembership) {
+                serverLastEntry ?: uiState.cachedContinueEntry?.takeIf {
+                    it.organizationId == currentMembership?.organizationId
                 }
             }
-        }
-    ) {
-        Scaffold(
-            contentWindowInsets = WindowInsets.safeDrawing.only(
-                WindowInsetsSides.Top + WindowInsetsSides.Horizontal
-            ),
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            topBar = {
-                TopAppBar(
-                    title = {
-                        TrackingAppBarTitle(
-                            userName = user?.name,
-                            organizationName = currentMembership?.organization?.name,
-                            canSwitchOrganization = memberships.size > 1 &&
-                                !uiState.isTracking && !uiState.isPaused,
-                            memberships = memberships,
-                            currentMembershipId = currentMembership?.id,
-                            onMembershipChange = onMembershipChange,
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(
-                            onClick = { scope.launch { drawerState.open() } },
-                            modifier = Modifier.testTag(TrackingTestTags.SETTINGS_BUTTON),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Menu,
-                                contentDescription = stringResource(R.string.settings_menu)
-                            )
-                        }
-                    },
-                    actions = {
-                        IconButton(
-                            onClick = { showAddDialog = true },
-                            modifier = Modifier.testTag(TrackingTestTags.ADD_ENTRY_BUTTON),
-                        ) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = stringResource(R.string.add_time_entry)
-                            )
-                        }
-                        // Notification permission button (Android 13+) - only show if not granted
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                            !NotificationPermissionHelper.hasNotificationPermission(context)
-                        ) {
-                            IconButton(
-                                onClick = {
-                                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Notifications,
-                                    contentDescription = stringResource(R.string.enable_notifications)
-                                )
-                            }
-                        }
-                        val syncTransition = rememberInfiniteTransition(label = "sync")
-                        val syncRotation by syncTransition.animateFloat(
-                            initialValue = 0f,
-                            targetValue = if (routineSyncInProgress) FULL_ROTATION_DEGREES else 0f,
-                            animationSpec = infiniteRepeatable(tween(SYNC_ROTATION_DURATION_MS), RepeatMode.Restart),
-                            label = "sync rotation"
-                        )
-                        IconButton(
-                            onClick = onRefresh,
-                            modifier = Modifier.testTag(TrackingTestTags.REFRESH_BUTTON),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = stringResource(
-                                    if (routineSyncInProgress) R.string.syncing else R.string.refresh,
-                                ),
-                                modifier = Modifier.rotate(syncRotation)
-                            )
-                        }
-                    }
-                )
-            },
-            containerColor = MaterialTheme.colorScheme.surface
-        ) { paddingValues ->
-            PullToRefreshBox(
-                isRefreshing = uiState.isRefreshing,
-                onRefresh = onRefresh,
-                modifier = Modifier.padding(paddingValues)
+            val preparedHistory by produceState(
+                initialValue = PreparedHistory.Empty,
+                uiState.timeEntries,
+                uiState.projects,
+                uiState.tasks,
+                uiState.clients,
+                historyFilter,
+                uiState.zone,
             ) {
-                val serverLastEntry = remember(uiState.timeEntries) {
-                    uiState.timeEntries
-                        .filter { isCompletedTimeEntry(it) && !it.description.isNullOrBlank() }
-                        .maxByOrNull { it.start }
-                }
-                val lastEntry = remember(serverLastEntry, uiState.cachedContinueEntry, currentMembership) {
-                    serverLastEntry ?: uiState.cachedContinueEntry?.takeIf {
-                        it.organizationId == currentMembership?.organizationId
-                    }
-                }
-                val preparedHistory by produceState(
-                    initialValue = PreparedHistory.Empty,
-                    uiState.timeEntries, uiState.projects, uiState.tasks, uiState.clients,
-                    historyFilter, uiState.zone,
-                ) {
-                    value = withContext(Dispatchers.Default) {
-                        val filtered = EntryTrustRules.filter(
-                            entries = uiState.timeEntries,
-                            filter = historyFilter,
-                            projects = uiState.projects,
-                            tasks = uiState.tasks,
-                            clients = uiState.clients,
-                            syncOperations = uiState.syncOperations,
-                            zone = uiState.zone,
-                        )
-                        val grouped = groupCompletedEntriesByLocalDay(
-                            filtered,
-                            uiState.zone,
-                            Instant.now(),
-                        )
-                        val days = grouped.mapNotNull { (date, entries) ->
-                            if (entries.isEmpty()) null else HistoryDay(
+                value = withContext(Dispatchers.Default) {
+                    val filtered = EntryTrustRules.filter(
+                        entries = uiState.timeEntries,
+                        filter = historyFilter,
+                        projects = uiState.projects,
+                        tasks = uiState.tasks,
+                        clients = uiState.clients,
+                        syncOperations = uiState.syncOperations,
+                        zone = uiState.zone,
+                    )
+                    val grouped = groupCompletedEntriesByLocalDay(
+                        filtered,
+                        uiState.zone,
+                        Instant.now(),
+                    )
+                    val days = grouped.mapNotNull { (date, entries) ->
+                        if (entries.isEmpty()) {
+                            null
+                        } else {
+                            HistoryDay(
                                 date = date,
                                 entries = entries,
                                 groups = historyEntryGroups(entries),
                             )
                         }
-                        PreparedHistory(
-                            groupedEntries = grouped,
-                            listItems = buildList {
-                                days.forEach { day ->
-                                    add(HistoryListItem.Header(day))
-                                    day.groups.forEach { add(HistoryListItem.Group(day.date, it)) }
+                    }
+                    PreparedHistory(
+                        groupedEntries = grouped,
+                        listItems = buildList {
+                            days.forEach { day ->
+                                add(HistoryListItem.Header(day))
+                                day.groups.forEach { add(HistoryListItem.Group(day.date, it)) }
+                            }
+                        },
+                    )
+                }
+            }
+            val groupedEntries = preparedHistory.groupedEntries
+            val historyListItems = preparedHistory.listItems
+            val historyProjectsById = remember(uiState.projects) { uiState.projects.associateBy { it.id } }
+            val historyTasksById = remember(uiState.tasks) { uiState.tasks.associateBy { it.id } }
+            val visibleSyncOperations = remember(uiState.syncOperations, uiState.syncStatusVisible) {
+                if (uiState.syncStatusVisible) uiState.syncOperations else emptyList()
+            }
+            val syncStatusByEntryId = remember(visibleSyncOperations) {
+                worstSyncStatusByEntryId(visibleSyncOperations)
+            }
+            val showConflictLocked: () -> Unit = {
+                scope.launch { snackbarHostState.showSnackbar(conflictEditLockedMessage, withDismissAction = true) }
+            }
+            val onHistoryEdit = remember(uiState.conflictedEntryIds) {
+                { entry: TimeEntry ->
+                    if (entry.id in uiState.conflictedEntryIds) showConflictLocked() else showEditDialog = entry
+                }
+            }
+            val onHistoryDelete = remember(uiState.conflictedEntryIds) {
+                { entry: TimeEntry ->
+                    if (entry.id in uiState.conflictedEntryIds) {
+                        showConflictLocked()
+                    } else {
+                        deletedEntry = entry
+                        onDeleteEntry(entry.id)
+                    }
+                }
+            }
+            val onHistoryDateClick = remember<(LocalDate) -> Unit> { { date -> calendarInitialDate = date } }
+
+            LaunchedEffect(uiState.historyJumpDate, groupedEntries) {
+                val target = uiState.historyJumpDate ?: return@LaunchedEffect
+                val historyIndex = historyHeaderIndex(target, groupedEntries)
+                if (historyIndex >= 0) {
+                    val primaryItemCount = 2 +
+                        (if (uiState.error != null) 1 else 0) +
+                        (if (!uiState.isTracking && !uiState.isPaused && lastEntry != null) 1 else 0)
+                    compactListState.scrollToItem(primaryItemCount + historyIndex)
+                    wideHistoryListState.scrollToItem(1 + historyIndex)
+                }
+                onHistoryJumpConsumed()
+            }
+
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val wideLayout = maxWidth >= 840.dp
+                val primaryContent: LazyListScope.() -> Unit = {
+                    item { Spacer(Modifier.height(8.dp)) }
+                    item {
+                        val elapsed by elapsedSeconds.collectAsState()
+                        TrackingControls(
+                            uiState = uiState,
+                            elapsedSeconds = elapsed,
+                            onDescriptionChange = onDescriptionChange,
+                            onProjectChange = onProjectChange,
+                            onTaskChange = onTaskChange,
+                            onResetEntryFields = onResetEntryFields,
+                            autoClearEntryFieldsAfterStop = autoClearEntryFieldsAfterStop,
+                            onTagsChange = onTagsChange,
+                            onBillableChange = onBillableChange,
+                            onStart = onStartTracking,
+                            onStop = onStopTracking,
+                            onPause = onPauseTracking,
+                            onResume = onResumeTracking,
+                            onUpdate = onUpdateCurrentEntry,
+                            onEditActiveEntry = {
+                                uiState.currentTimeEntry?.let { entry ->
+                                    if (entry.id in uiState.conflictedEntryIds) showConflictLocked() else showEditDialog = entry
                                 }
                             },
                         )
                     }
-                }
-                val groupedEntries = preparedHistory.groupedEntries
-                val historyListItems = preparedHistory.listItems
-                val historyProjectsById = remember(uiState.projects) { uiState.projects.associateBy { it.id } }
-                val historyTasksById = remember(uiState.tasks) { uiState.tasks.associateBy { it.id } }
-                val visibleSyncOperations = remember(uiState.syncOperations, uiState.syncStatusVisible) {
-                    if (uiState.syncStatusVisible) uiState.syncOperations else emptyList()
-                }
-                val syncStatusByEntryId = remember(visibleSyncOperations) {
-                    worstSyncStatusByEntryId(visibleSyncOperations)
-                }
-                val showConflictLocked: () -> Unit = {
-                    scope.launch { snackbarHostState.showSnackbar(conflictEditLockedMessage, withDismissAction = true) }
-                }
-                val onHistoryEdit = remember(uiState.conflictedEntryIds) {
-                    { entry: TimeEntry ->
-                        if (entry.id in uiState.conflictedEntryIds) showConflictLocked() else showEditDialog = entry
-                    }
-                }
-                val onHistoryDelete = remember(uiState.conflictedEntryIds) {
-                    { entry: TimeEntry ->
-                        if (entry.id in uiState.conflictedEntryIds) {
-                            showConflictLocked()
-                        } else {
-                            deletedEntry = entry
-                            onDeleteEntry(entry.id)
+                    item(key = "long_timer_warning") {
+                        val elapsed by elapsedSeconds.collectAsState()
+                        if (uiState.isTracking &&
+                            elapsed >= longTimerHours * SECONDS_PER_HOUR_LONG &&
+                            elapsed >= longTimerSnoozedUntil
+                        ) {
+                            LongTimerWarning(
+                                hours = longTimerHours,
+                                onStop = onStopTracking,
+                                onKeepRunning = {
+                                    longTimerSnoozedUntil = elapsed + SECONDS_PER_HOUR_LONG
+                                    TimeTrackingNotificationService.snoozeLongTimerWarning(context)
+                                },
+                                onAdjust = { uiState.currentTimeEntry?.let { showEditDialog = it } },
+                            )
                         }
                     }
-                }
-                val onHistoryDateClick = remember<(LocalDate) -> Unit> { { date -> calendarInitialDate = date } }
-
-                LaunchedEffect(uiState.historyJumpDate, groupedEntries) {
-                    val target = uiState.historyJumpDate ?: return@LaunchedEffect
-                    val historyIndex = historyHeaderIndex(target, groupedEntries)
-                    if (historyIndex >= 0) {
-                        val primaryItemCount = 2 +
-                            (if (uiState.error != null) 1 else 0) +
-                            (if (!uiState.isTracking && !uiState.isPaused && lastEntry != null) 1 else 0)
-                        compactListState.scrollToItem(primaryItemCount + historyIndex)
-                        wideHistoryListState.scrollToItem(1 + historyIndex)
-                    }
-                    onHistoryJumpConsumed()
-                }
-
-                BoxWithConstraints(Modifier.fillMaxSize()) {
-                    val wideLayout = maxWidth >= 840.dp
-                    val primaryContent: LazyListScope.() -> Unit = {
-                        item { Spacer(Modifier.height(8.dp)) }
-                        item {
-                            val elapsed by elapsedSeconds.collectAsState()
-                            TrackingControls(
-                                uiState = uiState,
-                                elapsedSeconds = elapsed,
-                                onDescriptionChange = onDescriptionChange,
-                                onProjectChange = onProjectChange,
-                                onTaskChange = onTaskChange,
-                                onResetEntryFields = onResetEntryFields,
-                                autoClearEntryFieldsAfterStop = autoClearEntryFieldsAfterStop,
-                                onTagsChange = onTagsChange,
-                                onBillableChange = onBillableChange,
-                                onStart = onStartTracking,
-                                onStop = onStopTracking,
-                                onPause = onPauseTracking,
-                                onResume = onResumeTracking,
-                                onUpdate = onUpdateCurrentEntry,
-                                onEditActiveEntry = {
-                                    uiState.currentTimeEntry?.let { entry ->
-                                        if (entry.id in uiState.conflictedEntryIds) showConflictLocked() else showEditDialog = entry
-                                    }
+                    if (!uiState.isTracking &&
+                        !uiState.isPaused &&
+                        templateState.quickStart.isNotEmpty()
+                    ) {
+                        item(key = "favorites_quick_start") {
+                            FavoriteTemplatesRow(
+                                templates = templateState.quickStart,
+                                projects = templateState.projects,
+                                tasks = templateState.tasks,
+                                tags = templateState.tags,
+                                onStart = { start ->
+                                    onDescriptionChange(start.description ?: "")
+                                    onProjectChange(start.projectId)
+                                    onTaskChange(start.taskId)
+                                    onTagsChange(start.tagIds)
+                                    onBillableChange(start.billable)
+                                    onStartTracking()
                                 },
                             )
                         }
-                        item(key = "long_timer_warning") {
-                            val elapsed by elapsedSeconds.collectAsState()
-                            if (uiState.isTracking && elapsed >= longTimerHours * SECONDS_PER_HOUR_LONG &&
-                                elapsed >= longTimerSnoozedUntil) {
-                                LongTimerWarning(
-                                    hours = longTimerHours,
-                                    onStop = onStopTracking,
-                                    onKeepRunning = {
-                                        longTimerSnoozedUntil = elapsed + SECONDS_PER_HOUR_LONG
-                                        TimeTrackingNotificationService.snoozeLongTimerWarning(context)
-                                    },
-                                    onAdjust = { uiState.currentTimeEntry?.let { showEditDialog = it } },
-                                )
-                            }
-                        }
-                        if (!uiState.isTracking && !uiState.isPaused &&
-                            templateState.quickStart.isNotEmpty()
-                        ) {
-                            item(key = "favorites_quick_start") {
-                                FavoriteTemplatesRow(
-                                    templates = templateState.quickStart,
-                                    projects = templateState.projects,
-                                    tasks = templateState.tasks,
-                                    tags = templateState.tags,
-                                    onStart = { start ->
-                                        onDescriptionChange(start.description ?: "")
-                                        onProjectChange(start.projectId)
-                                        onTaskChange(start.taskId)
-                                        onTagsChange(start.tagIds)
-                                        onBillableChange(start.billable)
-                                        onStartTracking()
-                                    },
-                                )
-                            }
-                        }
-                        if (!uiState.isTracking && !uiState.isPaused && lastEntry != null) {
-                            item(key = "continue_last") {
-                                ContinueLastEntryButton(
-                                    entry = lastEntry,
-                                    projects = uiState.projects,
-                                    onContinue = {
-                                        onDescriptionChange(lastEntry.description ?: "")
-                                        onProjectChange(lastEntry.projectId)
-                                        onTaskChange(lastEntry.taskId)
-                                        onTagsChange(lastEntry.tags.map { it.id })
-                                        onBillableChange(lastEntry.billable)
-                                        onStartTracking()
-                                    }
-                                )
-                            }
+                    }
+                    if (!uiState.isTracking && !uiState.isPaused && lastEntry != null) {
+                        item(key = "continue_last") {
+                            ContinueLastEntryButton(
+                                entry = lastEntry,
+                                projects = uiState.projects,
+                                onContinue = {
+                                    onDescriptionChange(lastEntry.description ?: "")
+                                    onProjectChange(lastEntry.projectId)
+                                    onTaskChange(lastEntry.taskId)
+                                    onTagsChange(lastEntry.tags.map { it.id })
+                                    onBillableChange(lastEntry.billable)
+                                    onStartTracking()
+                                },
+                            )
                         }
                     }
+                }
 
-                    if (wideLayout) {
-                        Row(Modifier.fillMaxSize()) {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .weight(WIDE_PRIMARY_WEIGHT)
-                                    .fillMaxSize()
-                                    .testTag(TrackingTestTags.PRIMARY_LIST)
-                                    .padding(horizontal = 24.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                                content = primaryContent
-                            )
-                            VerticalDivider(
-                                modifier = Modifier.fillMaxHeight(),
-                                color = MaterialTheme.colorScheme.outlineVariant
-                            )
-                            LazyColumn(
-                                state = wideHistoryListState,
-                                modifier = Modifier
-                                    .weight(WIDE_HISTORY_WEIGHT)
-                                    .fillMaxSize()
-                                    .testTag(TrackingTestTags.HISTORY_LIST)
-                                    .nestedScroll(historyScrollConnection)
-                                    .padding(horizontal = 24.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                item { Spacer(Modifier.height(8.dp)) }
-                                item(key = "history_filters") { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
-                                if (uiState.syncStatusVisible && uiState.syncOperations.isNotEmpty()) {
-                                    item {
-                                        SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter)
-                                    }
-                                }
-                                trackingHistoryItems(
-                                    uiState = uiState,
-                                    historyItems = historyListItems,
-                                    projectsById = historyProjectsById,
-                                    tasksById = historyTasksById,
-                                    syncStatusByEntryId = syncStatusByEntryId,
-                                    onEdit = onHistoryEdit,
-                                    onDelete = onHistoryDelete,
-                                    onDateClick = onHistoryDateClick,
-                                    onRetrySync = { onRetrySyncEntry(it.id) }
-                                )
-                                item { Spacer(Modifier.height(16.dp)) }
-                            }
-                        }
-                    } else {
+                if (wideLayout) {
+                    Row(Modifier.fillMaxSize()) {
                         LazyColumn(
-                            state = compactListState,
                             modifier = Modifier
+                                .weight(WIDE_PRIMARY_WEIGHT)
+                                .fillMaxSize()
+                                .testTag(TrackingTestTags.PRIMARY_LIST)
+                                .padding(horizontal = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            content = primaryContent,
+                        )
+                        VerticalDivider(
+                            modifier = Modifier.fillMaxHeight(),
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                        )
+                        LazyColumn(
+                            state = wideHistoryListState,
+                            modifier = Modifier
+                                .weight(WIDE_HISTORY_WEIGHT)
                                 .fillMaxSize()
                                 .testTag(TrackingTestTags.HISTORY_LIST)
                                 .nestedScroll(historyScrollConnection)
-                                .padding(horizontal = 16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                .padding(horizontal = 24.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            primaryContent()
+                            item { Spacer(Modifier.height(8.dp)) }
                             item(key = "history_filters") { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
                             if (uiState.syncStatusVisible && uiState.syncOperations.isNotEmpty()) {
                                 item {
@@ -1136,10 +678,41 @@ fun TrackingScreen(
                                 onEdit = onHistoryEdit,
                                 onDelete = onHistoryDelete,
                                 onDateClick = onHistoryDateClick,
-                                onRetrySync = { onRetrySyncEntry(it.id) }
+                                onRetrySync = { onRetrySyncEntry(it.id) },
                             )
                             item { Spacer(Modifier.height(16.dp)) }
                         }
+                    }
+                } else {
+                    LazyColumn(
+                        state = compactListState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag(TrackingTestTags.HISTORY_LIST)
+                            .nestedScroll(historyScrollConnection)
+                            .padding(horizontal = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        primaryContent()
+                        item(key = "history_filters") { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
+                        if (uiState.syncStatusVisible && uiState.syncOperations.isNotEmpty()) {
+                            item {
+                                SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter)
+                            }
+                        }
+                        trackingHistoryItems(
+                            uiState = uiState,
+                            historyItems = historyListItems,
+                            projectsById = historyProjectsById,
+                            tasksById = historyTasksById,
+                            syncStatusByEntryId = syncStatusByEntryId,
+                            onEdit = onHistoryEdit,
+                            onDelete = onHistoryDelete,
+                            onDateClick = onHistoryDateClick,
+                            onRetrySync = { onRetrySyncEntry(it.id) },
+                        )
+                        item { Spacer(Modifier.height(16.dp)) }
                     }
                 }
             }
@@ -1206,7 +779,7 @@ fun TrackingScreen(
     calendarInitialDate?.let { initialDate ->
         androidx.compose.runtime.key(initialDate) {
             val datePickerState = rememberDatePickerState(
-                initialSelectedDateMillis = initialDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+                initialSelectedDateMillis = initialDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
             )
             DatePickerDialog(
                 onDismissRequest = { calendarInitialDate = null },
@@ -1222,7 +795,7 @@ fun TrackingScreen(
                     TextButton(onClick = { calendarInitialDate = null }) {
                         Text(stringResource(R.string.cancel))
                     }
-                }
+                },
             ) { DatePicker(state = datePickerState) }
         }
     }
@@ -1232,154 +805,27 @@ fun TrackingScreen(
             Surface(shape = RoundedCornerShape(20.dp), tonalElevation = 6.dp) {
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     Text(
                         text = stringResource(
                             R.string.finding_date_entries,
-                            formatDate(targetDate, LocalContext.current, uiState.zone, appLocale())
+                            formatDate(targetDate, LocalContext.current, uiState.zone, appLocale()),
                         ),
-                        style = MaterialTheme.typography.titleMedium
+                        style = MaterialTheme.typography.titleMedium,
                     )
                     LinearProgressIndicator(
                         progress = { uiState.historyJumpProgress ?: 0f },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
                         text = uiState.historyRateLimitWaitSeconds?.let { seconds ->
                             pluralStringResource(R.plurals.rate_limit_wait, seconds, seconds)
                         } ?: stringResource(R.string.finding_date_hint),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** Settings control for Android 16+ promoted ongoing timer notifications. */
-@Composable
-internal fun LiveUpdateSettingRow(
-    enabled: Boolean,
-    systemEnabled: Boolean,
-    onEnabledChange: (Boolean) -> Unit,
-    onOpenSystemSettings: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Dimens.Space16, vertical = Dimens.Space8),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.live_timer_updates),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Text(
-                    text = stringResource(R.string.live_timer_updates_description),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(
-                checked = enabled,
-                onCheckedChange = onEnabledChange,
-                modifier = Modifier
-                    .testTag(TrackingTestTags.LIVE_UPDATE_SWITCH)
-                    .heightIn(min = Dimens.MinTouchTarget),
-            )
-        }
-        if (enabled && !systemEnabled) {
-            Text(
-                text = stringResource(R.string.live_timer_updates_android_disabled),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = Dimens.Space4),
-            )
-            TextButton(
-                onClick = onOpenSystemSettings,
-                modifier = Modifier.heightIn(min = Dimens.MinTouchTarget),
-            ) {
-                Text(stringResource(R.string.live_timer_updates_open_settings))
-            }
-        }
-    }
-}
-
-/** Full field clearing plus the description-only fallback shown when full clearing is disabled. */
-@Composable
-internal fun AutoClearEntryFieldsSettings(
-    autoClearEntryFieldsAfterStop: Boolean,
-    clearDescriptionAfterStop: Boolean,
-    onAutoClearEntryFieldsAfterStopChange: (Boolean) -> Unit,
-    onClearDescriptionAfterStopChange: (Boolean) -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Dimens.Space16, vertical = Dimens.Space12),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.auto_clear_entry_fields_after_stop),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Text(
-                    text = stringResource(R.string.auto_clear_entry_fields_after_stop_description),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(
-                checked = autoClearEntryFieldsAfterStop,
-                onCheckedChange = onAutoClearEntryFieldsAfterStopChange,
-                modifier = Modifier
-                    .testTag(TrackingTestTags.AUTO_CLEAR_FIELDS_SWITCH)
-                    .heightIn(min = Dimens.MinTouchTarget),
-            )
-        }
-
-        AnimatedVisibility(
-            visible = !autoClearEntryFieldsAfterStop,
-            enter = fadeIn() + expandVertically(),
-            exit = fadeOut() + shrinkVertically(),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        start = Dimens.Space32,
-                        top = Dimens.Space8,
-                        end = Dimens.Space16,
-                        bottom = Dimens.Space12,
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.clear_description_after_stop),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    Text(
-                        text = stringResource(R.string.clear_description_after_stop_description),
-                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Switch(
-                    checked = clearDescriptionAfterStop,
-                    onCheckedChange = onClearDescriptionAfterStopChange,
-                    modifier = Modifier
-                        .testTag(TrackingTestTags.CLEAR_DESCRIPTION_AFTER_STOP_SWITCH)
-                        .heightIn(min = Dimens.MinTouchTarget),
-                )
             }
         }
     }
@@ -1446,95 +892,98 @@ private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onCh
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = filter.billable == true,
-                onClick = { onChange(filter.copy(billable = if (filter.billable == true) null else true)) },
-                label = { Text(stringResource(R.string.billable)) },
-            )
-            FilterChip(
-                selected = filter.billable == false,
-                onClick = { onChange(filter.copy(billable = if (filter.billable == false) null else false)) },
-                label = { Text(stringResource(R.string.non_billable)) },
-            )
-            FilterChip(
-                selected = filter.runningOnly,
-                onClick = { onChange(filter.copy(runningOnly = !filter.runningOnly)) },
-                label = { Text(stringResource(R.string.running_entries)) },
-            )
-            FilterChip(
-                selected = filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED,
-                onClick = {
-                    val toggled = if (filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED) {
-                        null
-                    } else {
-                        TimeEntryRepository.EntrySyncStatus.FAILED
+                    FilterChip(
+                        selected = filter.billable == true,
+                        onClick = { onChange(filter.copy(billable = if (filter.billable == true) null else true)) },
+                        label = { Text(stringResource(R.string.billable)) },
+                    )
+                    FilterChip(
+                        selected = filter.billable == false,
+                        onClick = { onChange(filter.copy(billable = if (filter.billable == false) null else false)) },
+                        label = { Text(stringResource(R.string.non_billable)) },
+                    )
+                    FilterChip(
+                        selected = filter.runningOnly,
+                        onClick = { onChange(filter.copy(runningOnly = !filter.runningOnly)) },
+                        label = { Text(stringResource(R.string.running_entries)) },
+                    )
+                    FilterChip(
+                        selected = filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED,
+                        onClick = {
+                            val toggled = if (filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED) {
+                                null
+                            } else {
+                                TimeEntryRepository.EntrySyncStatus.FAILED
+                            }
+                            onChange(filter.copy(syncStatus = toggled))
+                        },
+                        label = { Text(stringResource(R.string.sync_failed)) },
+                    )
+                    val today = LocalDate.now(uiState.zone)
+                    FilterChip(
+                        selected = filter.startDate == today && filter.endDate == today,
+                        onClick = { onChange(filter.copy(startDate = today, endDate = today)) },
+                        label = { Text(stringResource(R.string.today)) },
+                    )
+                    FilterChip(
+                        selected = filter.startDate == today.minusDays(LAST_7_DAYS_OFFSET) && filter.endDate == today,
+                        onClick = { onChange(filter.copy(startDate = today.minusDays(LAST_7_DAYS_OFFSET), endDate = today)) },
+                        label = { Text(stringResource(R.string.stats_last_7_days)) },
+                    )
+                    FilterChip(
+                        selected = filter.startDate != null &&
+                            filter.endDate != null &&
+                            !(filter.startDate == today && filter.endDate == today) &&
+                            !(filter.startDate == today.minusDays(LAST_7_DAYS_OFFSET) && filter.endDate == today),
+                        onClick = { showDateRangePicker = true },
+                        label = { Text(stringResource(R.string.stats_custom)) },
+                    )
+                    FilterChip(
+                        selected = filter.needsCategorization,
+                        onClick = { onChange(filter.copy(needsCategorization = !filter.needsCategorization)) },
+                        label = { Text(stringResource(R.string.needs_categorization)) },
+                    )
+                    FilterChip(
+                        selected = filter.missingProjectOnly,
+                        onClick = { onChange(filter.copy(missingProjectOnly = !filter.missingProjectOnly)) },
+                        label = { Text(stringResource(R.string.without_project)) },
+                    )
+                    FilterChip(
+                        selected = filter.missingDescriptionOnly,
+                        onClick = { onChange(filter.copy(missingDescriptionOnly = !filter.missingDescriptionOnly)) },
+                        label = { Text(stringResource(R.string.without_description)) },
+                    )
+                    if (filter != HistoryFilter()) {
+                        TextButton(onClick = { onChange(HistoryFilter()) }) { Text(stringResource(R.string.clear_filters)) }
                     }
-                    onChange(filter.copy(syncStatus = toggled))
-                },
-                label = { Text(stringResource(R.string.sync_failed)) },
-            )
-            val today = LocalDate.now(uiState.zone)
-            FilterChip(
-                selected = filter.startDate == today && filter.endDate == today,
-                onClick = { onChange(filter.copy(startDate = today, endDate = today)) },
-                label = { Text(stringResource(R.string.today)) },
-            )
-            FilterChip(
-                selected = filter.startDate == today.minusDays(LAST_7_DAYS_OFFSET) && filter.endDate == today,
-                onClick = { onChange(filter.copy(startDate = today.minusDays(LAST_7_DAYS_OFFSET), endDate = today)) },
-                label = { Text(stringResource(R.string.stats_last_7_days)) },
-            )
-            FilterChip(
-                selected = filter.startDate != null && filter.endDate != null &&
-                    !(filter.startDate == today && filter.endDate == today) &&
-                    !(filter.startDate == today.minusDays(LAST_7_DAYS_OFFSET) && filter.endDate == today),
-                onClick = { showDateRangePicker = true },
-                label = { Text(stringResource(R.string.stats_custom)) },
-            )
-            FilterChip(
-                selected = filter.needsCategorization,
-                onClick = { onChange(filter.copy(needsCategorization = !filter.needsCategorization)) },
-                label = { Text(stringResource(R.string.needs_categorization)) },
-            )
-            FilterChip(
-                selected = filter.missingProjectOnly,
-                onClick = { onChange(filter.copy(missingProjectOnly = !filter.missingProjectOnly)) },
-                label = { Text(stringResource(R.string.without_project)) },
-            )
-            FilterChip(
-                selected = filter.missingDescriptionOnly,
-                onClick = { onChange(filter.copy(missingDescriptionOnly = !filter.missingDescriptionOnly)) },
-                label = { Text(stringResource(R.string.without_description)) },
-            )
-            if (filter != HistoryFilter()) {
-                TextButton(onClick = { onChange(HistoryFilter()) }) { Text(stringResource(R.string.clear_filters)) }
-            }
                 }
                 FilterDropdown(
-            label = stringResource(R.string.client),
-            selectedId = filter.clientId,
-            options = uiState.clients.map { it.id to it.name },
-            onSelect = { onChange(filter.copy(clientId = it, projectId = null, taskId = null)) },
-        )
+                    label = stringResource(R.string.client),
+                    selectedId = filter.clientId,
+                    options = uiState.clients.map { it.id to it.name },
+                    onSelect = { onChange(filter.copy(clientId = it, projectId = null, taskId = null)) },
+                )
                 FilterDropdown(
-            label = stringResource(R.string.project),
-            selectedId = filter.projectId,
-            options = uiState.projects.filter { filter.clientId == null || it.clientId == filter.clientId }.map { it.id to it.name },
-            onSelect = { onChange(filter.copy(projectId = it, taskId = null)) },
-        )
+                    label = stringResource(R.string.project),
+                    selectedId = filter.projectId,
+                    options = uiState.projects
+                        .filter { filter.clientId == null || it.clientId == filter.clientId }
+                        .map { it.id to it.name },
+                    onSelect = { onChange(filter.copy(projectId = it, taskId = null)) },
+                )
                 if (filter.projectId != null) {
-            FilterDropdown(
-                label = stringResource(R.string.task),
-                selectedId = filter.taskId,
-                options = uiState.tasks.filter { it.projectId == filter.projectId }.map { it.id to it.name },
-                onSelect = { onChange(filter.copy(taskId = it)) },
-            )
+                    FilterDropdown(
+                        label = stringResource(R.string.task),
+                        selectedId = filter.taskId,
+                        options = uiState.tasks.filter { it.projectId == filter.projectId }.map { it.id to it.name },
+                        onSelect = { onChange(filter.copy(taskId = it)) },
+                    )
                 }
                 FilterDropdown(
-            label = stringResource(R.string.tags),
-            selectedId = filter.tagId,
-            options = uiState.tags.map { it.id to it.name },
-            onSelect = { onChange(filter.copy(tagId = it)) },
+                    label = stringResource(R.string.tags),
+                    selectedId = filter.tagId,
+                    options = uiState.tags.map { it.id to it.name },
+                    onSelect = { onChange(filter.copy(tagId = it)) },
                 )
             }
         }
@@ -1565,12 +1014,7 @@ private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onCh
 }
 
 @Composable
-private fun FilterDropdown(
-    label: String,
-    selectedId: String?,
-    options: List<Pair<String, String>>,
-    onSelect: (String?) -> Unit,
-) {
+private fun FilterDropdown(label: String, selectedId: String?, options: List<Pair<String, String>>, onSelect: (String?) -> Unit) {
     if (options.isEmpty()) return
     var expanded by remember { mutableStateOf(false) }
     FilterChip(
@@ -1691,10 +1135,7 @@ private fun LongTimerWarning(hours: Int, onStop: () -> Unit, onKeepRunning: () -
 private const val HISTORY_PREFETCH_ITEMS = 75
 private const val HISTORY_INITIAL_PREFETCH_MAX_ENTRIES = 250
 
-private fun historyHeaderIndex(
-    requestedDate: LocalDate,
-    groupedEntries: Map<LocalDate, List<TimeEntry>>
-): Int {
+private fun historyHeaderIndex(requestedDate: LocalDate, groupedEntries: Map<LocalDate, List<TimeEntry>>): Int {
     val groups = groupedEntries.filterValues { it.isNotEmpty() }
     val targetDate = groups.keys.minByOrNull { kotlin.math.abs(it.toEpochDay() - requestedDate.toEpochDay()) }
         ?: return -1
@@ -1715,11 +1156,11 @@ internal fun LazyListScope.trackingHistoryItems(
     onEdit: (TimeEntry) -> Unit,
     onDelete: (TimeEntry) -> Unit,
     onDateClick: (LocalDate) -> Unit,
-    onRetrySync: (TimeEntry) -> Unit = {}
+    onRetrySync: (TimeEntry) -> Unit = {},
 ) {
     if (!uiState.hasLoadedTimeEntries && uiState.timeEntries.isEmpty()) {
         item(key = "history_loading_header") { HistoryLoadingHeader() }
-            repeat(HISTORY_PLACEHOLDER_COUNT) { index ->
+        repeat(HISTORY_PLACEHOLDER_COUNT) { index ->
             item(key = "history_loading_$index") { HistoryLoadingEntry(index) }
         }
         return
@@ -1750,17 +1191,17 @@ internal fun LazyListScope.trackingHistoryItems(
             )
             is HistoryListItem.Group -> {
                 val entriesForProject = historyItem.entries
-                    CollapsibleTimeEntryGroup(
-                        entries = entriesForProject,
-                        date = historyItem.date,
-                        zone = uiState.zone,
-                        projectsById = projectsById,
-                        tasksById = tasksById,
-                        syncStatusByEntryId = syncStatusByEntryId,
-                        onEdit = onEdit,
-                        onDelete = onDelete,
-                        onRetrySync = onRetrySync
-                    )
+                CollapsibleTimeEntryGroup(
+                    entries = entriesForProject,
+                    date = historyItem.date,
+                    zone = uiState.zone,
+                    projectsById = projectsById,
+                    tasksById = tasksById,
+                    syncStatusByEntryId = syncStatusByEntryId,
+                    onEdit = onEdit,
+                    onDelete = onDelete,
+                    onRetrySync = onRetrySync,
+                )
             }
         }
     }
@@ -1770,14 +1211,14 @@ internal fun LazyListScope.trackingHistoryItems(
             Row(
                 modifier = Modifier.fillMaxWidth().padding(24.dp),
                 horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                 uiState.totalTimeEntries?.let { total ->
                     Text(
                         text = "  ${uiState.timeEntries.size} / $total",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -1790,7 +1231,7 @@ internal fun LazyListScope.trackingHistoryItems(
                 text = stringResource(R.string.no_time_entries),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(32.dp)
+                modifier = Modifier.padding(32.dp),
             )
         }
     }
@@ -1851,37 +1292,30 @@ internal fun worstSyncStatusByEntryId(
     .mapValues { (_, entryOperations) -> entryOperations.minBy { syncStatusSeverity.indexOf(it.status) }.status }
 
 @Immutable
- internal data class HistoryDay(
-     val date: LocalDate,
-     val entries: List<TimeEntry>,
-     val groups: List<List<TimeEntry>>,
- )
+internal data class HistoryDay(val date: LocalDate, val entries: List<TimeEntry>, val groups: List<List<TimeEntry>>)
 
 @Immutable
- internal sealed interface HistoryListItem {
+internal sealed interface HistoryListItem {
     @Immutable
-     data class Header(val day: HistoryDay) : HistoryListItem
+    data class Header(val day: HistoryDay) : HistoryListItem
+
     @Immutable
-     data class Group(val date: LocalDate, val entries: List<TimeEntry>) : HistoryListItem
- }
+    data class Group(val date: LocalDate, val entries: List<TimeEntry>) : HistoryListItem
+}
 
 /** Keep every punch visible, even when multiple entries share the same project/task/description. */
 /** Statuses a user can act on from the card; PENDING is queued and will upload on its own. */
 internal fun canRetrySync(status: TimeEntryRepository.EntrySyncStatus): Boolean =
     status == TimeEntryRepository.EntrySyncStatus.FAILED || status == TimeEntryRepository.EntrySyncStatus.RETRYING
 
-internal fun historyEntryGroups(entries: List<TimeEntry>): List<List<TimeEntry>> =
-    entries.map(::listOf)
+internal fun historyEntryGroups(entries: List<TimeEntry>): List<List<TimeEntry>> = entries.map(::listOf)
 
 @Immutable
- private data class PreparedHistory(
-     val groupedEntries: Map<LocalDate, List<TimeEntry>>,
-     val listItems: List<HistoryListItem>,
- ) {
-     companion object {
-         val Empty = PreparedHistory(emptyMap(), emptyList())
-     }
- }
+private data class PreparedHistory(val groupedEntries: Map<LocalDate, List<TimeEntry>>, val listItems: List<HistoryListItem>) {
+    companion object {
+        val Empty = PreparedHistory(emptyMap(), emptyList())
+    }
+}
 
 @Composable
 private fun rememberGhostAlpha(): Float {
@@ -1891,25 +1325,22 @@ private fun rememberGhostAlpha(): Float {
         targetValue = 0.78f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 850),
-            repeatMode = RepeatMode.Reverse
+            repeatMode = RepeatMode.Reverse,
         ),
-        label = "ghost alpha"
+        label = "ghost alpha",
     )
     return alpha
 }
 
 @Composable
-private fun GhostBlock(
-    modifier: Modifier,
-    alpha: Float
-) {
+private fun GhostBlock(modifier: Modifier, alpha: Float) {
     Box(
         modifier = modifier
             .alpha(alpha)
             .background(
                 MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f),
-                RoundedCornerShape(6.dp)
-            )
+                RoundedCornerShape(6.dp),
+            ),
     )
 }
 
@@ -1921,7 +1352,7 @@ private fun HistoryLoadingHeader() {
             .fillMaxWidth()
             .padding(top = 12.dp, bottom = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         GhostBlock(Modifier.width(72.dp).height(12.dp), alpha)
         GhostBlock(Modifier.width(150.dp).height(10.dp), alpha)
@@ -1934,23 +1365,23 @@ private fun HistoryLoadingEntry(index: Int) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-        shape = RoundedCornerShape(8.dp)
+        shape = RoundedCornerShape(8.dp),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             GhostBlock(Modifier.size(10.dp), alpha)
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(7.dp)
+                verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
                 GhostBlock(
                     Modifier
                         .fillMaxWidth(if (index % ALTERNATING_ROW_COUNT == 0) GHOST_PRIMARY_WIDTH else GHOST_SECONDARY_WIDTH)
                         .height(13.dp),
-                    alpha
+                    alpha,
                 )
                 GhostBlock(Modifier.width(if (index % 2 == 0) 96.dp else 128.dp).height(10.dp), alpha)
             }
@@ -1987,16 +1418,16 @@ internal fun TrackingControls(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
         ),
         shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // Timer display
             if (uiState.isTracking) {
@@ -2028,7 +1459,7 @@ internal fun TrackingControls(
                 }
                 HorizontalDivider(
                     color = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.padding(vertical = 8.dp)
+                    modifier = Modifier.padding(vertical = 8.dp),
                 )
             } else if (uiState.isPaused) {
                 Text(
@@ -2037,11 +1468,11 @@ internal fun TrackingControls(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.tertiary,
                     fontSize = 36.sp,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
                 )
                 HorizontalDivider(
                     color = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.padding(vertical = 8.dp)
+                    modifier = Modifier.padding(vertical = 8.dp),
                 )
             }
 
@@ -2059,7 +1490,7 @@ internal fun TrackingControls(
                     onTaskChange(entry.taskId)
                     onTagsChange(entry.tags.map { it.id })
                     onBillableChange(entry.billable)
-                }
+                },
             )
 
             // Combined Project/Task selector
@@ -2072,7 +1503,7 @@ internal fun TrackingControls(
                     onProjectChange(projectId)
                     onTaskChange(taskId)
                 },
-                enabled = !uiState.isMutating
+                enabled = !uiState.isMutating,
             )
 
             TagsSelector(
@@ -2082,8 +1513,11 @@ internal fun TrackingControls(
                 enabled = !uiState.isMutating,
             )
 
-            if (!autoClearEntryFieldsAfterStop && !uiState.isTracking && !uiState.isPaused &&
-                (uiState.editingDescription.isNotEmpty() || uiState.editingProjectId != null || uiState.editingTaskId != null)) {
+            if (!autoClearEntryFieldsAfterStop &&
+                !uiState.isTracking &&
+                !uiState.isPaused &&
+                (uiState.editingDescription.isNotEmpty() || uiState.editingProjectId != null || uiState.editingTaskId != null)
+            ) {
                 OutlinedButton(
                     onClick = onResetEntryFields,
                     enabled = !uiState.isMutating,
@@ -2108,25 +1542,25 @@ internal fun TrackingControls(
                         value = uiState.editingBillable,
                         enabled = !uiState.isMutating,
                         role = Role.Checkbox,
-                        onValueChange = onBillableChange
+                        onValueChange = onBillableChange,
                     ),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Checkbox(
                     checked = uiState.editingBillable,
                     onCheckedChange = null,
-                    enabled = !uiState.isMutating
+                    enabled = !uiState.isMutating,
                 )
                 Text(
                     text = stringResource(R.string.billable),
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
 
             // Action buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (uiState.isTracking) {
                     Button(
@@ -2134,7 +1568,7 @@ internal fun TrackingControls(
                         modifier = Modifier.weight(1f),
                         enabled = !uiState.isMutating,
                         contentPadding = PaddingValues(horizontal = Dimens.Space8),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
                     ) {
                         Text(
                             stringResource(R.string.update),
@@ -2153,14 +1587,14 @@ internal fun TrackingControls(
                         contentPadding = PaddingValues(horizontal = Dimens.Space8),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.tertiary,
-                            contentColor = MaterialTheme.colorScheme.onTertiary
+                            contentColor = MaterialTheme.colorScheme.onTertiary,
                         ),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
                     ) {
                         Icon(
                             Icons.Default.Pause,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(18.dp),
                         )
                         Spacer(Modifier.width(4.dp))
                         Text(
@@ -2180,14 +1614,14 @@ internal fun TrackingControls(
                         contentPadding = PaddingValues(horizontal = Dimens.Space8),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError
+                            contentColor = MaterialTheme.colorScheme.onError,
                         ),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
                     ) {
                         Icon(
                             Icons.Default.Stop,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(18.dp),
                         )
                         Spacer(Modifier.width(4.dp))
                         Text(
@@ -2206,12 +1640,12 @@ internal fun TrackingControls(
                         modifier = Modifier.weight(1f),
                         enabled = !uiState.isMutating,
                         contentPadding = PaddingValues(horizontal = Dimens.Space8),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
                     ) {
                         Icon(
                             Icons.Default.PlayArrow,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(18.dp),
                         )
                         Spacer(Modifier.width(4.dp))
                         Text(
@@ -2231,14 +1665,14 @@ internal fun TrackingControls(
                         contentPadding = PaddingValues(horizontal = Dimens.Space8),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError
+                            contentColor = MaterialTheme.colorScheme.onError,
                         ),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
                     ) {
                         Icon(
                             Icons.Default.Stop,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(18.dp),
                         )
                         Spacer(Modifier.width(4.dp))
                         Text(
@@ -2256,12 +1690,12 @@ internal fun TrackingControls(
                         },
                         modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.START_BUTTON),
                         enabled = !uiState.isMutating,
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
                     ) {
                         Icon(
                             Icons.Default.PlayArrow,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(18.dp),
                         )
                         Spacer(Modifier.width(4.dp))
                         Text(stringResource(R.string.start), fontWeight = FontWeight.SemiBold)
@@ -2277,11 +1711,7 @@ internal fun TrackingControls(
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ContinueLastEntryButton(
-    entry: TimeEntry,
-    projects: List<Project>,
-    onContinue: () -> Unit
-) {
+private fun ContinueLastEntryButton(entry: TimeEntry, projects: List<Project>, onContinue: () -> Unit) {
     val haptic = LocalHapticFeedback.current
     val project = projects.find { it.id == entry.projectId }
 
@@ -2291,43 +1721,43 @@ private fun ContinueLastEntryButton(
             onContinue()
         },
         modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.CONTINUE_BUTTON),
-        shape = RoundedCornerShape(8.dp)
+        shape = RoundedCornerShape(8.dp),
     ) {
         Icon(
             Icons.Default.PlayArrow,
             contentDescription = null,
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(18.dp),
         )
         Spacer(Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = stringResource(R.string.continue_last_entry),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = entry.description ?: "",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             if (entry.projectId != null) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (project != null) {
                         Box(
                             modifier = Modifier
                                 .size(8.dp)
                                 .clip(CircleShape)
-                                .background(Color(project.color.toColorInt()))
+                                .background(Color(project.color.toColorInt())),
                         )
                     } else {
                         Spacer(Modifier.size(8.dp))
@@ -2335,7 +1765,7 @@ private fun ContinueLastEntryButton(
                     Text(
                         text = project?.name ?: " ",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -2343,19 +1773,19 @@ private fun ContinueLastEntryButton(
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.padding(top = 2.dp)
+                    modifier = Modifier.padding(top = 2.dp),
                 ) {
                     entry.tags.forEach { tag ->
                         Surface(
                             shape = RoundedCornerShape(4.dp),
                             color = MaterialTheme.colorScheme.secondaryContainer,
-                            tonalElevation = 0.dp
+                            tonalElevation = 0.dp,
                         ) {
                             Text(
                                 text = tag.name,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             )
                         }
                     }
@@ -2380,7 +1810,7 @@ private fun DescriptionFieldWithSuggestions(
     projects: List<Project>,
     tags: List<Tag>,
     enabled: Boolean,
-    onEntryCopied: (TimeEntry) -> Unit
+    onEntryCopied: (TimeEntry) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -2399,7 +1829,7 @@ private fun DescriptionFieldWithSuggestions(
         expanded = expanded && recentEntries.isNotEmpty(),
         onExpandedChange = {
             if (enabled) expanded = it
-        }
+        },
     ) {
         OutlinedTextField(
             value = description,
@@ -2417,18 +1847,18 @@ private fun DescriptionFieldWithSuggestions(
                 },
             singleLine = true,
             enabled = enabled,
-            shape = RoundedCornerShape(8.dp)
+            shape = RoundedCornerShape(8.dp),
         )
 
         ExposedDropdownMenu(
             expanded = expanded && recentEntries.isNotEmpty(),
-            onDismissRequest = { expanded = false }
+            onDismissRequest = { expanded = false },
         ) {
             Text(
                 stringResource(R.string.recent_entries),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
 
             recentEntries.forEach { entry ->
@@ -2444,30 +1874,30 @@ private fun DescriptionFieldWithSuggestions(
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                overflow = TextOverflow.Ellipsis,
                             )
                             // Project row
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 if (project != null) {
                                     Box(
                                         modifier = Modifier
                                             .size(8.dp)
                                             .clip(CircleShape)
-                                            .background(Color(project.color.toColorInt()))
+                                            .background(Color(project.color.toColorInt())),
                                     )
                                     Text(
                                         text = project.name,
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 } else {
                                     Text(
                                         text = stringResource(R.string.no_project_label),
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                             }
@@ -2475,13 +1905,13 @@ private fun DescriptionFieldWithSuggestions(
                             if (entryTagNames.isNotEmpty()) {
                                 FlowRow(
                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
                                 ) {
                                     entryTagNames.forEach { tagName ->
                                         Surface(
                                             shape = RoundedCornerShape(4.dp),
                                             color = MaterialTheme.colorScheme.secondaryContainer,
-                                            tonalElevation = 0.dp
+                                            tonalElevation = 0.dp,
                                         ) {
                                             Text(
                                                 text = tagName,
@@ -2489,8 +1919,8 @@ private fun DescriptionFieldWithSuggestions(
                                                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                                                 modifier = Modifier.padding(
                                                     horizontal = 6.dp,
-                                                    vertical = 2.dp
-                                                )
+                                                    vertical = 2.dp,
+                                                ),
                                             )
                                         }
                                     }
@@ -2501,7 +1931,7 @@ private fun DescriptionFieldWithSuggestions(
                     onClick = {
                         onEntryCopied(entry)
                         expanded = false
-                    }
+                    },
                 )
             }
         }
@@ -2538,13 +1968,7 @@ internal fun ProjectTaskDropdown(
  * Date header for time entries
  */
 @Composable
-private fun DateHeader(
-    date: LocalDate,
-    entries: List<TimeEntry>,
-    projectsById: Map<String, Project>,
-    zone: ZoneId,
-    onClick: () -> Unit
-) {
+private fun DateHeader(date: LocalDate, entries: List<TimeEntry>, projectsById: Map<String, Project>, zone: ZoneId, onClick: () -> Unit) {
     val context = LocalContext.current
     val locale = appLocale()
     val resources = LocalResources.current
@@ -2571,14 +1995,14 @@ private fun DateHeader(
             .clickable(onClick = onClick)
             .padding(top = 12.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
             text = formatDate(date, context, zone, locale),
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1
+            maxLines = 1,
         )
         Text(
             text = headerStats,
@@ -2586,7 +2010,7 @@ private fun DateHeader(
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         )
     }
 }
@@ -2604,7 +2028,7 @@ private fun CollapsibleTimeEntryGroup(
     syncStatusByEntryId: Map<String, TimeEntryRepository.EntrySyncStatus>,
     onEdit: (TimeEntry) -> Unit,
     onDelete: (TimeEntry) -> Unit,
-    onRetrySync: (TimeEntry) -> Unit
+    onRetrySync: (TimeEntry) -> Unit,
 ) {
     var isExpanded by remember { mutableStateOf(false) }
     val now = remember { Instant.now() }
@@ -2629,7 +2053,7 @@ private fun CollapsibleTimeEntryGroup(
                 onEdit = { onEdit(entries.first()) },
                 onDelete = { onDelete(entries.first()) },
                 onRetrySync = { onRetrySync(entries.first()) },
-                count = null
+                count = null,
             )
         } else {
             // Multiple entries, show collapsed or expanded
@@ -2648,7 +2072,7 @@ private fun CollapsibleTimeEntryGroup(
                         entries.filter { syncStatusByEntryId[it.id]?.let(::canRetrySync) == true }.forEach(onRetrySync)
                     },
                     count = entries.size,
-                    totalDuration = totalDuration
+                    totalDuration = totalDuration,
                 )
             } else {
                 // Show all entries
@@ -2664,7 +2088,7 @@ private fun CollapsibleTimeEntryGroup(
                         onDelete = { onDelete(entry) },
                         onRetrySync = { onRetrySync(entry) },
                         count = null,
-                        isIndented = true
+                        isIndented = true,
                     )
                 }
                 // Collapse button
@@ -2673,18 +2097,18 @@ private fun CollapsibleTimeEntryGroup(
                         .fillMaxWidth()
                         .background(
                             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            RoundedCornerShape(6.dp)
+                            RoundedCornerShape(6.dp),
                         )
                         .heightIn(min = Dimens.MinTouchTarget)
                         .clickable(role = Role.Button) { isExpanded = false }
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         text = pluralStringResource(R.plurals.collapse_entries, entries.size, entries.size),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -2704,95 +2128,182 @@ private fun CollapsibleTimeEntryGroup(
  * "Switch organization" content description and opens the membership picker on click. Otherwise it
  * is inert, plain [onSurfaceVariant] text with no click target and no affordance icon.
  */
+/**
+ * Timer header: calendar on the left, the organization centred (tap to switch when allowed), and
+ * refresh, review inbox and add-entry on the right.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun TimerTopBar(
+    organizationName: String?,
+    canSwitchOrganization: Boolean,
+    memberships: List<Membership>,
+    currentMembershipId: String?,
+    onMembershipChange: (Membership) -> Unit,
+    onOpenCalendar: () -> Unit,
+    onAddEntry: () -> Unit,
+    reviewBadgeCount: Int,
+    onOpenReview: () -> Unit,
+    syncing: Boolean,
+    onRefresh: () -> Unit,
+    onRequestNotifications: (() -> Unit)?,
+) {
+    CenterAlignedTopAppBar(
+        title = {
+            TrackingAppBarTitle(
+                organizationName = organizationName,
+                canSwitchOrganization = canSwitchOrganization,
+                memberships = memberships,
+                currentMembershipId = currentMembershipId,
+                onMembershipChange = onMembershipChange,
+            )
+        },
+        navigationIcon = {
+            IconButton(onClick = onOpenCalendar, modifier = Modifier.testTag(TrackingTestTags.OPEN_CALENDAR_BUTTON)) {
+                Icon(imageVector = Icons.Outlined.CalendarMonth, contentDescription = stringResource(R.string.nav_calendar))
+            }
+        },
+        actions = {
+            if (onRequestNotifications != null) {
+                IconButton(onClick = onRequestNotifications) {
+                    Icon(
+                        imageVector = Icons.Outlined.NotificationsOff,
+                        contentDescription = stringResource(R.string.enable_notifications),
+                    )
+                }
+            }
+            // Only compose the infinite spin while syncing; an idle infinite transition keeps the
+            // frame clock busy forever.
+            val syncRotation = if (syncing) {
+                val syncTransition = rememberInfiniteTransition(label = "sync")
+                val rotation by syncTransition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = FULL_ROTATION_DEGREES,
+                    animationSpec = infiniteRepeatable(tween(SYNC_ROTATION_DURATION_MS), RepeatMode.Restart),
+                    label = "sync rotation",
+                )
+                rotation
+            } else {
+                0f
+            }
+            IconButton(onClick = onRefresh, modifier = Modifier.testTag(TrackingTestTags.REFRESH_BUTTON)) {
+                Icon(
+                    imageVector = Icons.Outlined.Sync,
+                    contentDescription = stringResource(if (syncing) R.string.syncing else R.string.refresh),
+                    modifier = Modifier.rotate(syncRotation),
+                )
+            }
+            ReviewInboxButton(badgeCount = reviewBadgeCount, onClick = onOpenReview)
+            IconButton(onClick = onAddEntry, modifier = Modifier.testTag(TrackingTestTags.ADD_ENTRY_BUTTON)) {
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_time_entry))
+            }
+        },
+        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            navigationIconContentColor = MaterialTheme.colorScheme.primary,
+            actionIconContentColor = MaterialTheme.colorScheme.primary,
+        ),
+    )
+}
+
+/** The organization name, with a switcher menu when the user belongs to more than one. */
 @Composable
 internal fun TrackingAppBarTitle(
-    userName: String?,
     organizationName: String?,
     canSwitchOrganization: Boolean,
     memberships: List<Membership>,
     currentMembershipId: String?,
     onMembershipChange: (Membership) -> Unit,
 ) {
+    if (organizationName == null) {
+        Text(stringResource(R.string.time_tracking), style = MaterialTheme.typography.titleSmall)
+        return
+    }
     var organizationMenuExpanded by remember { mutableStateOf(false) }
-    val collapsed = userName != null && organizationName != null &&
-        userName.trim() == organizationName.trim()
-
-    Column {
-        Text(
-            stringResource(R.string.time_tracking),
-            fontWeight = FontWeight.SemiBold
-        )
-
-        // When collapsed, the org line represents both user and org, so skip the separate user line.
-        if (userName != null && !collapsed) {
+    Box {
+        if (canSwitchOrganization) {
+            val switchDescription = stringResource(R.string.switch_organization)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clickable { organizationMenuExpanded = true }
+                    .semantics {
+                        role = Role.Button
+                        contentDescription = switchDescription
+                    },
+            ) {
+                Text(
+                    text = organizationName,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(Dimens.IconSmall),
+                )
+            }
+        } else {
             Text(
-                text = userName,
-                style = MaterialTheme.typography.bodySmall,
+                text = organizationName,
+                style = MaterialTheme.typography.titleSmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-
-        if (organizationName != null) {
-            Box {
-                if (canSwitchOrganization) {
-                    val switchDescription = stringResource(R.string.switch_organization)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .clickable { organizationMenuExpanded = true }
-                            .semantics {
-                                role = Role.Button
-                                contentDescription = switchDescription
-                            }
-                    ) {
-                        Text(
-                            text = organizationName,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Icon(
-                            imageVector = Icons.Default.ArrowDropDown,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                } else {
-                    Text(
-                        text = organizationName,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                androidx.compose.material3.DropdownMenu(
-                    expanded = organizationMenuExpanded,
-                    onDismissRequest = { organizationMenuExpanded = false }
-                ) {
-                    memberships.forEach { membership ->
-                        DropdownMenuItem(
-                            text = { Text(membership.organization.name) },
-                            onClick = {
-                                organizationMenuExpanded = false
-                                onMembershipChange(membership)
-                            },
-                            trailingIcon = if (membership.id == currentMembershipId) {
-                                {
-                                    Icon(
-                                        imageVector = Icons.Default.Done,
-                                        contentDescription = null
-                                    )
-                                }
-                            } else null
-                        )
-                    }
-                }
+        androidx.compose.material3.DropdownMenu(
+            expanded = organizationMenuExpanded,
+            onDismissRequest = { organizationMenuExpanded = false },
+        ) {
+            memberships.forEach { membership ->
+                DropdownMenuItem(
+                    text = { Text(membership.organization.name) },
+                    onClick = {
+                        organizationMenuExpanded = false
+                        onMembershipChange(membership)
+                    },
+                    trailingIcon = if (membership.id == currentMembershipId) {
+                        { Icon(imageVector = Icons.Default.Done, contentDescription = null) }
+                    } else {
+                        null
+                    },
+                )
             }
+        }
+    }
+}
+
+/** Opens Review (inbox + end-of-day review); the badge counts open inbox issues. */
+@Composable
+private fun ReviewInboxButton(badgeCount: Int, onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.testTag(TrackingTestTags.OPEN_REVIEW_BUTTON)) {
+        if (badgeCount > 0) {
+            BadgedBox(
+                badge = {
+                    Badge {
+                        Text(
+                            text = if (badgeCount > MAX_BADGE_COUNT) {
+                                stringResource(R.string.review_badge_overflow)
+                            } else {
+                                badgeCount.toString()
+                            },
+                        )
+                    }
+                },
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Inbox,
+                    contentDescription = pluralStringResource(
+                        R.plurals.review_pending_badge_description,
+                        badgeCount,
+                        badgeCount,
+                    ),
+                )
+            }
+        } else {
+            Icon(imageVector = Icons.Outlined.Inbox, contentDescription = stringResource(R.string.nav_review))
         }
     }
 }
@@ -2815,7 +2326,7 @@ private fun CompactTimeEntryRow(
     onRetrySync: () -> Unit,
     count: Int? = null,
     totalDuration: Long? = null,
-    isIndented: Boolean = false
+    isIndented: Boolean = false,
 ) {
     val now = remember { Instant.now() }
     val locale = appLocale()
@@ -2839,7 +2350,7 @@ private fun CompactTimeEntryRow(
             .padding(horizontal = 12.dp, vertical = 10.dp)
             .clickable(enabled = count != null && count > 1) { onEdit() },
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         // Count badge (if grouped)
         if (count != null && count > 1) {
@@ -2847,13 +2358,13 @@ private fun CompactTimeEntryRow(
                 modifier = Modifier
                     .size(24.dp)
                     .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = count.toString(),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
                 )
             }
             Spacer(Modifier.width(8.dp))
@@ -2866,12 +2377,13 @@ private fun CompactTimeEntryRow(
                 text = entry.description?.takeIf { it.isNotEmpty() }
                     ?: stringResource(R.string.no_description),
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (entry.description.isNullOrEmpty())
+                color = if (entry.description.isNullOrEmpty()) {
                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                else
-                    MaterialTheme.colorScheme.onSurface,
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
 
             Spacer(Modifier.height(2.dp))
@@ -2880,7 +2392,7 @@ private fun CompactTimeEntryRow(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 // Project color dot + name
                 if (project != null) {
@@ -2888,7 +2400,7 @@ private fun CompactTimeEntryRow(
                         modifier = Modifier
                             .size(6.dp)
                             .clip(CircleShape)
-                            .background(projectColor ?: MaterialTheme.colorScheme.outline)
+                            .background(projectColor ?: MaterialTheme.colorScheme.outline),
                     )
                     val projectTaskText = remember(project.name, task?.name) {
                         buildString {
@@ -2902,7 +2414,7 @@ private fun CompactTimeEntryRow(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
                     )
                 } else {
                     Spacer(Modifier.weight(1f))
@@ -2924,7 +2436,7 @@ private fun CompactTimeEntryRow(
         // Right side: Duration and action icons
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             // Kit chip renders nothing for SYNCED (and null); only PENDING /
             // RETRYING / FAILED surface, so a healthy row stays clutter-free.
@@ -2933,7 +2445,7 @@ private fun CompactTimeEntryRow(
             if (syncStatus != null && canRetrySync(syncStatus)) {
                 IconButton(
                     onClick = onRetrySync,
-                    modifier = Modifier.size(48.dp).testTag(TrackingTestTags.entryRetrySyncButton(entry.id))
+                    modifier = Modifier.size(48.dp).testTag(TrackingTestTags.entryRetrySyncButton(entry.id)),
                 ) {
                     Icon(
                         Icons.Default.SyncProblem,
@@ -2943,7 +2455,7 @@ private fun CompactTimeEntryRow(
                         } else {
                             MaterialTheme.colorScheme.syncPending
                         },
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(16.dp),
                     )
                 }
             } else {
@@ -2954,7 +2466,7 @@ private fun CompactTimeEntryRow(
                 text = durationText,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
             )
 
             // Only show action buttons if not grouped or if expanded
@@ -2962,26 +2474,26 @@ private fun CompactTimeEntryRow(
                 // Edit button
                 IconButton(
                     onClick = onEdit,
-                    modifier = Modifier.size(48.dp).testTag(TrackingTestTags.ENTRY_EDIT_BUTTON)
+                    modifier = Modifier.size(48.dp).testTag(TrackingTestTags.ENTRY_EDIT_BUTTON),
                 ) {
                     Icon(
                         Icons.Default.Edit,
                         contentDescription = stringResource(R.string.edit),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(16.dp),
                     )
                 }
 
                 // Delete button
                 IconButton(
                     onClick = onDelete,
-                    modifier = Modifier.size(48.dp).testTag(TrackingTestTags.ENTRY_DELETE_BUTTON)
+                    modifier = Modifier.size(48.dp).testTag(TrackingTestTags.ENTRY_DELETE_BUTTON),
                 ) {
                     Icon(
                         Icons.Default.Delete,
                         contentDescription = stringResource(R.string.delete),
                         tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(16.dp),
                     )
                 }
             }
@@ -3085,7 +2597,7 @@ internal fun TimeEntryFormSheet(
         },
         modifier = Modifier.testTag(TrackingTestTags.SHEET),
         sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
     ) {
         Column(
             modifier = Modifier
@@ -3095,158 +2607,162 @@ internal fun TimeEntryFormSheet(
                 .imePadding()
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-                Text(
-                    text = stringResource(if (entry == null) R.string.add_time_entry else R.string.edit_time_entry),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
+            Text(
+                text = stringResource(if (entry == null) R.string.add_time_entry else R.string.edit_time_entry),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
 
-                // Save-as-template / start-from-template affordance (gap analysis #1, #9).
-                if (templates.isNotEmpty() || onSaveAsTemplate != null) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (templates.isNotEmpty()) {
-                            Box {
-                                OutlinedButton(
-                                    onClick = { templateMenuExpanded = true },
-                                    shape = RoundedCornerShape(8.dp),
-                                ) {
-                                    Text(stringResource(R.string.templates_use_template))
-                                }
-                                DropdownMenu(
-                                    expanded = templateMenuExpanded,
-                                    onDismissRequest = { templateMenuExpanded = false },
-                                ) {
-                                    templates.forEach { template ->
-                                        val label = templateDisplayLabel(template, projects)
-                                        DropdownMenuItem(
-                                            text = { Text(label) },
-                                            onClick = {
-                                                val resolution = TemplateResolver.resolve(
-                                                    template, projects, tasks, tags,
-                                                )
-                                                description = template.description ?: ""
-                                                projectId = resolution.projectId
-                                                taskId = resolution.taskId
-                                                selectedTags = resolution.tagIds
-                                                billable = resolution.billable
-                                                templateMenuExpanded = false
-                                            },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        if (onSaveAsTemplate != null) {
+            // Save-as-template / start-from-template affordance (gap analysis #1, #9).
+            if (templates.isNotEmpty() || onSaveAsTemplate != null) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (templates.isNotEmpty()) {
+                        Box {
                             OutlinedButton(
-                                onClick = {
-                                    onSaveAsTemplate(
-                                        TemplateDraft(
-                                            name = null,
-                                            projectId = projectId,
-                                            taskId = taskId,
-                                            description = description.trim().takeIf { it.isNotEmpty() },
-                                            tagIds = selectedTags,
-                                            billable = billable,
-                                            isFavorite = false,
-                                        )
-                                    )
-                                },
-                                enabled = projectId != null || description.isNotBlank() || selectedTags.isNotEmpty(),
+                                onClick = { templateMenuExpanded = true },
                                 shape = RoundedCornerShape(8.dp),
                             ) {
-                                Text(stringResource(R.string.templates_save_as_template))
+                                Text(stringResource(R.string.templates_use_template))
+                            }
+                            DropdownMenu(
+                                expanded = templateMenuExpanded,
+                                onDismissRequest = { templateMenuExpanded = false },
+                            ) {
+                                templates.forEach { template ->
+                                    val label = templateDisplayLabel(template, projects)
+                                    DropdownMenuItem(
+                                        text = { Text(label) },
+                                        onClick = {
+                                            val resolution = TemplateResolver.resolve(
+                                                template,
+                                                projects,
+                                                tasks,
+                                                tags,
+                                            )
+                                            description = template.description ?: ""
+                                            projectId = resolution.projectId
+                                            taskId = resolution.taskId
+                                            selectedTags = resolution.tagIds
+                                            billable = resolution.billable
+                                            templateMenuExpanded = false
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
+                    if (onSaveAsTemplate != null) {
+                        OutlinedButton(
+                            onClick = {
+                                onSaveAsTemplate(
+                                    TemplateDraft(
+                                        name = null,
+                                        projectId = projectId,
+                                        taskId = taskId,
+                                        description = description.trim().takeIf { it.isNotEmpty() },
+                                        tagIds = selectedTags,
+                                        billable = billable,
+                                        isFavorite = false,
+                                    ),
+                                )
+                            },
+                            enabled = projectId != null || description.isNotBlank() || selectedTags.isNotEmpty(),
+                            shape = RoundedCornerShape(8.dp),
+                        ) {
+                            Text(stringResource(R.string.templates_save_as_template))
+                        }
+                    }
                 }
+            }
 
-                Text(
-                    text = stringResource(R.string.time_and_duration),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            Text(
+                text = stringResource(R.string.time_and_duration),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
+            ) {
+                EntryDateFieldButton(
+                    label = stringResource(R.string.start_date),
+                    date = startTime.toLocalDate(),
+                    onClick = { editingDate = TimeField.Start },
+                    modifier = if (isRunningEntry) Modifier.fillMaxWidth() else Modifier.weight(1f),
+                    testTag = TrackingTestTags.SHEET_START_DATE,
                 )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
-                ) {
+                if (!isRunningEntry) {
                     EntryDateFieldButton(
-                        label = stringResource(R.string.start_date),
-                        date = startTime.toLocalDate(),
-                        onClick = { editingDate = TimeField.Start },
-                        modifier = if (isRunningEntry) Modifier.fillMaxWidth() else Modifier.weight(1f),
-                        testTag = TrackingTestTags.SHEET_START_DATE,
+                        label = stringResource(R.string.end_date),
+                        date = endTime.toLocalDate(),
+                        onClick = { editingDate = TimeField.End },
+                        modifier = Modifier.weight(1f),
+                        testTag = TrackingTestTags.SHEET_END_DATE,
                     )
-                    if (!isRunningEntry) {
-                        EntryDateFieldButton(
-                            label = stringResource(R.string.end_date),
-                            date = endTime.toLocalDate(),
-                            onClick = { editingDate = TimeField.End },
-                            modifier = Modifier.weight(1f),
-                            testTag = TrackingTestTags.SHEET_END_DATE,
-                        )
-                    }
                 }
+            }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)
-                ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
+            ) {
+                TimeFieldButton(
+                    label = stringResource(R.string.start_time),
+                    value = startTime,
+                    onClick = { editingTime = TimeField.Start },
+                    modifier = (if (isRunningEntry) Modifier.fillMaxWidth() else Modifier.weight(1f))
+                        .testTag(TrackingTestTags.SHEET_START_TIME),
+                )
+                if (!isRunningEntry) {
                     TimeFieldButton(
-                        label = stringResource(R.string.start_time),
-                        value = startTime,
-                        onClick = { editingTime = TimeField.Start },
-                        modifier = (if (isRunningEntry) Modifier.fillMaxWidth() else Modifier.weight(1f))
-                            .testTag(TrackingTestTags.SHEET_START_TIME)
+                        label = stringResource(R.string.end_time),
+                        value = endTime,
+                        onClick = { editingTime = TimeField.End },
+                        modifier = Modifier.weight(1f).testTag(TrackingTestTags.SHEET_END_TIME),
                     )
-                    if (!isRunningEntry) {
-                        TimeFieldButton(
-                            label = stringResource(R.string.end_time),
-                            value = endTime,
-                            onClick = { editingTime = TimeField.End },
-                            modifier = Modifier.weight(1f).testTag(TrackingTestTags.SHEET_END_TIME)
-                        )
-                    }
                 }
+            }
 
-                if (isRunningEntry) {
-                    Text(
-                        text = stringResource(R.string.running_entry_start_edit_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else Surface(
+            if (isRunningEntry) {
+                Text(
+                    text = stringResource(R.string.running_entry_start_edit_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(16.dp)
+                    shape = RoundedCornerShape(16.dp),
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Text(
                                 text = stringResource(R.string.total_time),
                                 style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
                                 text = formatEditableDuration(durationMinutes.toLongOrNull() ?: 0),
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
+                                color = MaterialTheme.colorScheme.primary,
                             )
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             FilledTonalIconButton(
                                 onClick = {
@@ -3254,11 +2770,11 @@ internal fun TimeEntryFormSheet(
                                         (durationMinutes.toLongOrNull() ?: MINIMUM_DURATION_MINUTES) - DURATION_STEP_MINUTES,
                                     )
                                 },
-                                modifier = Modifier.size(48.dp)
+                                modifier = Modifier.size(48.dp),
                             ) {
                                 Icon(
                                     Icons.Default.Remove,
-                                    contentDescription = stringResource(R.string.decrease_15_minutes)
+                                    contentDescription = stringResource(R.string.decrease_15_minutes),
                                 )
                             }
                             OutlinedTextField(
@@ -3277,143 +2793,147 @@ internal fun TimeEntryFormSheet(
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.weight(1f).testTag(TrackingTestTags.SHEET_DURATION_FIELD),
-                                shape = RoundedCornerShape(12.dp)
+                                shape = RoundedCornerShape(12.dp),
                             )
                             FilledTonalIconButton(
                                 onClick = { setDuration((durationMinutes.toLongOrNull() ?: 0) + DURATION_STEP_MINUTES) },
-                                modifier = Modifier.size(48.dp)
+                                modifier = Modifier.size(48.dp),
                             ) {
                                 Icon(
                                     Icons.Default.Add,
-                                    contentDescription = stringResource(R.string.increase_15_minutes)
+                                    contentDescription = stringResource(R.string.increase_15_minutes),
                                 )
                             }
                         }
                     }
                 }
+            }
 
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text(stringResource(R.string.description)) },
-                    modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.SHEET_DESCRIPTION_FIELD),
-                    shape = RoundedCornerShape(8.dp)
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                label = { Text(stringResource(R.string.description)) },
+                modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.SHEET_DESCRIPTION_FIELD),
+                shape = RoundedCornerShape(8.dp),
+            )
+
+            ProjectTaskDropdown(
+                selectedProjectId = projectId,
+                selectedTaskId = taskId,
+                projects = projects,
+                tasks = tasks,
+                onSelectionChanged = { newProjectId, newTaskId ->
+                    projectId = newProjectId
+                    taskId = newTaskId
+                },
+                enabled = true,
+            )
+
+            TagsSelector(
+                selectedTagIds = selectedTags,
+                availableTags = tags,
+                onTagsChanged = { selectedTags = it },
+                enabled = true,
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag(TrackingTestTags.SHEET_BILLABLE)
+                    .toggleable(
+                        value = billable,
+                        role = Role.Checkbox,
+                        onValueChange = { billable = it },
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(
+                    checked = billable,
+                    onCheckedChange = null,
                 )
-
-                ProjectTaskDropdown(
-                    selectedProjectId = projectId,
-                    selectedTaskId = taskId,
-                    projects = projects,
-                    tasks = tasks,
-                    onSelectionChanged = { newProjectId, newTaskId ->
-                        projectId = newProjectId
-                        taskId = newTaskId
-                    },
-                    enabled = true
+                Text(
+                    text = stringResource(R.string.billable),
+                    style = MaterialTheme.typography.bodyMedium,
                 )
+            }
 
-                TagsSelector(
-                    selectedTagIds = selectedTags,
-                    availableTags = tags,
-                    onTagsChanged = { selectedTags = it },
-                    enabled = true,
+            if (!isRunningEntry) {
+                EntryValidationBanner(result = validation, durationHours = durationHours)
+            }
+
+            if (!saveEnabled) {
+                Text(
+                    text = stringResource(R.string.sync_conflict_edit_locked),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
                 )
+            }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .testTag(TrackingTestTags.SHEET_BILLABLE)
-                        .toggleable(
-                            value = billable,
-                            role = Role.Checkbox,
-                            onValueChange = { billable = it }
-                        ),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = billable,
-                        onCheckedChange = null
-                    )
-                    Text(
-                        text = stringResource(R.string.billable),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-
-                if (!isRunningEntry) {
-                    EntryValidationBanner(result = validation, durationHours = durationHours)
-                }
-
-                if (!saveEnabled) {
-                    Text(
-                        text = stringResource(R.string.sync_conflict_edit_locked),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-
-                // Roadmap #13: Duplicate/Split act on the stored entry. Only for completed
-                // (has end) and editable (not conflicted) entries; hidden otherwise.
-                val canDuplicateOrSplit = entry?.let(::isCompletedTimeEntry) == true && saveEnabled
-                if (canDuplicateOrSplit && (onDuplicate != null || onSplit != null)) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (onDuplicate != null) {
-                            OutlinedButton(
-                                onClick = { onDuplicate(); onDismiss() },
-                                modifier = Modifier.testTag(EditTimeEntryTestTags.DUPLICATE_BUTTON),
-                                shape = RoundedCornerShape(8.dp),
-                            ) {
-                                Text(stringResource(R.string.duplicate_entry))
-                            }
+            // Roadmap #13: Duplicate/Split act on the stored entry. Only for completed
+            // (has end) and editable (not conflicted) entries; hidden otherwise.
+            val canDuplicateOrSplit = entry?.let(::isCompletedTimeEntry) == true && saveEnabled
+            if (canDuplicateOrSplit && (onDuplicate != null || onSplit != null)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (onDuplicate != null) {
+                        OutlinedButton(
+                            onClick = {
+                                onDuplicate()
+                                onDismiss()
+                            },
+                            modifier = Modifier.testTag(EditTimeEntryTestTags.DUPLICATE_BUTTON),
+                            shape = RoundedCornerShape(8.dp),
+                        ) {
+                            Text(stringResource(R.string.duplicate_entry))
                         }
-                        if (onSplit != null) {
-                            OutlinedButton(
-                                onClick = { showSplitPicker = true },
-                                modifier = Modifier.testTag(EditTimeEntryTestTags.SPLIT_BUTTON),
-                                shape = RoundedCornerShape(8.dp),
-                            ) {
-                                Text(stringResource(R.string.split_entry))
-                            }
+                    }
+                    if (onSplit != null) {
+                        OutlinedButton(
+                            onClick = { showSplitPicker = true },
+                            modifier = Modifier.testTag(EditTimeEntryTestTags.SPLIT_BUTTON),
+                            shape = RoundedCornerShape(8.dp),
+                        ) {
+                            Text(stringResource(R.string.split_entry))
                         }
                     }
                 }
+            }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.testTag(EditTimeEntryTestTags.CANCEL_BUTTON),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
                 ) {
-                    Button(
-                        onClick = onDismiss,
-                        modifier = Modifier.testTag(EditTimeEntryTestTags.CANCEL_BUTTON),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Transparent,
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    Text(stringResource(R.string.cancel))
+                }
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick = {
+                        onSave(
+                            description.ifEmpty { null },
+                            projectId,
+                            taskId,
+                            selectedTags,
+                            billable,
+                            formatTimeEntryInstant(startTime),
+                            endTime.takeUnless { isRunningEntry }?.let(::formatTimeEntryInstant),
                         )
-                    ) {
-                        Text(stringResource(R.string.cancel))
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            onSave(
-                                description.ifEmpty { null },
-                                projectId,
-                                taskId,
-                                selectedTags,
-                                billable,
-                                formatTimeEntryInstant(startTime),
-                                endTime.takeUnless { isRunningEntry }?.let(::formatTimeEntryInstant)
-                            )
-                        },
-                        enabled = saveEnabled && durationIsValid && validation.canSave,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.testTag(TrackingTestTags.SHEET_SAVE_BUTTON)
-                    ) {
-                        Text(stringResource(R.string.save), fontWeight = FontWeight.SemiBold)
-                    }
+                    },
+                    enabled = saveEnabled && durationIsValid && validation.canSave,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.testTag(TrackingTestTags.SHEET_SAVE_BUTTON),
+                ) {
+                    Text(stringResource(R.string.save), fontWeight = FontWeight.SemiBold)
                 }
+            }
         }
     }
 
@@ -3437,7 +2957,7 @@ internal fun TimeEntryFormSheet(
                     durationMinutes = java.time.Duration.between(startTime, endTime).toMinutes().toString()
                 }
                 editingTime = null
-            }
+            },
         )
     }
 
@@ -3486,17 +3006,12 @@ internal fun TimeEntryFormSheet(
 private enum class TimeField { Start, End }
 
 @Composable
-private fun TimeFieldButton(
-    label: String,
-    value: ZonedDateTime,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+private fun TimeFieldButton(label: String, value: ZonedDateTime, onClick: () -> Unit, modifier: Modifier = Modifier) {
     OutlinedButton(
         onClick = onClick,
         modifier = modifier.height(64.dp),
         shape = RoundedCornerShape(12.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
     ) {
         Icon(Icons.Default.AccessTime, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
@@ -3514,7 +3029,7 @@ private fun EntryTimePickerDialog(
     initial: ZonedDateTime,
     testTag: String? = null,
     onDismiss: () -> Unit,
-    onConfirm: (Int, Int) -> Unit
+    onConfirm: (Int, Int) -> Unit,
 ) {
     val state = rememberTimePickerState(initialHour = initial.hour, initialMinute = initial.minute, is24Hour = true)
     AlertDialog(
@@ -3532,151 +3047,15 @@ private fun EntryTimePickerDialog(
                 modifier = Modifier.testTag(EditTimeEntryTestTags.TIME_PICKER_CONFIRM),
             ) { Text(stringResource(R.string.done)) }
         },
-        dismissButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
-internal fun canDismissTimeEntryFormSheet(
-    hasTimePicker: Boolean,
-    hasDatePicker: Boolean,
-    hasSplitPicker: Boolean,
-): Boolean = !hasTimePicker && !hasDatePicker && !hasSplitPicker
+internal fun canDismissTimeEntryFormSheet(hasTimePicker: Boolean, hasDatePicker: Boolean, hasSplitPicker: Boolean): Boolean =
+    !hasTimePicker && !hasDatePicker && !hasSplitPicker
 
-/**
- * About section with version info, verification details, and Obtainium button
- */
-@Composable
-private fun AboutSection(context: Context) {
-    Text(
-        text = stringResource(R.string.about),
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(bottom = 12.dp)
-    )
-
-    // Version
-    Text(
-        text = stringResource(R.string.app_version, BuildConfig.VERSION_NAME),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(bottom = 16.dp)
-    )
-
-    // Verification Info card
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.verification_info),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            // Package ID
-            Text(
-                text = stringResource(R.string.package_id_label),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = context.packageName,
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = Dimens.MinTouchTarget)
-                    .clickable(role = Role.Button) { copyToClipboard(context, context.packageName) }
-                    .wrapContentHeight()
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Signing Certificate SHA-256
-            Text(
-                text = stringResource(R.string.signing_certificate_label),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            val signingHash = remember { getSigningCertificateHash(context) }
-            Text(
-                text = signingHash,
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = Dimens.MinTouchTarget)
-                    .clickable(role = Role.Button) { copyToClipboard(context, signingHash) }
-                    .wrapContentHeight()
-            )
-        }
-    }
-
-    Spacer(modifier = Modifier.height(12.dp))
-
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var obtainiumInstalled by remember { mutableStateOf(isObtainiumInstalled(context)) }
-
-    DisposableEffect(context, lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                obtainiumInstalled = isObtainiumInstalled(context)
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    // Add to Obtainium, or help the user install it first.
-    OutlinedButton(
-        onClick = {
-            val obtainiumUrl = if (obtainiumInstalled) {
-                OBTAINIUM_ADD_APP_URL
-            } else {
-                OBTAINIUM_INSTALL_URL
-            }
-            val intent = Intent(Intent.ACTION_VIEW, obtainiumUrl.toUri()).apply {
-                if (obtainiumInstalled) setPackage(OBTAINIUM_PACKAGE)
-            }
-            context.startActivity(intent)
-        },
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = stringResource(
-                    if (obtainiumInstalled) R.string.add_to_obtainium else R.string.install_obtainium
-                ),
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = stringResource(
-                    if (obtainiumInstalled) {
-                        R.string.add_to_obtainium_description
-                    } else {
-                        R.string.install_obtainium_description
-                    }
-                ),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-private const val OBTAINIUM_PACKAGE = "dev.imranr.obtainium"
-private const val OBTAINIUM_INSTALL_URL = "https://obtainium.imranr.dev/"
 private const val FULL_ROTATION_DEGREES = 360f
+private const val MAX_BADGE_COUNT = 99
 private const val SECONDS_PER_HOUR = 3600
 private const val SECONDS_PER_MINUTE = 60
 private const val SECONDS_PER_HOUR_LONG = 3600L
@@ -3695,62 +3074,9 @@ private const val HISTORY_PLACEHOLDER_COUNT = 4
 private const val RECENT_ENTRIES_LIMIT = 5
 private const val DURATION_STEP_MINUTES = 15L
 private const val MINIMUM_DURATION_MINUTES = 1L
-private const val TWO_HOURS = 2
-private const val FOUR_HOURS = 4
-private const val SIX_HOURS = 6
-private const val EIGHT_HOURS = 8
-private const val TWELVE_HOURS = 12
-private val LONG_TIMER_OPTIONS = listOf(TWO_HOURS, FOUR_HOURS, SIX_HOURS, EIGHT_HOURS, TWELVE_HOURS)
 private const val MAX_CROSS_MIDNIGHT_HOURS = 18L
 private const val LONG_DURATION_WARNING_HOURS = 12L
 private const val LAST_7_DAYS_OFFSET = 6L
-@Suppress("MaxLineLength")
-private const val OBTAINIUM_ADD_APP_URL = "obtainium://app/%7B%22id%22%3A%22dev.tricked.solidverdant%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FTricked-dev%2FSolidVerdant%22%2C%22author%22%3A%22Tricked-dev%22%2C%22name%22%3A%22SolidVerdant%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%7D%22%7D"
-
-private fun isObtainiumInstalled(context: Context): Boolean = try {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        context.packageManager.getPackageInfo(
-            OBTAINIUM_PACKAGE,
-            PackageManager.PackageInfoFlags.of(0)
-        )
-    } else {
-        @Suppress("DEPRECATION")
-        context.packageManager.getPackageInfo(OBTAINIUM_PACKAGE, 0)
-    }
-    true
-} catch (_: PackageManager.NameNotFoundException) {
-    false
-}
-
-/**
- * Get the SHA-256 hash of the app's signing certificate
- */
-private fun getSigningCertificateHash(context: Context): String {
-    return try {
-        val packageInfo = context.packageManager.getPackageInfo(
-            context.packageName,
-            PackageManager.GET_SIGNING_CERTIFICATES,
-        )
-        val signatures = packageInfo.signingInfo?.apkContentsSigners
-
-        val signature = signatures?.firstOrNull() ?: return "Unknown"
-        val digest = java.security.MessageDigest.getInstance("SHA-256")
-        val hashBytes = digest.digest(signature.toByteArray())
-        hashBytes.joinToString(":") { "%02X".format(it) }
-    } catch (e: Exception) {
-        "Unknown"
-    }
-}
-
-/**
- * Copy text to clipboard and show a toast
- */
-private fun copyToClipboard(context: Context, text: String) {
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val clip = ClipData.newPlainText("SolidVerdant", text)
-    clipboard.setPrimaryClip(clip)
-    Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
-}
 
 /**
  * Format elapsed time as HH:MM:SS
@@ -3775,6 +3101,7 @@ internal object EntryTimeValidator {
     /** An end clock-time earlier than start rolls to the next day only within this span; beyond it
      *  the inversion is treated as a mistake rather than an intended overnight shift. */
     val MAX_CROSS_MIDNIGHT: java.time.Duration = java.time.Duration.ofHours(MAX_CROSS_MIDNIGHT_HOURS)
+
     /** Durations at or above this are plausible but worth confirming before saving. */
     val LONG_DURATION_WARNING: java.time.Duration = java.time.Duration.ofHours(LONG_DURATION_WARNING_HOURS)
     enum class Error { END_NOT_AFTER_START }
@@ -3796,12 +3123,7 @@ internal object EntryTimeValidator {
         return rolled.takeIf { java.time.Duration.between(start, it) <= MAX_CROSS_MIDNIGHT }
     }
 
-    fun evaluate(
-        start: ZonedDateTime,
-        end: ZonedDateTime,
-        overlaps: Boolean = false,
-        overlapProhibited: Boolean = false,
-    ): Result {
+    fun evaluate(start: ZonedDateTime, end: ZonedDateTime, overlaps: Boolean = false, overlapProhibited: Boolean = false): Result {
         val duration = java.time.Duration.between(start, end)
         val error = when {
             !end.isAfter(start) -> Error.END_NOT_AFTER_START
@@ -3821,20 +3143,26 @@ internal fun EntryValidationBanner(result: EntryTimeValidator.Result, durationHo
     if (result.canSave && result.warnings.isEmpty()) return
     val isError = !result.canSave
     Surface(
-        color = if (isError) MaterialTheme.colorScheme.errorContainer
-        else MaterialTheme.colorScheme.secondaryContainer,
+        color = if (isError) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer
+        },
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().testTag(dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.VALIDATION_BANNER)
+        modifier = Modifier.fillMaxWidth().testTag(dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.VALIDATION_BANNER),
     ) {
-        val contentColor = if (isError) MaterialTheme.colorScheme.onErrorContainer
-        else MaterialTheme.colorScheme.onSecondaryContainer
+        val contentColor = if (isError) {
+            MaterialTheme.colorScheme.onErrorContainer
+        } else {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        }
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             result.error?.let { error ->
                 Text(
                     text = stringResource(
                         when (error) {
                             EntryTimeValidator.Error.END_NOT_AFTER_START -> R.string.entry_error_end_before_start
-                        }
+                        },
                     ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = contentColor,
@@ -3918,17 +3246,14 @@ private fun formatDuration(seconds: Long): String {
 private fun entryDurationOnDay(entry: TimeEntry, date: LocalDate, zone: ZoneId, now: Instant): Long =
     clipTimeEntryToLocalDay(entry, date, zone, now)?.seconds ?: 0L
 
-internal fun groupCompletedEntriesByLocalDay(
-    entries: List<TimeEntry>,
-    zone: ZoneId,
-    now: Instant,
-): Map<LocalDate, List<TimeEntry>> = entries
-    .asSequence()
-    .filter(::isCompletedTimeEntry)
-    .filter(::isWorkTimeEntry)
-    .flatMap { entry -> timeEntryLocalDaySlices(entry, zone, now).asSequence().map { it.date to entry } }
-    .groupBy({ it.first }, { it.second })
-    .toSortedMap(compareByDescending { it })
+internal fun groupCompletedEntriesByLocalDay(entries: List<TimeEntry>, zone: ZoneId, now: Instant): Map<LocalDate, List<TimeEntry>> =
+    entries
+        .asSequence()
+        .filter(::isCompletedTimeEntry)
+        .filter(::isWorkTimeEntry)
+        .flatMap { entry -> timeEntryLocalDaySlices(entry, zone, now).asSequence().map { it.date to entry } }
+        .groupBy({ it.first }, { it.second })
+        .toSortedMap(compareByDescending { it })
 
 /** Date-picker millis are UTC-midnight instants; resolve them back to the picked date. */
 private fun utcDateOf(epochMillis: Long): LocalDate = Instant.ofEpochMilli(epochMillis).atZone(ZoneOffset.UTC).toLocalDate()

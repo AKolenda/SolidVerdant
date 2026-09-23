@@ -7,8 +7,9 @@
 package dev.tricked.solidverdant.ui.navigation
 
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -21,44 +22,60 @@ import org.junit.Test
 class MainNavHostTest {
     @get:Rule val composeRule = createComposeRule()
 
-    @Test
-    fun tappingCalendarTabShowsCalendarContent() {
-        composeRule.setContent {
-            val nav = rememberNavController()
-            MainNavHost(
-                navController = nav,
-                trackContent = { Text("TRACK_CONTENT") },
-                calendarContent = { Text("CALENDAR_CONTENT") },
-                statsContent = { Text("STATS_CONTENT") },
-            )
-        }
-        composeRule.onNodeWithText("TRACK_CONTENT").assertIsDisplayed()
-        composeRule.onNodeWithText("Calendar").performClick()
-        composeRule.onNodeWithText("CALENDAR_CONTENT").assertIsDisplayed()
+    private lateinit var navController: NavHostController
+
+    @Composable
+    private fun Host() {
+        navController = rememberNavController()
+        MainNavHost(
+            navController = navController,
+            trackContent = { Text("TRACK_CONTENT") },
+            calendarContent = { Text("CALENDAR_CONTENT") },
+            statsContent = { Text("STATS_CONTENT") },
+            settingsContent = { Text("SETTINGS_CONTENT") },
+            syncCenterContent = { Text("SYNC_CENTER_CONTENT") },
+        )
     }
 
     @Test
-    fun tappingTrackFromSyncCenterShowsTrackContent() {
-        lateinit var navController: NavHostController
-        composeRule.setContent {
-            navController = rememberNavController()
-            MainNavHost(
-                navController = navController,
-                trackContent = { Text("TRACK_CONTENT") },
-                calendarContent = { Text("CALENDAR_CONTENT") },
-                statsContent = { Text("STATS_CONTENT") },
-                syncCenterContent = { Text("SYNC_CENTER_CONTENT") },
-            )
-        }
-        composeRule.runOnIdle {
-            navController.navigate(SyncRoutes.SYNC_CENTER)
-        }
-        composeRule.onNodeWithText("SYNC_CENTER_CONTENT").assertIsDisplayed()
-        composeRule.onNode(hasTestTag("main_nav_track")).assertIsNotSelected()
-
-        composeRule.onNode(hasTestTag("main_nav_track")).performClick()
-
+    fun tappingDashboardAndSettingsTabsShowsTheirContent() {
+        composeRule.setContent { Host() }
         composeRule.onNodeWithText("TRACK_CONTENT").assertIsDisplayed()
-        composeRule.onNodeWithText("SYNC_CENTER_CONTENT").assertDoesNotExist()
+
+        composeRule.onNode(hasTestTag(mainNavTag(Screen.Stats.route))).performClick()
+        composeRule.onNodeWithText("STATS_CONTENT").assertIsDisplayed()
+
+        composeRule.onNode(hasTestTag(mainNavTag(Screen.Settings.route))).performClick()
+        composeRule.onNodeWithText("SETTINGS_CONTENT").assertIsDisplayed()
+    }
+
+    @Test
+    fun calendarPushedFromTimerKeepsTimerSelectedAndSurvivesTabSwitches() {
+        composeRule.setContent { Host() }
+        composeRule.runOnIdle { navController.navigate(TimerRoutes.CALENDAR) }
+        composeRule.onNodeWithText("CALENDAR_CONTENT").assertIsDisplayed()
+        composeRule.onNode(hasTestTag(mainNavTag(Screen.Track.route))).assertIsSelected()
+
+        composeRule.onNode(hasTestTag(mainNavTag(Screen.Settings.route))).performClick()
+        composeRule.onNodeWithText("SETTINGS_CONTENT").assertIsDisplayed()
+
+        composeRule.onNode(hasTestTag(mainNavTag(Screen.Track.route))).performClick()
+        composeRule.onNodeWithText("CALENDAR_CONTENT").assertIsDisplayed()
+
+        composeRule.onNode(hasTestTag(mainNavTag(Screen.Track.route))).performClick()
+        composeRule.onNodeWithText("TRACK_CONTENT").assertIsDisplayed()
+        composeRule.onNodeWithText("CALENDAR_CONTENT").assertDoesNotExist()
+    }
+
+    @Test
+    fun syncCenterOpenedFromSettingsKeepsSettingsSelected() {
+        composeRule.setContent { Host() }
+        composeRule.onNode(hasTestTag(mainNavTag(Screen.Settings.route))).performClick()
+        composeRule.runOnIdle { navController.navigate(SyncRoutes.SYNC_CENTER) }
+        composeRule.onNodeWithText("SYNC_CENTER_CONTENT").assertIsDisplayed()
+        composeRule.onNode(hasTestTag(mainNavTag(Screen.Settings.route))).assertIsSelected()
+
+        composeRule.onNode(hasTestTag(mainNavTag(Screen.Track.route))).performClick()
+        composeRule.onNodeWithText("TRACK_CONTENT").assertIsDisplayed()
     }
 }

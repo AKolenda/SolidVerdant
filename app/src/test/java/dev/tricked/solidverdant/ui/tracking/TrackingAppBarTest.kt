@@ -31,7 +31,7 @@ import org.robolectric.annotation.Config
  * The title previously rendered the user name and organization name on adjacent unlabeled lines,
  * colouring the org line `primary` even when it was inert (single membership), giving no dropdown
  * affordance and no accessibility semantics. These tests pin the three fixed behaviours:
- *  - identical user/org names collapse to a single line (no duplicate-text glitch),
+ *  - the header names the organization once (the account itself lives in Settings),
  *  - a switchable org line exposes a labelled [Role.Button] plus dropdown-arrow affordance,
  *  - an unswitchable org line is plain, inert text with none of that affordance.
  */
@@ -53,12 +53,11 @@ class TrackingAppBarTest {
     private val roleButtonMatcher = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)
 
     @Test
-    fun identical_user_and_org_names_render_a_single_line() {
+    fun header_shows_the_organization_once_without_a_user_line() {
         val memberships = listOf(membership("m1", "Tricked"))
         composeRule.setContent {
             MaterialTheme {
                 TrackingAppBarTitle(
-                    userName = "Tricked",
                     organizationName = "Tricked",
                     canSwitchOrganization = false,
                     memberships = memberships,
@@ -68,7 +67,7 @@ class TrackingAppBarTest {
             }
         }
 
-        // Collapsed: "Tricked" appears exactly once, not duplicated across a user + org line.
+        // The Timer header names only the organization; the account lives in Settings.
         composeRule.onAllNodesWithText("Tricked").assertCountEquals(1)
     }
 
@@ -81,7 +80,6 @@ class TrackingAppBarTest {
         composeRule.setContent {
             MaterialTheme {
                 TrackingAppBarTitle(
-                    userName = "Alice",
                     organizationName = "Acme",
                     canSwitchOrganization = true,
                     memberships = memberships,
@@ -104,7 +102,6 @@ class TrackingAppBarTest {
         composeRule.setContent {
             MaterialTheme {
                 TrackingAppBarTitle(
-                    userName = "Alice",
                     organizationName = "Acme",
                     canSwitchOrganization = false,
                     memberships = memberships,

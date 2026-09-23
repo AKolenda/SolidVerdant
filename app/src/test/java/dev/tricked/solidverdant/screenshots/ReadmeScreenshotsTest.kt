@@ -24,10 +24,13 @@ import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.model.Client
+import dev.tricked.solidverdant.data.model.Membership
+import dev.tricked.solidverdant.data.model.Organization
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.repository.EntryTemplate
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.inbox.InboxIssue
@@ -48,6 +51,7 @@ import dev.tricked.solidverdant.ui.review.ReviewDayUiState
 import dev.tricked.solidverdant.ui.review.ReviewItem
 import dev.tricked.solidverdant.ui.review.ReviewItemType
 import dev.tricked.solidverdant.ui.review.ReviewProject
+import dev.tricked.solidverdant.ui.settings.SettingsContent
 import dev.tricked.solidverdant.ui.statistics.InteractiveBarChart
 import dev.tricked.solidverdant.ui.statistics.KpiGrid
 import dev.tricked.solidverdant.ui.statistics.ProjectTotal
@@ -119,8 +123,8 @@ class ReadmeScreenshotsTest {
                             ),
                             content = {
                                 ScreenshotHost.AppShell(
-                                    destination = destinationFor(screen.name),
-                                    inboxBadgeCount = if (screen.name == "inbox") 4 else 0,
+                                    tab = tabFor(screen.name),
+                                    titleRes = pushedTitleFor(screen.name),
                                     content = screen.content,
                                 )
                             },
@@ -141,8 +145,8 @@ class ReadmeScreenshotsTest {
                                 ),
                                 content = {
                                     ScreenshotHost.AppShell(
-                                        destination = destinationFor(screen.name),
-                                        inboxBadgeCount = if (screen.name == "inbox") 4 else 0,
+                                        tab = tabFor(screen.name),
+                                        titleRes = pushedTitleFor(screen.name),
                                         content = screen.content,
                                     )
                                 },
@@ -154,11 +158,18 @@ class ReadmeScreenshotsTest {
         }
     }
 
-    private fun destinationFor(screenName: String): NavScreen = when (screenName) {
-        "calendar-month", "calendar-week" -> NavScreen.Calendar
+    private fun tabFor(screenName: String): NavScreen = when (screenName) {
         "statistics" -> NavScreen.Stats
-        "inbox", "review", "templates" -> NavScreen.Review
+        "settings", "templates" -> NavScreen.Settings
         else -> NavScreen.Track
+    }
+
+    /** Title bar for destinations pushed on top of a tab; tab roots draw their own headers. */
+    private fun pushedTitleFor(screenName: String): Int? = when (screenName) {
+        "calendar-month", "calendar-week" -> dev.tricked.solidverdant.R.string.nav_calendar
+        "inbox", "review" -> dev.tricked.solidverdant.R.string.review_title
+        "templates" -> dev.tricked.solidverdant.R.string.review_menu_manage_templates
+        else -> null
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -606,7 +617,41 @@ class ReadmeScreenshotsTest {
                 )
             }
         },
-        // 9. Templates / favorites.
+        // 9. Settings tab.
+        Screen("settings") {
+            SettingsContent(
+                user = User(id = "u1", name = "Alex Morgan", email = "alex@acme.studio", timezone = "Europe/Amsterdam"),
+                memberships = emptyList(),
+                currentMembership = Membership("m1", "owner", Organization(id = "org1", name = "Acme Studio", currency = "EUR")),
+                canSwitchOrganization = true,
+                serverEndpoint = "https://time.acme.studio",
+                clientId = "9f3c2a71-5d1e-4c9b-a0f2-1b7e6d4c8a90",
+                appTheme = dev.tricked.solidverdant.data.local.AppThemeMode.SYSTEM,
+                alwaysShowNotifications = true,
+                optimisticRefresh = true,
+                liveUpdateEnabled = false,
+                autoClearEntryFieldsAfterStop = true,
+                clearDescriptionAfterStop = false,
+                longTimerHours = 4,
+                onMembershipChange = {},
+                onAppThemeChange = {},
+                onAlwaysShowNotificationsChange = {},
+                onOptimisticRefreshChange = {},
+                onLiveUpdateEnabledChange = {},
+                onAutoClearEntryFieldsAfterStopChange = {},
+                onClearDescriptionAfterStopChange = {},
+                onLongTimerHoursChange = {},
+                onOpenReminderSettings = {},
+                onOpenManageTemplates = {},
+                onOpenSyncCenter = {},
+                onOpenPrivacy = {},
+                onLogout = {},
+                liveUpdatesSupported = true,
+                systemLiveUpdatesEnabled = true,
+                onRequestNotificationPermission = {},
+            )
+        },
+        // 10. Templates / favorites.
         Screen("templates") {
             val templates = listOf(
                 EntryTemplate("tm1", "org1", "Deep work", "p1", "t1", "Focus block", listOf("tag1"), true, true, 0, 0L),

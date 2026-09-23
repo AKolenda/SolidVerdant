@@ -195,8 +195,8 @@ class CalendarMetadataCatalogueE2eTest {
     }
 
     private fun openCalendar(composeRule: ComposeTestRule) {
-        composeRule.waitUntilAtLeastOneExists(hasTestTag("main_nav_calendar"), WAIT_MS)
-        composeRule.onNodeWithTag("main_nav_calendar", useUnmergedTree = true).performClick()
+        composeRule.waitUntilAtLeastOneExists(hasTestTag("track_open_calendar"), WAIT_MS)
+        composeRule.onNodeWithTag("track_open_calendar", useUnmergedTree = true).performClick()
         composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_WEEK_GRID), WAIT_MS)
     }
 

@@ -9,6 +9,7 @@ package dev.tricked.solidverdant.e2e
 import dev.tricked.solidverdant.ui.calendar.CalendarTestTags
 import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
 import dev.tricked.solidverdant.ui.login.LoginTestTags
+import dev.tricked.solidverdant.ui.settings.SettingsTestTags
 import dev.tricked.solidverdant.ui.sync.SyncCenterTestTags
 import dev.tricked.solidverdant.ui.tile.ProjectSelectionTestTags
 import dev.tricked.solidverdant.ui.tracking.TrackingTestTags
@@ -27,14 +28,18 @@ object TestTags {
     const val TRACK_ENTRY_ROW = TrackingTestTags.ENTRY_ROW
     const val TRACK_START_BUTTON = TrackingTestTags.START_BUTTON
     const val TRACK_RESET_FIELDS_BUTTON = TrackingTestTags.RESET_FIELDS_BUTTON
-    const val TRACK_AUTO_CLEAR_FIELDS_SWITCH = TrackingTestTags.AUTO_CLEAR_FIELDS_SWITCH
     const val TRACK_STOP_BUTTON = TrackingTestTags.STOP_BUTTON
-    const val TRACK_SETTINGS_BUTTON = TrackingTestTags.SETTINGS_BUTTON
-    const val TRACK_LIVE_UPDATE_SWITCH = TrackingTestTags.LIVE_UPDATE_SWITCH
     const val TRACK_REFRESH_BUTTON = TrackingTestTags.REFRESH_BUTTON
+    const val TRACK_OPEN_CALENDAR = TrackingTestTags.OPEN_CALENDAR_BUTTON
+    const val TRACK_OPEN_REVIEW = TrackingTestTags.OPEN_REVIEW_BUTTON
+    const val NAV_TIMER = "main_nav_track"
+    const val NAV_DASHBOARD = "main_nav_stats"
+    const val NAV_SETTINGS = "main_nav_settings"
+    const val SETTINGS_SCREEN = SettingsTestTags.SCREEN
+    const val SETTINGS_LOGOUT_BUTTON = SettingsTestTags.LOGOUT_BUTTON
+    const val SETTINGS_LIVE_UPDATE_SWITCH = SettingsTestTags.LIVE_UPDATE_SWITCH
     const val TRACK_ADD_ENTRY_BUTTON = TrackingTestTags.ADD_ENTRY_BUTTON
     const val TRACK_EDIT_ACTIVE_ENTRY = TrackingTestTags.EDIT_ACTIVE_ENTRY
-    const val TRACK_LOGOUT_BUTTON = TrackingTestTags.LOGOUT_BUTTON
     const val TRACK_ENTRY_EDIT_BUTTON = TrackingTestTags.ENTRY_EDIT_BUTTON
     const val TRACK_ENTRY_DELETE_BUTTON = TrackingTestTags.ENTRY_DELETE_BUTTON
     const val TRACK_CONTINUE_BUTTON = TrackingTestTags.CONTINUE_BUTTON

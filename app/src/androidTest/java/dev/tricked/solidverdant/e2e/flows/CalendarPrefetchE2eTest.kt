@@ -32,7 +32,7 @@ class CalendarPrefetchE2eTest {
         e2e.prepare(E2eFixture.Empty)
         e2e.launchApp()
 
-        e2e.composeRule.onNodeWithTag("main_nav_calendar", useUnmergedTree = true).performClick()
+        e2e.composeRule.onNodeWithTag("track_open_calendar", useUnmergedTree = true).performClick()
         e2e.composeRule.waitUntil(WAIT_MS) { calendarMonthRequests(server).size >= EXPECTED_MONTH_REQUESTS }
 
         val monthEnds = calendarMonthRequests(server).mapNotNull { call ->

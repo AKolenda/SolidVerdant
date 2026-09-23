@@ -38,7 +38,7 @@ class BreakEntryE2eTest {
         e2e.prepare(E2eFixture.Empty)
         e2e.launchApp()
 
-        e2e.composeRule.onNodeWithTag("main_nav_calendar", useUnmergedTree = true).performClick()
+        e2e.composeRule.onNodeWithTag("track_open_calendar", useUnmergedTree = true).performClick()
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ADD_BREAK), WAIT_MS)
         e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_ADD_BREAK, useUnmergedTree = true).performClick()
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ADD_BREAK_MENU), WAIT_MS)

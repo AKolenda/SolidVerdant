@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -36,23 +37,38 @@ import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
 
 /**
- * Container for the review-loop home (the "Review" bottom-nav tab). Hosts a segmented control that
+ * Container for the review-loop home, pushed from the Timer header. Hosts a segmented control that
  * switches between [InboxPane] and [ReviewDayPane], and an overflow menu with entry points to the
  * reminder settings and template management screens.
  *
- * This is shared scaffolding only. The Inbox agent fills in [InboxPane]; the review/reminders agent
+ * Pushed from the Timer header; [onBack] returns there. This is shared scaffolding only. The Inbox agent fills in [InboxPane]; the review/reminders agent
  * fills in [ReviewDayPane] and [ReminderSettingsScreen]; the templates agent fills in the manage
  * templates screen. Navigation callbacks default to no-ops so the container renders standalone.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReviewScreen(onOpenReminderSettings: () -> Unit = {}, onOpenManageTemplates: () -> Unit = {}, onOpenEndOfDayReview: () -> Unit = {}) {
+fun ReviewScreen(
+    onBack: (() -> Unit)? = null,
+    onOpenReminderSettings: () -> Unit = {},
+    onOpenManageTemplates: () -> Unit = {},
+    onOpenEndOfDayReview: () -> Unit = {},
+) {
     var segment by rememberSaveable { mutableStateOf(ReviewSegment.Inbox) }
     var menuExpanded by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text(stringResource(R.string.review_title)) },
+            navigationIcon = {
+                if (onBack != null) {
+                    IconButton(onClick = onBack, modifier = Modifier.testTag("review_back")) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                            contentDescription = stringResource(R.string.review_navigate_back),
+                        )
+                    }
+                }
+            },
             actions = {
                 IconButton(
                     onClick = { menuExpanded = true },

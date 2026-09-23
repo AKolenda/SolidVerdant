@@ -64,8 +64,15 @@ class ScrollingFramePerformanceTest {
             repeat(10) { history.performTouchInput { swipeDown(durationMillis = 300) } }
         }
         val tabs = measureFrames(scenario) {
-            listOf("stats", "track", "calendar", "track", "review", "track").forEach { route ->
-                rule.onAllNodes(hasTestTag("main_nav_$route")).onFirst().performClick()
+            listOf(
+                "main_nav_stats",
+                "main_nav_track",
+                "track_open_calendar",
+                "main_nav_track",
+                "track_open_review",
+                "main_nav_track",
+            ).forEach { tag ->
+                rule.onAllNodes(hasTestTag(tag)).onFirst().performClick()
                 rule.waitForIdle()
             }
         }

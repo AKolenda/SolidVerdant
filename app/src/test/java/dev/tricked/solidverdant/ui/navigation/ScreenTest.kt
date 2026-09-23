@@ -13,7 +13,24 @@ class ScreenTest {
     @Test
     fun bottomNavScreens_haveUniqueStableRoutes() {
         val routes = bottomNavScreens.map { it.route }
-        assertEquals(listOf("track", "calendar", "stats", "review"), routes)
+        assertEquals(listOf("track", "stats", "settings"), routes)
         assertEquals(routes.size, routes.toSet().size)
+    }
+
+    @Test
+    fun pushedDestinations_belongToTheTabThatOpenedThem() {
+        assertEquals("track", selectedTabRoute(listOf(null, "track", TimerRoutes.CALENDAR)))
+        assertEquals("track", selectedTabRoute(listOf(null, "track", TimerRoutes.REVIEW, ReviewRoutes.END_OF_DAY)))
+        assertEquals(
+            "settings",
+            selectedTabRoute(listOf(null, "track", "settings", SyncRoutes.SYNC_CENTER)),
+        )
+        assertEquals("stats", selectedTabRoute(listOf(null, "track", "stats")))
+    }
+
+    @Test
+    fun deepLinkWithoutATabFallsBackToTimer() {
+        assertEquals("track", selectedTabRoute(listOf(null, ReviewRoutes.REMINDER_SETTINGS)))
+        assertEquals("track", selectedTabRoute(emptyList()))
     }
 }

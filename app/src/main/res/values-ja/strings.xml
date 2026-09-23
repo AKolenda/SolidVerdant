@@ -33,7 +33,12 @@
     <string name="all_items">すべての%1$s</string>
     <string name="search_items">%1$sを検索</string>
     <string name="minutes_short">分</string>
-    <string name="nav_track">記録</string><string name="nav_calendar">カレンダー</string><string name="nav_stats">統計</string>
+    <string name="nav_calendar">カレンダー</string>
+    <string name="nav_timer">タイマー</string>
+    <string name="nav_dashboard">ダッシュボード</string>
+    <string name="settings_organization">組織</string>
+    <string name="settings_section_appearance">外観</string>
+    <string name="settings_section_data">データと同期</string>
     <string name="running_entries">実行中</string><string name="tracking_now">現在</string>
     <string name="enable_notifications">通知を有効にする</string>
     <plurals name="collapse_entries">

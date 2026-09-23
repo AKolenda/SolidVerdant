@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-package dev.tricked.solidverdant.ui.tracking
+package dev.tricked.solidverdant.ui.settings
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -60,6 +60,6 @@ class LiveUpdateSettingRowTest {
         }
 
         composeRule.onNodeWithText("Open Android Live Update settings").assertDoesNotExist()
-        composeRule.onNodeWithTag(TrackingTestTags.LIVE_UPDATE_SWITCH).assertExists()
+        composeRule.onNodeWithTag(SettingsTestTags.LIVE_UPDATE_SWITCH).assertExists()
     }
 }

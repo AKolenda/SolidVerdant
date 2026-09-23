@@ -51,16 +51,17 @@ class LargeDataScrollE2eTest {
         e2e.composeRule.waitForTag("project_task_selector")
         e2e.composeRule.swipeTag(TestTags.TRACK_HISTORY_LIST, times = 12)
 
-        e2e.composeRule.tapTag("main_nav_calendar")
+        e2e.composeRule.tapTag("track_open_calendar")
         e2e.composeRule.waitForTag(TestTags.CALENDAR_WEEK_GRID)
         e2e.composeRule.swipeTag(TestTags.CALENDAR_WEEK_GRID, times = 8)
 
-        e2e.composeRule.tapTag("main_nav_stats")
+        e2e.composeRule.tapTag(TestTags.NAV_DASHBOARD)
         e2e.composeRule.waitForTag(TestTags.STATS_SCREEN)
         e2e.composeRule.waitForScrollable()
         e2e.composeRule.swipeScrollable(times = 8)
 
-        e2e.composeRule.tapTag("main_nav_review")
+        e2e.composeRule.tapTag(TestTags.NAV_TIMER)
+        e2e.composeRule.tapTag(TestTags.TRACK_OPEN_REVIEW)
         e2e.composeRule.waitForTag("review_more_actions")
         e2e.composeRule.swipeScrollableIfPresent(times = 8)
 
@@ -69,10 +70,9 @@ class LargeDataScrollE2eTest {
         e2e.composeRule.waitForTag("templates_list")
         e2e.composeRule.swipeScrollable(times = 12)
 
-        // The settings drawer is itself a long, independently scrollable surface.
-        e2e.composeRule.tapTag("main_nav_track")
-        e2e.composeRule.tapTag(TestTags.TRACK_SETTINGS_BUTTON)
-        e2e.composeRule.waitForTag(TestTags.TRACK_LOGOUT_BUTTON)
+        // Settings is itself a long, independently scrollable surface.
+        e2e.composeRule.tapTag(TestTags.NAV_SETTINGS)
+        e2e.composeRule.waitForTag(TestTags.SETTINGS_LOGOUT_BUTTON)
         e2e.composeRule.swipeScrollable(times = 8)
     }
 }

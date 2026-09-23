@@ -43,7 +43,7 @@ class CalendarLoadRecoveryE2eTest {
         server.setTimeEntriesRequestsFailing(true)
         e2e.launchApp()
 
-        e2e.composeRule.onNodeWithTag("main_nav_calendar", useUnmergedTree = true).performClick()
+        e2e.composeRule.onNodeWithTag("track_open_calendar", useUnmergedTree = true).performClick()
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_LOAD_ERROR), WAIT_MS)
         val failedRequestCount = server.callsMatching("GET", "/time-entries").size
 

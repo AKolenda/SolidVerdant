@@ -69,7 +69,7 @@ class CalendarRunningTimerE2eTest {
         val originalHandle = e2e.prepare(E2eFixture.Active(original))
         e2e.launchApp()
 
-        e2e.composeRule.onNodeWithTag("main_nav_calendar", useUnmergedTree = true).performClick()
+        e2e.composeRule.onNodeWithTag("track_open_calendar", useUnmergedTree = true).performClick()
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_CONTENT_READY), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_RUNNING_TIMER), WAIT_MS)
 
@@ -104,7 +104,7 @@ class CalendarRunningTimerE2eTest {
         val originalHandle = e2e.prepare(E2eFixture.Active(original))
         e2e.launchApp()
 
-        e2e.composeRule.onNodeWithTag("main_nav_calendar", useUnmergedTree = true).performClick()
+        e2e.composeRule.onNodeWithTag("track_open_calendar", useUnmergedTree = true).performClick()
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_CONTENT_READY), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_RUNNING_TIMER), WAIT_MS)
         val entryTag = "week-entry-${requireNotNull(originalHandle.serverId)}"

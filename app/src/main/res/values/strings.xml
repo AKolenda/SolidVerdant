@@ -116,9 +116,12 @@
     <string name="sync_conflict_edit_locked">Resolve this sync conflict in Review before saving edits.</string>
 
     <!-- Bottom Navigation -->
-    <string name="nav_track">Track</string>
     <string name="nav_calendar">Calendar</string>
-    <string name="nav_stats">Stats</string>
+    <string name="nav_timer">Timer</string>
+    <string name="nav_dashboard">Dashboard</string>
+    <string name="settings_organization">Organization</string>
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_section_data">Data &amp; sync</string>
 
     <!-- Tile -->
     <string name="tile_label">Time Tracking</string>
