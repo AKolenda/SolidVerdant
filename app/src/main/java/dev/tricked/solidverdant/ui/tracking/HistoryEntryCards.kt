@@ -86,8 +86,10 @@ import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.ui.theme.syncFailed
 import dev.tricked.solidverdant.ui.theme.syncPending
 import dev.tricked.solidverdant.ui.theme.tabular
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /** Bold week label ("This week", "Last week" or "Aug 17 – Aug 23") with the week total. */
 @Composable
@@ -127,12 +129,12 @@ internal fun HistoryWeekHeader(week: HistoryListItem.Week) {
     }
 }
 
-/** Grey "Today" / "Yesterday" / date label with the day total; tapping opens the jump-to-date picker. */
+/** Grey "Today" / "Yesterday" / "Wed, Jun 10" label with the day total; tapping opens the jump-to-date picker. */
 @Composable
 internal fun HistoryDayHeader(day: HistoryDay, zone: ZoneId, onClick: () -> Unit) {
     val context = LocalContext.current
     val locale = appLocale()
-    val label = remember(day.date, zone, locale) { formatDate(day.date, context, zone, locale) }
+    val label = remember(day.date, zone, locale) { formatHistoryDayLabel(day.date, context, zone, locale) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -638,3 +640,16 @@ private const val HALF_TURN_DEGREES = 180f
 private const val MIN_TEXT_CONTRAST = 4.5f
 private const val RELATIVE_LUMINANCE_FLARE = 0.05f
 private const val CONTRAST_BLEND_STEP = 0.1f
+
+/** The day label: the weekday plus day and month, with the year only outside the current year. */
+internal fun formatHistoryDayLabel(date: LocalDate, context: android.content.Context, zone: ZoneId, locale: Locale): String {
+    val today = LocalDate.now(zone)
+    return when (date) {
+        today -> context.getString(R.string.today)
+        today.minusDays(1) -> context.getString(R.string.yesterday)
+        else -> {
+            val skeleton = if (date.year == today.year) "EEEMMMd" else "EEEMMMdy"
+            date.format(DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, skeleton), locale))
+        }
+    }
+}
