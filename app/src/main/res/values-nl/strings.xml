@@ -279,6 +279,9 @@
     <string name="theme_system">Systeem</string>
     <string name="theme_light">Licht</string>
     <string name="theme_neo">Neo</string>
+    <string name="theme_dark">Donker</string>
+    <string name="theme_verdant">Verdant</string>
+    <string name="theme_dynamic">Achtergrond</string>
     <string name="pause">Pauzeren</string>
     <string name="resume">Hervatten</string>
     <string name="paused">Gepauzeerd</string>

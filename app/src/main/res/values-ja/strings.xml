@@ -266,6 +266,9 @@
     <string name="theme_system">システム</string>
     <string name="theme_light">ライト</string>
     <string name="theme_neo">ネオ</string>
+    <string name="theme_dark">ダーク</string>
+    <string name="theme_verdant">ヴァーダント</string>
+    <string name="theme_dynamic">壁紙</string>
     <string name="pause">一時停止</string>
     <string name="resume">再開</string>
     <string name="paused">一時停止中</string>

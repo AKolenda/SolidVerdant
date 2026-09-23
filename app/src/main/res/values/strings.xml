@@ -288,6 +288,9 @@
     <string name="theme_system">System</string>
     <string name="theme_light">Light</string>
     <string name="theme_neo">Neo</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_verdant">Verdant</string>
+    <string name="theme_dynamic">Wallpaper</string>
     <string name="pause">Pause</string>
     <string name="resume">Resume</string>
     <string name="paused">Paused</string>

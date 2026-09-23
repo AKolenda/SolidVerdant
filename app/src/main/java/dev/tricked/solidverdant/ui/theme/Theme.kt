@@ -9,6 +9,7 @@ package dev.tricked.solidverdant.ui.theme
 import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -22,8 +23,85 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import dev.tricked.solidverdant.data.local.AppThemeMode
 
-private val DarkColorScheme = darkColorScheme()
-private val LightColorScheme = lightColorScheme()
+// Default light/dark palettes follow the iOS system colours (grouped background, system blue,
+// system red, separator greys) so the app reads like a native grouped-list time tracker.
+private val ZenLightColorScheme = lightColorScheme(
+    primary = Color(0xFF007AFF),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFDCEBFF),
+    onPrimaryContainer = Color(0xFF00316B),
+    inversePrimary = Color(0xFF0A84FF),
+    secondary = Color(0xFF636366),
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFE5E5EA),
+    onSecondaryContainer = Color(0xFF1C1C1E),
+    tertiary = Color(0xFFC76A00),
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFFFE8CC),
+    onTertiaryContainer = Color(0xFF4A2800),
+    error = Color(0xFFFF3B30),
+    onError = Color.White,
+    errorContainer = Color(0xFFFFE5E3),
+    onErrorContainer = Color(0xFF7A0A04),
+    background = Color(0xFFF2F2F7),
+    onBackground = Color(0xFF000000),
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF000000),
+    surfaceVariant = Color(0xFFEEEEF0),
+    onSurfaceVariant = Color(0xFF8A8A8E),
+    surfaceTint = Color.Transparent,
+    inverseSurface = Color(0xFF1C1C1E),
+    inverseOnSurface = Color(0xFFF2F2F7),
+    outline = Color(0xFFC6C6C8),
+    outlineVariant = Color(0xFFE5E5EA),
+    scrim = Color(0xFF000000),
+    surfaceBright = Color(0xFFFFFFFF),
+    surfaceDim = Color(0xFFF2F2F7),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceContainerLow = Color(0xFFFFFFFF),
+    surfaceContainer = Color(0xFFFFFFFF),
+    surfaceContainerHigh = Color(0xFFF2F2F7),
+    surfaceContainerHighest = Color(0xFFEEEEF0),
+)
+
+private val ZenDarkColorScheme = darkColorScheme(
+    primary = Color(0xFF0A84FF),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF0B2A4D),
+    onPrimaryContainer = Color(0xFFB8D9FF),
+    inversePrimary = Color(0xFF007AFF),
+    secondary = Color(0xFFAEAEB2),
+    onSecondary = Color(0xFF000000),
+    secondaryContainer = Color(0xFF3A3A3C),
+    onSecondaryContainer = Color(0xFFF2F2F7),
+    tertiary = Color(0xFFFF9F0A),
+    onTertiary = Color(0xFF000000),
+    tertiaryContainer = Color(0xFF4A2E00),
+    onTertiaryContainer = Color(0xFFFFDDB0),
+    error = Color(0xFFFF453A),
+    onError = Color.White,
+    errorContainer = Color(0xFF4D1210),
+    onErrorContainer = Color(0xFFFFB4AE),
+    background = Color(0xFF000000),
+    onBackground = Color(0xFFFFFFFF),
+    surface = Color(0xFF1C1C1E),
+    onSurface = Color(0xFFFFFFFF),
+    surfaceVariant = Color(0xFF2C2C2E),
+    onSurfaceVariant = Color(0xFF98989F),
+    surfaceTint = Color.Transparent,
+    inverseSurface = Color(0xFFF2F2F7),
+    inverseOnSurface = Color(0xFF1C1C1E),
+    outline = Color(0xFF48484A),
+    outlineVariant = Color(0xFF38383A),
+    scrim = Color(0xFF000000),
+    surfaceBright = Color(0xFF2C2C2E),
+    surfaceDim = Color(0xFF000000),
+    surfaceContainerLowest = Color(0xFF000000),
+    surfaceContainerLow = Color(0xFF1C1C1E),
+    surfaceContainer = Color(0xFF1C1C1E),
+    surfaceContainerHigh = Color(0xFF2C2C2E),
+    surfaceContainerHighest = Color(0xFF3A3A3C),
+)
 
 private val VerdantLightColorScheme = lightColorScheme(
     primary = Color(0xFF386A20),
@@ -82,23 +160,31 @@ private val NeoColorScheme = darkColorScheme(
     outlineVariant = Color(0xFF243549),
 )
 
+/** Resolves the colour scheme for [themeMode]; [darkTheme] only matters for [AppThemeMode.SYSTEM]/[AppThemeMode.DYNAMIC]. */
+@Composable
+private fun colorSchemeFor(themeMode: AppThemeMode, darkTheme: Boolean): ColorScheme = when (themeMode) {
+    AppThemeMode.SYSTEM -> if (darkTheme) ZenDarkColorScheme else ZenLightColorScheme
+    AppThemeMode.LIGHT -> ZenLightColorScheme
+    AppThemeMode.DARK -> ZenDarkColorScheme
+    AppThemeMode.VERDANT -> VerdantLightColorScheme
+    AppThemeMode.NEO -> NeoColorScheme
+    AppThemeMode.DYNAMIC -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val context = LocalContext.current
+        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    } else if (darkTheme) {
+        ZenDarkColorScheme
+    } else {
+        ZenLightColorScheme
+    }
+}
+
 @Composable
 fun SolidVerdantTheme(
     themeMode: AppThemeMode = AppThemeMode.SYSTEM,
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = when {
-        themeMode == AppThemeMode.LIGHT -> VerdantLightColorScheme
-        themeMode == AppThemeMode.NEO -> NeoColorScheme
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
+    val colorScheme = colorSchemeFor(themeMode, darkTheme)
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -106,8 +192,7 @@ fun SolidVerdantTheme(
             val window = (view.context as Activity).window
             val insetsController = WindowCompat.getInsetsController(window, view)
 
-            val useLightSystemBars = themeMode == AppThemeMode.LIGHT ||
-                (themeMode == AppThemeMode.SYSTEM && !darkTheme)
+            val useLightSystemBars = colorScheme.isLight
             insetsController.isAppearanceLightStatusBars = useLightSystemBars
             insetsController.isAppearanceLightNavigationBars = useLightSystemBars
         }
@@ -115,6 +200,8 @@ fun SolidVerdantTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
+        typography = ZenTypography,
+        shapes = ZenShapes,
         content = content,
     )
 }

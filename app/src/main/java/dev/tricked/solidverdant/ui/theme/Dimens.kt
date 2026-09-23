@@ -35,6 +35,10 @@ object Dimens {
 
     // --- Corner radius (matches MaterialTheme.shapes.small used by calendar blocks) ---
     val CornerRadius = 8.dp
+    val RadiusXs = 6.dp
+    val RadiusMd = 12.dp
+    val RadiusLg = 14.dp
+    val RadiusXl = 22.dp
 
     // --- Card content metrics (measured from KPI / donut / trend cards) ---
     val CardContentPadding = 16.dp

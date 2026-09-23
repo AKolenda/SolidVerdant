@@ -39,7 +39,12 @@ private val Context.settingsDataStore: DataStore<Preferences> by preferencesData
 enum class AppThemeMode {
     SYSTEM,
     LIGHT,
+    DARK,
+    VERDANT,
     NEO,
+
+    /** Wallpaper-derived Material You colours; only offered on Android 12+. */
+    DYNAMIC,
 }
 
 /**

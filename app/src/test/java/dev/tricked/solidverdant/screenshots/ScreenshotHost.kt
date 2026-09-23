@@ -68,11 +68,11 @@ import java.util.Locale
  * code changes required elsewhere.
  */
 enum class ThemeAxis(val id: String, val mode: AppThemeMode) {
-    /** The Verdant light scheme. */
+    /** The default light scheme. */
     LIGHT("light", AppThemeMode.LIGHT),
 
-    /** The "Neo" dark scheme — the cohesive README hero style. */
-    DARK("dark", AppThemeMode.NEO),
+    /** The default dark scheme — the cohesive README hero style. */
+    DARK("dark", AppThemeMode.DARK),
 }
 
 enum class DeviceAxis(val id: String, val widthDp: Int, val heightDp: Int) {
@@ -91,7 +91,7 @@ object ScreenshotMatrix {
     val devices: List<DeviceAxis> = listOf(DeviceAxis.PHONE, DeviceAxis.TABLET)
     val locales: List<LocaleAxis> = listOf(LocaleAxis.ENGLISH, LocaleAxis.JAPANESE)
 
-    /** The cohesive README hero style: Neo dark + phone. */
+    /** The cohesive README hero style: dark + phone. */
     val readmeTheme: ThemeAxis = ThemeAxis.DARK
     val readmeDevice: DeviceAxis = DeviceAxis.PHONE
 }

@@ -216,6 +216,8 @@ import dev.tricked.solidverdant.ui.components.SearchableSingleSelectDialog
 import dev.tricked.solidverdant.ui.components.SyncChip
 import dev.tricked.solidverdant.ui.components.TagsSelector
 import dev.tricked.solidverdant.ui.localization.appLocale
+import dev.tricked.solidverdant.ui.theme.labelRes
+import dev.tricked.solidverdant.ui.theme.selectableThemeModes
 import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.ui.theme.syncFailed
 import dev.tricked.solidverdant.ui.theme.syncPending
@@ -761,16 +763,11 @@ fun TrackingScreen(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            AppThemeMode.entries.forEach { theme ->
-                                val label = when (theme) {
-                                    AppThemeMode.SYSTEM -> R.string.theme_system
-                                    AppThemeMode.LIGHT -> R.string.theme_light
-                                    AppThemeMode.NEO -> R.string.theme_neo
-                                }
+                            selectableThemeModes().forEach { theme ->
                                 FilterChip(
                                     selected = appTheme == theme,
                                     onClick = { onAppThemeChange(theme) },
-                                    label = { Text(stringResource(label)) }
+                                    label = { Text(stringResource(theme.labelRes)) }
                                 )
                             }
                         }
