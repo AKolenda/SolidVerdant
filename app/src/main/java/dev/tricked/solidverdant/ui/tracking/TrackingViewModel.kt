@@ -57,6 +57,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -225,6 +226,8 @@ data class TrackingUiState(
     val conflictedEntryIds: Set<String> = emptySet(),
     /** Account temporal-policy zone; history filtering and new-entry pickers use it. */
     val zone: ZoneId = ZoneId.systemDefault(),
+    /** Account temporal-policy week start; history week headers begin on this day. */
+    val firstDayOfWeek: DayOfWeek = DayOfWeek.MONDAY,
     /**
      * Roadmap #13: id of an entry the UI should open for editing right after a duplicate/split
      * (the freshly created copy / second half). One-shot: cleared via [TrackingViewModel.consumeEntryToEdit].
@@ -281,10 +284,12 @@ class TrackingViewModel @Inject constructor(
                 editingTags = cached.activeEntry?.tags?.map { it.id }.orEmpty(),
                 editingBillable = cached.activeEntry?.billable ?: false,
                 zone = currentPolicy.zone,
+                firstDayOfWeek = currentPolicy.firstDayOfWeek,
             )
         } ?: TrackingUiState(
             cachedContinueEntry = settingsDataStore.getCachedContinueEntry(),
             zone = currentPolicy.zone,
+            firstDayOfWeek = currentPolicy.firstDayOfWeek,
         ),
     )
     val uiState: StateFlow<TrackingUiState> = _uiState.asStateFlow()
@@ -293,7 +298,7 @@ class TrackingViewModel @Inject constructor(
         viewModelScope.launch {
             temporalPolicyProvider.policy.collect { policy ->
                 currentPolicy = policy
-                _uiState.value = _uiState.value.copy(zone = policy.zone)
+                _uiState.value = _uiState.value.copy(zone = policy.zone, firstDayOfWeek = policy.firstDayOfWeek)
             }
         }
     }
