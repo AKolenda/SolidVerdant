@@ -62,19 +62,24 @@ The shots below are generated on the JVM (no device) by the Roborazzi + Robolect
 
 <table>
   <tr>
-    <td align="center"><img src=".github/screenshots/readme/track.png" width="240" alt="Timer tab with a running timer above the history" /><br /><sub><b>Timer</b><br />Running timer &amp; history</sub></td>
-    <td align="center"><img src=".github/screenshots/readme/track-idle.png" width="240" alt="Timer tab ready to start a new entry" /><br /><sub><b>Timer — idle</b><br />Next entry, project &amp; tags</sub></td>
+    <td align="center"><img src=".github/screenshots/readme/track.png" width="240" alt="Time Tracker history with the running timer docked at the bottom" /><br /><sub><b>Time Tracker</b><br />History &amp; docked running timer</sub></td>
+    <td align="center"><img src=".github/screenshots/readme/track-idle.png" width="240" alt="Start timer sheet for the next entry" /><br /><sub><b>Start timer</b><br />Next entry, project &amp; tags</sub></td>
     <td align="center"><img src=".github/screenshots/readme/edit-entry.png" width="240" alt="Edit time entry sheet" /><br /><sub><b>Edit Entry</b><br />Grouped edit sheet</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src=".github/screenshots/readme/statistics.png" width="240" alt="Dashboard with period selector and stacked daily chart" /><br /><sub><b>Dashboard</b><br />Periods, by day &amp; by project</sub></td>
-    <td align="center"><img src=".github/screenshots/readme/settings.png" width="240" alt="Settings tab" /><br /><sub><b>Settings</b><br />Account, appearance &amp; sync</sub></td>
-    <td align="center"><img src=".github/screenshots/readme/calendar-week.png" width="240" alt="Calendar week view with overlay events" /><br /><sub><b>Calendar — Week</b><br />Opened from the Timer header</sub></td>
+    <td align="center"><img src=".github/screenshots/readme/menu.png" width="240" alt="Side menu with the account, organization and destinations" /><br /><sub><b>Menu</b><br />Account, organization &amp; destinations</sub></td>
+    <td align="center"><img src=".github/screenshots/readme/calendar-day.png" width="240" alt="Calendar day view with the week strip and day total" /><br /><sub><b>Calendar — Day</b><br />Week strip &amp; day total</sub></td>
+    <td align="center"><img src=".github/screenshots/readme/calendar-week.png" width="240" alt="Calendar week view with overlay events" /><br /><sub><b>Calendar — Week</b><br />Device-calendar overlay</sub></td>
   </tr>
   <tr>
     <td align="center"><img src=".github/screenshots/readme/calendar-month.png" width="240" alt="Calendar month view" /><br /><sub><b>Calendar — Month</b><br />Month overview</sub></td>
+    <td align="center"><img src=".github/screenshots/readme/statistics.png" width="240" alt="Reports with period selector and stacked daily chart" /><br /><sub><b>Reports</b><br />Periods, by day &amp; by project</sub></td>
+    <td align="center"><img src=".github/screenshots/readme/settings.png" width="240" alt="Settings" /><br /><sub><b>Settings</b><br />Account, appearance &amp; sync</sub></td>
+  </tr>
+  <tr>
     <td align="center"><img src=".github/screenshots/readme/inbox.png" width="240" alt="Time Inbox review issue cards" /><br /><sub><b>Time Inbox</b><br />Review issue cards</sub></td>
     <td align="center"><img src=".github/screenshots/readme/templates.png" width="240" alt="Templates and favorites" /><br /><sub><b>Templates</b><br />Favorites &amp; quick starts</sub></td>
+    <td></td>
   </tr>
 </table>
 

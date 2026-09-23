@@ -20,7 +20,7 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
-class TrackingControlsRetentionTest {
+class StartTimerFormRetentionTest {
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -30,7 +30,7 @@ class TrackingControlsRetentionTest {
         var resetClicked = false
         composeRule.setContent {
             MaterialTheme {
-                TrackingControls(
+                StartTimerForm(
                     uiState = TrackingUiState(
                         editingDescription = "Precision setup",
                         editingProjectId = "project-1",
@@ -44,9 +44,6 @@ class TrackingControlsRetentionTest {
                     onTagsChange = {},
                     onBillableChange = {},
                     onStart = {},
-                    onStop = {},
-                    onPause = {},
-                    onResume = {},
                 )
             }
         }
@@ -62,7 +59,7 @@ class TrackingControlsRetentionTest {
     fun blank_idle_fields_do_not_show_reset_button() {
         composeRule.setContent {
             MaterialTheme {
-                TrackingControls(
+                StartTimerForm(
                     uiState = TrackingUiState(),
                     onDescriptionChange = {},
                     onProjectChange = {},
@@ -70,9 +67,6 @@ class TrackingControlsRetentionTest {
                     onTagsChange = {},
                     onBillableChange = {},
                     onStart = {},
-                    onStop = {},
-                    onPause = {},
-                    onResume = {},
                 )
             }
         }
@@ -84,7 +78,7 @@ class TrackingControlsRetentionTest {
     fun auto_clear_enabled_hides_reset_even_when_fields_have_values() {
         composeRule.setContent {
             MaterialTheme {
-                TrackingControls(
+                StartTimerForm(
                     uiState = TrackingUiState(editingDescription = "Prepared work"),
                     onDescriptionChange = {},
                     onProjectChange = {},
@@ -93,9 +87,6 @@ class TrackingControlsRetentionTest {
                     onTagsChange = {},
                     onBillableChange = {},
                     onStart = {},
-                    onStop = {},
-                    onPause = {},
-                    onResume = {},
                 )
             }
         }

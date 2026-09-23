@@ -9,6 +9,7 @@ package dev.tricked.solidverdant.e2e
 import dev.tricked.solidverdant.ui.calendar.CalendarTestTags
 import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
 import dev.tricked.solidverdant.ui.login.LoginTestTags
+import dev.tricked.solidverdant.ui.navigation.MAIN_MENU_BUTTON_TAG
 import dev.tricked.solidverdant.ui.settings.SettingsTestTags
 import dev.tricked.solidverdant.ui.sync.SyncCenterTestTags
 import dev.tricked.solidverdant.ui.tile.ProjectSelectionTestTags
@@ -30,10 +31,14 @@ object TestTags {
     const val TRACK_RESET_FIELDS_BUTTON = TrackingTestTags.RESET_FIELDS_BUTTON
     const val TRACK_STOP_BUTTON = TrackingTestTags.STOP_BUTTON
     const val TRACK_REFRESH_BUTTON = TrackingTestTags.REFRESH_BUTTON
-    const val TRACK_OPEN_CALENDAR = TrackingTestTags.OPEN_CALENDAR_BUTTON
-    const val TRACK_OPEN_REVIEW = TrackingTestTags.OPEN_REVIEW_BUTTON
+    const val TRACK_TIMER_FAB = TrackingTestTags.TIMER_FAB
+    const val TRACK_START_TIMER_ACTION = TrackingTestTags.START_TIMER_ACTION
+    const val TRACK_START_TIMER_SHEET = TrackingTestTags.START_TIMER_SHEET
+    const val MAIN_MENU_BUTTON = MAIN_MENU_BUTTON_TAG
     const val NAV_TIMER = "main_nav_track"
+    const val NAV_CALENDAR = "main_nav_calendar"
     const val NAV_DASHBOARD = "main_nav_stats"
+    const val NAV_REVIEW = "main_nav_review"
     const val NAV_SETTINGS = "main_nav_settings"
     const val SETTINGS_SCREEN = SettingsTestTags.SCREEN
     const val SETTINGS_LOGOUT_BUTTON = SettingsTestTags.LOGOUT_BUTTON
@@ -77,7 +82,7 @@ object TestTags {
     const val CALENDAR_MODE_WEEK = CalendarTestTags.MODE_WEEK
     const val CALENDAR_MODE_DAY = CalendarTestTags.MODE_DAY
     const val CALENDAR_ADD_ENTRY = CalendarTestTags.ADD_ENTRY
-    const val CALENDAR_ADD_BREAK = CalendarTestTags.ADD_BREAK
+    const val CALENDAR_MORE_ACTIONS = CalendarTestTags.MORE_ACTIONS
     const val CALENDAR_ADD_BREAK_MENU = CalendarTestTags.ADD_BREAK_MENU
     const val CALENDAR_OVERLAY = CalendarTestTags.OVERLAY
     const val CALENDAR_OVERLAY_TOGGLE = CalendarTestTags.OVERLAY_TOGGLE

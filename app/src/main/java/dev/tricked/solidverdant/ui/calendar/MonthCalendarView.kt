@@ -48,7 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -136,6 +136,7 @@ fun MonthCalendarView(
                 onNextMonth = onNextMonth,
                 onSelectDate = onSelectDate,
                 onCollapse = { monthExpanded = false },
+                today = now.atZone(state.zone).toLocalDate(),
             )
         }
 
@@ -165,6 +166,7 @@ private fun MonthCalendarGrid(
     onNextMonth: () -> Unit,
     onSelectDate: (LocalDate) -> Unit,
     onCollapse: () -> Unit,
+    today: LocalDate,
 ) {
     Column {
         Row(
@@ -196,12 +198,12 @@ private fun MonthCalendarGrid(
         if (state.isLoading) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space4))
         }
-        MonthCalendarGridWeeks(state, onSelectDate, onCollapse)
+        MonthCalendarGridWeeks(state, today, onSelectDate, onCollapse)
     }
 }
 
 @Composable
-private fun MonthCalendarGridWeeks(state: CalendarUiState, onSelectDate: (LocalDate) -> Unit, onCollapse: () -> Unit) {
+private fun MonthCalendarGridWeeks(state: CalendarUiState, today: LocalDate, onSelectDate: (LocalDate) -> Unit, onCollapse: () -> Unit) {
     val weeks = monthGridWeeks(state.visibleMonth, state.weekStart)
     val maxSeconds = state.bucketsByDate.values.maxOfOrNull { it.totalSeconds } ?: 1L
     weeks.forEach { week ->
@@ -211,6 +213,7 @@ private fun MonthCalendarGridWeeks(state: CalendarUiState, onSelectDate: (LocalD
                     day = day,
                     state = state,
                     maxSeconds = maxSeconds,
+                    today = today,
                     onSelectDate = onSelectDate,
                     onCollapse = onCollapse,
                 )
@@ -224,26 +227,36 @@ private fun RowScope.MonthCalendarDay(
     day: LocalDate,
     state: CalendarUiState,
     maxSeconds: Long,
+    today: LocalDate,
     onSelectDate: (LocalDate) -> Unit,
     onCollapse: () -> Unit,
 ) {
     val bucket = state.bucketsByDate[day]
     val inMonth = java.time.YearMonth.from(day) == state.visibleMonth
     val selected = day == state.selectedDate
+    val isToday = day == today
     val intensity = ((bucket?.totalSeconds ?: 0L).toFloat() / maxSeconds).coerceIn(0f, 1f)
+    val colors = MaterialTheme.colorScheme
+    // Grey cards like the entry cards; tracked days warm toward the accent by their share of the
+    // busiest day, and the selected day takes the accent itself.
+    val background = when {
+        selected -> colors.primary
+        else -> lerp(colors.surfaceContainerHighest, colors.primaryContainer, intensity * MONTH_HEAT_MAX)
+    }
+    val dateColor = when {
+        selected -> colors.onPrimary
+        isToday -> colors.primary
+        inMonth -> colors.onSurface
+        else -> colors.onSurfaceVariant
+    }
+    val totalColor = if (selected) colors.onPrimary else colors.onSurfaceVariant
     Column(
         modifier = Modifier
             .weight(1f)
             .aspectRatio(1f)
             .padding(Dimens.Space2)
             .clip(MaterialTheme.shapes.small)
-            .background(
-                if (selected) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f + 0.55f * intensity)
-                },
-            )
+            .background(background)
             .clickable {
                 onSelectDate(day)
                 onCollapse()
@@ -255,26 +268,14 @@ private fun RowScope.MonthCalendarDay(
         Text(
             text = day.dayOfMonth.toString(),
             style = MaterialTheme.typography.bodySmall,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = calendarDayContentColor(
-                selected = selected,
-                isToday = false,
-                primary = MaterialTheme.colorScheme.primary,
-                onPrimaryContainer = MaterialTheme.colorScheme.onPrimaryContainer,
-                default = if (inMonth) Color.Unspecified else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
-            ),
+            fontWeight = if (selected || isToday) FontWeight.Bold else FontWeight.Normal,
+            color = dateColor,
         )
         bucket?.let {
             Text(
                 text = formatDuration(it.totalSeconds),
                 style = MaterialTheme.typography.labelSmall,
-                color = calendarDayContentColor(
-                    selected = selected,
-                    isToday = false,
-                    primary = MaterialTheme.colorScheme.primary,
-                    onPrimaryContainer = MaterialTheme.colorScheme.onPrimaryContainer,
-                    default = Color.Unspecified,
-                ),
+                color = totalColor,
             )
         }
     }
@@ -512,3 +513,6 @@ fun DayTimeline(
         }
     }
 }
+
+/** How far the busiest day blends from the grey card toward the accent container. */
+private const val MONTH_HEAT_MAX = 0.7f

@@ -10,7 +10,6 @@ package dev.tricked.solidverdant.e2e.flows
 
 import android.content.Context
 import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
@@ -22,6 +21,8 @@ import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.e2e.E2eFixture
 import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.TestTags
+import dev.tricked.solidverdant.e2e.robots.chooseCalendarMenuItem
+import dev.tricked.solidverdant.e2e.robots.openCalendarFromMenu
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -49,15 +50,14 @@ class CalendarStaleLoadRecoveryE2eTest {
         )
         e2e.launchApp()
 
-        e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag("track_open_calendar"), WAIT_MS)
-        e2e.composeRule.onNodeWithTag("track_open_calendar", useUnmergedTree = true).performClick()
+        e2e.composeRule.openCalendarFromMenu()
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_WEEK_GRID), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_CONTENT_READY), WAIT_MS)
         val entryTag = "week-entry-${requireNotNull(fixture.serverId)}"
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(entryTag), WAIT_MS)
 
         server.setTimeEntriesRequestsFailing(true)
-        e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_MODE_DAY, useUnmergedTree = true).performClick()
+        e2e.composeRule.chooseCalendarMenuItem(TestTags.CALENDAR_MODE_DAY)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_LOAD_ERROR), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(entryTag), WAIT_MS)
 

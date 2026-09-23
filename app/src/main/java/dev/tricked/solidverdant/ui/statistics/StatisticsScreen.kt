@@ -14,13 +14,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -50,7 +48,7 @@ import androidx.core.graphics.toColorInt
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tricked.solidverdant.R
-import dev.tricked.solidverdant.ui.navigation.LocalFloatingBarInset
+import dev.tricked.solidverdant.ui.navigation.MainTopBar
 import dev.tricked.solidverdant.ui.theme.Dimens
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -153,7 +151,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
         )
         SnackbarHost(
             hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = LocalFloatingBarInset.current),
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
         )
     }
 
@@ -180,71 +178,63 @@ internal fun StatisticsContent(
     onBucketClick: (TrendBucket) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .padding(bottom = LocalFloatingBarInset.current + Dimens.Space24),
-        verticalArrangement = Arrangement.spacedBy(Dimens.Space16),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = Dimens.Space16 + Dimens.Space4, top = Dimens.Space16, end = Dimens.Space8),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.nav_dashboard),
-                style = MaterialTheme.typography.headlineLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.weight(1f),
-            )
-            ExportAction(exporting = exporting, onExport = onExport)
-        }
-
-        StatRangeControls(range = state.range, onSelect = onRangeChange)
-
-        StatFilterBar(
-            filters = state.filters,
-            catalog = state.catalog,
-            onFiltersChange = onFiltersChange,
-            onClearFilters = onClearFilters,
+    Column(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        MainTopBar(
+            title = stringResource(R.string.nav_reports),
+            actions = { ExportAction(exporting = exporting, onExport = onExport) },
         )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+                .padding(top = Dimens.Space8, bottom = Dimens.Space24),
+            verticalArrangement = Arrangement.spacedBy(Dimens.Space16),
+        ) {
+            StatRangeControls(range = state.range, onSelect = onRangeChange)
 
-        if (state.isRefreshing) {
-            LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = Dimens.Space16))
-        }
-        if (state.refreshFailed) {
-            DashboardCard {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
-                    Text(
-                        stringResource(R.string.stats_cached_refresh_failed),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = onRefresh) { Text(stringResource(R.string.retry)) }
+            StatFilterBar(
+                filters = state.filters,
+                catalog = state.catalog,
+                onFiltersChange = onFiltersChange,
+                onClearFilters = onClearFilters,
+            )
+
+            if (state.isRefreshing) {
+                LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = Dimens.Space16))
+            }
+            if (state.refreshFailed) {
+                DashboardCard {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
+                        Text(
+                            stringResource(R.string.stats_cached_refresh_failed),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = onRefresh) { Text(stringResource(R.string.retry)) }
+                    }
                 }
             }
-        }
 
-        when {
-            state.isLoading -> Box(Modifier.fillMaxWidth().padding(Dimens.Space32), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-            else -> {
-                val range = state.rangeStart?.let { start -> state.rangeEnd?.let { end -> start..end } }
-                SummaryCard(
-                    summary = state.summary,
-                    range = range,
-                    comparison = state.comparison,
-                    emptyText = if (state.isEmpty) stringResource(R.string.stats_empty) else null,
-                )
-                if (!state.isEmpty) {
-                    TrendCard(state.summary, state.granularity, onBucketClick)
-                    ProjectBreakdownCard(state.summary, onProjectClick)
-                    if (state.estimateProgress.isNotEmpty()) {
-                        EstimatesCard(state.estimateProgress)
+            when {
+                state.isLoading -> Box(Modifier.fillMaxWidth().padding(Dimens.Space32), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+                else -> {
+                    val range = state.rangeStart?.let { start -> state.rangeEnd?.let { end -> start..end } }
+                    SummaryCard(
+                        summary = state.summary,
+                        range = range,
+                        comparison = state.comparison,
+                        emptyText = if (state.isEmpty) stringResource(R.string.stats_empty) else null,
+                    )
+                    if (!state.isEmpty) {
+                        TrendCard(state.summary, state.granularity, onBucketClick)
+                        ProjectBreakdownCard(state.summary, onProjectClick)
+                        if (state.estimateProgress.isNotEmpty()) {
+                            EstimatesCard(state.estimateProgress)
+                        }
                     }
                 }
             }

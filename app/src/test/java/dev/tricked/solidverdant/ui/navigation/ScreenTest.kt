@@ -11,23 +11,25 @@ import org.junit.Test
 
 class ScreenTest {
     @Test
-    fun bottomNavScreens_haveUniqueStableRoutes() {
-        val routes = bottomNavScreens.map { it.route }
-        assertEquals(listOf("track", "stats", "settings"), routes)
+    fun menuScreens_haveUniqueStableRoutesInMenuOrder() {
+        val routes = menuScreens.map { it.route }
+        // Calendar deep links and review notifications resolve these strings.
+        assertEquals(listOf("track", "calendar", "stats", "review", "settings"), routes)
         assertEquals(routes.size, routes.toSet().size)
     }
 
     @Test
-    fun pushedDestinations_keepTheTabThatOpenedThem() {
-        assertEquals("track", nextSelectedTab("track", TimerRoutes.CALENDAR))
-        assertEquals("track", nextSelectedTab("track", ReviewRoutes.END_OF_DAY))
-        assertEquals("settings", nextSelectedTab("settings", SyncRoutes.SYNC_CENTER))
+    fun pushedDestinations_keepTheMenuItemThatOpenedThem() {
+        assertEquals("review", nextSelectedDestination("review", ReviewRoutes.END_OF_DAY))
+        assertEquals("settings", nextSelectedDestination("settings", SyncRoutes.SYNC_CENTER))
+        assertEquals("track", nextSelectedDestination("track", SyncRoutes.SYNC_CENTER))
     }
 
     @Test
-    fun tabDestinationsSelectThemselves() {
-        assertEquals("stats", nextSelectedTab("track", "stats"))
-        assertEquals("track", nextSelectedTab("settings", "track"))
-        assertEquals("settings", nextSelectedTab("settings", null))
+    fun menuDestinationsSelectThemselves() {
+        assertEquals("calendar", nextSelectedDestination("track", "calendar"))
+        assertEquals("stats", nextSelectedDestination("track", "stats"))
+        assertEquals("track", nextSelectedDestination("settings", "track"))
+        assertEquals("settings", nextSelectedDestination("settings", null))
     }
 }

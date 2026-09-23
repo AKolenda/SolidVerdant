@@ -8,36 +8,37 @@ package dev.tricked.solidverdant.ui.navigation
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.tricked.solidverdant.R
 
-/** The three bottom tabs. Route strings are stable: deep links and device tests depend on them. */
+/**
+ * The side-menu destinations, in menu order. Route strings are stable: calendar deep links, review
+ * notifications and device tests depend on them.
+ */
 sealed class Screen(val route: String, val labelRes: Int, val icon: ImageVector) {
-    data object Track : Screen("track", R.string.nav_timer, Icons.Outlined.Timer)
-    data object Stats : Screen("stats", R.string.nav_dashboard, Icons.Outlined.BarChart)
+    data object Track : Screen("track", R.string.nav_time_tracker, Icons.Outlined.Timer)
+    data object Calendar : Screen("calendar", R.string.nav_calendar, Icons.Outlined.CalendarMonth)
+    data object Stats : Screen("stats", R.string.nav_reports, Icons.Outlined.BarChart)
+    data object Review : Screen("review", R.string.nav_review, Icons.Outlined.Inbox)
     data object Settings : Screen("settings", R.string.settings_menu, Icons.Outlined.Settings)
 }
 
-val bottomNavScreens: List<Screen> = listOf(Screen.Track, Screen.Stats, Screen.Settings)
+val menuScreens: List<Screen> = listOf(Screen.Track, Screen.Calendar, Screen.Stats, Screen.Review, Screen.Settings)
 
-/** Test tag of a bottom tab, shared by production UI and device robots. */
+/** Test tag of a side-menu item, shared by production UI and device robots. */
 fun mainNavTag(route: String): String = "main_nav_$route"
 
-/**
- * Destinations pushed on top of the Timer tab. Calendar and Review used to be tabs; they keep their
- * route strings so calendar deep links and review notifications still resolve.
- */
-object TimerRoutes {
-    const val CALENDAR: String = "calendar"
-    const val REVIEW: String = "review"
-}
+/** Test tag of the ☰ button that opens the side menu. */
+const val MAIN_MENU_BUTTON_TAG: String = "main_menu_button"
 
 /**
- * Routes for review-loop destinations pushed on top of a tab. They are reached from Review's overflow
- * menu, Settings, or a reminder / end-of-day notification, and each renders full-screen with its own
- * back navigation.
+ * Routes for review-loop destinations pushed on top of a menu destination. They are reached from
+ * Review's overflow menu, Settings, or a reminder / end-of-day notification, and each renders
+ * full-screen with its own back navigation.
  */
 object ReviewRoutes {
     /** Compact end-of-day review flow (opened from the end-of-day notification). */
@@ -51,8 +52,8 @@ object ReviewRoutes {
 }
 
 /**
- * Routes for the sync surface (#33). The dedicated Sync Center is pushed full-screen on top of the
- * tab graph with its own back navigation, reached from the Timer sync summary or Settings.
+ * Routes for the sync surface (#33). The dedicated Sync Center is pushed full-screen with its own
+ * back navigation, reached from the Time Tracker sync summary or Settings.
  */
 object SyncRoutes {
     /** Dedicated Sync Center: freshness, pending changes, failures + retry/discard. */
@@ -61,7 +62,7 @@ object SyncRoutes {
 
 /**
  * Routes for the settings surface. The privacy & data-management screen (#48) is pushed full-screen
- * on top of the tab graph with its own back navigation, reached from the Settings tab.
+ * on top of the menu destinations with its own back navigation, reached from Settings.
  */
 object SettingsRoutes {
     /** Privacy & data-management: what is stored/sent, token protection, permissions, data controls. */

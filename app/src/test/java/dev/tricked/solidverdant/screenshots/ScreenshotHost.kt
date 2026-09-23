@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,8 +27,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
@@ -47,12 +50,9 @@ import com.github.takahirom.roborazzi.RoborazziComposeOptions
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.size
 import dev.tricked.solidverdant.data.local.AppThemeMode
-import dev.tricked.solidverdant.ui.navigation.LocalFloatingBarInset
-import dev.tricked.solidverdant.ui.navigation.MainNavigationBar
-import dev.tricked.solidverdant.ui.navigation.Screen
-import dev.tricked.solidverdant.ui.theme.Dimens
+import dev.tricked.solidverdant.ui.navigation.LocalMainMenu
+import dev.tricked.solidverdant.ui.navigation.MainMenuController
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
-import dev.tricked.solidverdant.ui.tracking.TimerTopBar
 import java.io.File
 import java.util.Locale
 
@@ -175,56 +175,47 @@ object ScreenshotHost {
     }
 
     /**
-     * Hosts feature content inside the production floating tab bar. Tab roots draw their own
-     * headers (the Timer tab uses the real [TimerTopBar]); pushed destinations get a back-arrow
-     * title bar from [titleRes].
+     * Hosts feature content the way production does. Menu destinations get their side-menu
+     * [header] (Settings and Reports draw their own), pushed destinations a back-arrow bar from
+     * [pushedTitleRes]; then the content with an optional docked [bottomBar] and new-entry [fab].
+     * The Scaffold's surface supplies the content colour, as the production root Surface does.
      */
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    fun AppShell(tab: Screen, titleRes: Int? = null, content: @Composable () -> Unit) {
-        val barInset = Dimens.TabBarHeight + Dimens.TabBarBottomGap
-        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-            CompositionLocalProvider(LocalFloatingBarInset provides barInset) {
-                Column(Modifier.fillMaxSize()) {
+    fun AppShell(
+        header: (@Composable () -> Unit)? = null,
+        pushedTitleRes: Int? = null,
+        bottomBar: @Composable () -> Unit = {},
+        fab: @Composable () -> Unit = {},
+        content: @Composable () -> Unit,
+    ) {
+        CompositionLocalProvider(LocalMainMenu provides MainMenuController(open = {}, badgeCount = SAMPLE_REVIEW_BADGE)) {
+            Scaffold(
+                topBar = {
                     when {
-                        titleRes != null -> TopAppBar(
-                            title = { Text(stringResource(titleRes)) },
+                        pushedTitleRes != null -> TopAppBar(
+                            title = { Text(stringResource(pushedTitleRes)) },
                             navigationIcon = {
                                 IconButton(onClick = {}) {
                                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null)
                                 }
                             },
+                            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
                         )
-                        tab == Screen.Track -> TimerTopBar(
-                            organizationName = "Acme Studio",
-                            canSwitchOrganization = true,
-                            memberships = emptyList(),
-                            currentMembershipId = null,
-                            onMembershipChange = {},
-                            onOpenCalendar = {},
-                            onAddEntry = {},
-                            reviewBadgeCount = 4,
-                            onOpenReview = {},
-                            syncing = false,
-                            onRefresh = {},
-                            onRequestNotifications = null,
-                        )
+                        header != null -> header()
                     }
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .padding(bottom = if (titleRes != null) barInset else 0.dp),
-                    ) { content() }
-                }
+                },
+                bottomBar = bottomBar,
+                floatingActionButton = fab,
+                containerColor = MaterialTheme.colorScheme.background,
+                contentWindowInsets = WindowInsets(0),
+            ) { padding ->
+                Box(Modifier.padding(padding).fillMaxSize()) { content() }
             }
-            MainNavigationBar(
-                selectedRoute = tab.route,
-                onNavigate = {},
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = Dimens.TabBarBottomGap),
-            )
         }
     }
+
+    private const val SAMPLE_REVIEW_BADGE = 4
 
     /** Repository root (the folder that owns settings.gradle.kts), regardless of Gradle's cwd. */
     private val repoRoot: File by lazy {

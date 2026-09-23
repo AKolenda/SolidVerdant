@@ -10,6 +10,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -26,7 +27,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -35,49 +35,43 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.CallSplit
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.BookmarkAdd
-import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -106,8 +100,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TimePicker
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberDateRangePickerState
@@ -122,12 +114,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
@@ -141,15 +133,12 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.core.graphics.toColorInt
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Client
@@ -185,7 +174,7 @@ import dev.tricked.solidverdant.ui.components.SyncChip
 import dev.tricked.solidverdant.ui.components.TagsSelector
 import dev.tricked.solidverdant.ui.components.retimedEnd
 import dev.tricked.solidverdant.ui.localization.appLocale
-import dev.tricked.solidverdant.ui.navigation.LocalFloatingBarInset
+import dev.tricked.solidverdant.ui.navigation.MainTopBar
 import dev.tricked.solidverdant.ui.templates.FavoriteTemplatesRow
 import dev.tricked.solidverdant.ui.templates.ManageTemplatesViewModel
 import dev.tricked.solidverdant.ui.templates.TemplateDraft
@@ -218,7 +207,6 @@ import dev.tricked.solidverdant.ui.components.ProjectTaskDropdown as SharedProje
 @Composable
 fun TrackingScreen(
     user: User?,
-    memberships: List<Membership>,
     currentMembership: Membership?,
     uiState: TrackingUiState,
     elapsedSeconds: StateFlow<Long> = MutableStateFlow(uiState.elapsedSeconds),
@@ -227,7 +215,6 @@ fun TrackingScreen(
     editActiveEntryRequested: Boolean,
     onEditActiveEntryConsumed: () -> Unit,
     onRefresh: () -> Unit,
-    onMembershipChange: (Membership) -> Unit,
     onStartTracking: () -> Unit,
     onStopTracking: () -> Unit,
     onPauseTracking: () -> Unit,
@@ -248,9 +235,6 @@ fun TrackingScreen(
     onRetrySync: () -> Unit,
     onRetrySyncEntry: (String) -> Unit,
     onOpenSyncCenter: () -> Unit,
-    onOpenCalendar: () -> Unit,
-    onOpenReview: () -> Unit,
-    reviewBadgeCount: Int,
     onLoadMoreEntries: () -> Unit,
     onLoadNewerEntries: () -> Unit,
     onJumpToDate: (LocalDate) -> Unit,
@@ -271,8 +255,7 @@ fun TrackingScreen(
     val conflictEditLockedMessage = stringResource(R.string.sync_conflict_edit_locked)
     val undoLabel = stringResource(R.string.undo)
     val scope = rememberCoroutineScope()
-    val wideHistoryListState = rememberLazyListState()
-    val compactListState = rememberLazyListState()
+    val historyListState = rememberLazyListState()
     val routineSyncInProgress = uiState.isLoading ||
         uiState.isRefreshing ||
         uiState.syncOperations.any { operation ->
@@ -342,18 +325,9 @@ fun TrackingScreen(
         }
     }
 
-    LaunchedEffect(wideHistoryListState, uiState.timeEntries.size, uiState.hasMoreTimeEntries) {
+    LaunchedEffect(historyListState, uiState.timeEntries.size, uiState.hasMoreTimeEntries) {
         snapshotFlow {
-            val info = wideHistoryListState.layoutInfo
-            hasUserScrolledHistory &&
-                info.totalItemsCount > 0 &&
-                (info.visibleItemsInfo.lastOrNull()?.index ?: -1) >=
-                info.totalItemsCount - HISTORY_PREFETCH_ITEMS
-        }.filter { it }.collect { onLoadMoreEntries() }
-    }
-    LaunchedEffect(compactListState, uiState.timeEntries.size, uiState.hasMoreTimeEntries) {
-        snapshotFlow {
-            val info = compactListState.layoutInfo
+            val info = historyListState.layoutInfo
             hasUserScrolledHistory &&
                 info.totalItemsCount > 0 &&
                 (info.visibleItemsInfo.lastOrNull()?.index ?: -1) >=
@@ -374,7 +348,7 @@ fun TrackingScreen(
         }
     }
     LaunchedEffect(
-        wideHistoryListState,
+        historyListState,
         uiState.timeEntries.size,
         uiState.canLoadNewerHistory,
     ) {
@@ -382,21 +356,7 @@ fun TrackingScreen(
             hasUserScrolledHistory &&
                 uiState.canLoadNewerHistory &&
                 (
-                    wideHistoryListState.layoutInfo.visibleItemsInfo.firstOrNull()?.index
-                        ?: Int.MAX_VALUE
-                    ) <= HISTORY_PREFETCH_ITEMS
-        }.filter { it }.collect { onLoadNewerEntries() }
-    }
-    LaunchedEffect(
-        compactListState,
-        uiState.timeEntries.size,
-        uiState.canLoadNewerHistory,
-    ) {
-        snapshotFlow {
-            hasUserScrolledHistory &&
-                uiState.canLoadNewerHistory &&
-                (
-                    compactListState.layoutInfo.visibleItemsInfo.firstOrNull()?.index
+                    historyListState.layoutInfo.visibleItemsInfo.firstOrNull()?.index
                         ?: Int.MAX_VALUE
                     ) <= HISTORY_PREFETCH_ITEMS
         }.filter { it }.collect { onLoadNewerEntries() }
@@ -415,22 +375,48 @@ fun TrackingScreen(
     // "Always show notifications" toggle opt-in (see onCheckedChange on that Switch). The
     // persistent notification still shows normally if permission is already granted.
 
+    val timerActive = uiState.isTracking || uiState.isPaused
+    var fabExpanded by rememberSaveable { mutableStateOf(false) }
+    var showStartTimerSheet by rememberSaveable { mutableStateOf(false) }
+    // Starting from any surface (sheet, favourite, history play button, notification) closes the
+    // start controls; the running timer then docks at the bottom.
+    LaunchedEffect(timerActive) {
+        if (timerActive) {
+            fabExpanded = false
+            showStartTimerSheet = false
+        }
+    }
+    BackHandler(enabled = fabExpanded) { fabExpanded = false }
+    val serverLastEntry = remember(uiState.timeEntries) {
+        uiState.timeEntries
+            .filter { isCompletedTimeEntry(it) && !it.description.isNullOrBlank() }
+            .maxByOrNull { it.start }
+    }
+    val lastEntry = remember(serverLastEntry, uiState.cachedContinueEntry, currentMembership) {
+        serverLastEntry ?: uiState.cachedContinueEntry?.takeIf {
+            it.organizationId == currentMembership?.organizationId
+        }
+    }
+    val continueEntry: (TimeEntry) -> Unit = { entry ->
+        onDescriptionChange(entry.description ?: "")
+        onProjectChange(entry.projectId)
+        onTaskChange(entry.taskId)
+        onTagsChange(entry.tags.map { it.id })
+        onBillableChange(entry.billable)
+        onStartTracking()
+    }
+    val showConflictLocked: () -> Unit = {
+        scope.launch { snackbarHostState.showSnackbar(conflictEditLockedMessage, withDismissAction = true) }
+    }
+    val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing.only(
             WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
         ),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TimerTopBar(
-                organizationName = currentMembership?.organization?.name,
-                canSwitchOrganization = memberships.size > 1 && !uiState.isTracking && !uiState.isPaused,
-                memberships = memberships,
-                currentMembershipId = currentMembership?.id,
-                onMembershipChange = onMembershipChange,
-                onOpenCalendar = onOpenCalendar,
-                onAddEntry = { showAddDialog = true },
-                reviewBadgeCount = reviewBadgeCount,
-                onOpenReview = onOpenReview,
+            TimeTrackerTopBar(
                 syncing = routineSyncInProgress,
                 onRefresh = onRefresh,
                 onRequestNotifications = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -442,6 +428,34 @@ fun TrackingScreen(
                 },
             )
         },
+        bottomBar = {
+            if (timerActive) {
+                val elapsed by elapsedSeconds.collectAsState()
+                ActiveTimerBar(
+                    uiState = uiState,
+                    elapsedSeconds = elapsed,
+                    onStop = onStopTracking,
+                    onPause = onPauseTracking,
+                    onResume = onResumeTracking,
+                    onEditActiveEntry = {
+                        uiState.currentTimeEntry?.let { entry ->
+                            if (entry.id in uiState.conflictedEntryIds) showConflictLocked() else showEditDialog = entry
+                        }
+                    },
+                )
+            }
+        },
+        floatingActionButton = {
+            TimerFab(
+                timerActive = timerActive,
+                expanded = fabExpanded,
+                onExpandedChange = { fabExpanded = it },
+                onStartTimer = { showStartTimerSheet = true },
+                onAddManual = { showAddDialog = true },
+                // Without the docked timer the button sits directly above the system navigation bar.
+                modifier = if (timerActive) Modifier else Modifier.navigationBarsPadding(),
+            )
+        },
         containerColor = MaterialTheme.colorScheme.background,
     ) { paddingValues ->
         PullToRefreshBox(
@@ -449,16 +463,6 @@ fun TrackingScreen(
             onRefresh = onRefresh,
             modifier = Modifier.padding(paddingValues),
         ) {
-            val serverLastEntry = remember(uiState.timeEntries) {
-                uiState.timeEntries
-                    .filter { isCompletedTimeEntry(it) && !it.description.isNullOrBlank() }
-                    .maxByOrNull { it.start }
-            }
-            val lastEntry = remember(serverLastEntry, uiState.cachedContinueEntry, currentMembership) {
-                serverLastEntry ?: uiState.cachedContinueEntry?.takeIf {
-                    it.organizationId == currentMembership?.organizationId
-                }
-            }
             val historyListItems by produceState(
                 initialValue = emptyList<HistoryListItem>(),
                 uiState.timeEntries,
@@ -498,9 +502,7 @@ fun TrackingScreen(
             val syncStatusByEntryId = remember(visibleSyncOperations) {
                 worstSyncStatusByEntryId(visibleSyncOperations)
             }
-            val showConflictLocked: () -> Unit = {
-                scope.launch { snackbarHostState.showSnackbar(conflictEditLockedMessage, withDismissAction = true) }
-            }
+            val showSyncCenter = uiState.syncStatusVisible && uiState.syncOperations.isNotEmpty()
             val onHistoryEdit = remember(uiState.conflictedEntryIds) {
                 { entry: TimeEntry ->
                     if (entry.id in uiState.conflictedEntryIds) showConflictLocked() else showEditDialog = entry
@@ -522,50 +524,27 @@ fun TrackingScreen(
                 val target = uiState.historyJumpDate ?: return@LaunchedEffect
                 val historyIndex = historyHeaderIndex(target, historyListItems)
                 if (historyIndex >= 0) {
-                    val primaryItemCount = 2 +
-                        (if (uiState.error != null) 1 else 0) +
-                        (if (!uiState.isTracking && !uiState.isPaused && lastEntry != null) 1 else 0)
-                    compactListState.scrollToItem(primaryItemCount + historyIndex)
-                    wideHistoryListState.scrollToItem(1 + historyIndex)
+                    // The long-timer warning and filter rows, then the sync card when shown.
+                    val leadingItemCount = 2 + (if (showSyncCenter) 1 else 0)
+                    historyListState.scrollToItem(leadingItemCount + historyIndex)
                 }
                 onHistoryJumpConsumed()
             }
 
-            BoxWithConstraints(Modifier.fillMaxSize()) {
-                val wideLayout = maxWidth >= 840.dp
-                val continueEntry: (TimeEntry) -> Unit = { entry ->
-                    onDescriptionChange(entry.description ?: "")
-                    onProjectChange(entry.projectId)
-                    onTaskChange(entry.taskId)
-                    onTagsChange(entry.tags.map { it.id })
-                    onBillableChange(entry.billable)
-                    onStartTracking()
-                }
-                val sectionInset = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space16, vertical = Dimens.Space8)
-                val primaryContent: LazyListScope.() -> Unit = {
-                    item {
-                        val elapsed by elapsedSeconds.collectAsState()
-                        TrackingControls(
-                            uiState = uiState,
-                            elapsedSeconds = elapsed,
-                            onDescriptionChange = onDescriptionChange,
-                            onProjectChange = onProjectChange,
-                            onTaskChange = onTaskChange,
-                            onResetEntryFields = onResetEntryFields,
-                            autoClearEntryFieldsAfterStop = autoClearEntryFieldsAfterStop,
-                            onTagsChange = onTagsChange,
-                            onBillableChange = onBillableChange,
-                            onStart = onStartTracking,
-                            onStop = onStopTracking,
-                            onPause = onPauseTracking,
-                            onResume = onResumeTracking,
-                            onEditActiveEntry = {
-                                uiState.currentTimeEntry?.let { entry ->
-                                    if (entry.id in uiState.conflictedEntryIds) showConflictLocked() else showEditDialog = entry
-                                }
-                            },
-                        )
-                    }
+            val sectionInset = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space16, vertical = Dimens.Space8)
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                LazyColumn(
+                    state = historyListState,
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .widthIn(max = Dimens.ContentMaxWidth)
+                        .fillMaxWidth()
+                        .testTag(TrackingTestTags.HISTORY_LIST)
+                        .nestedScroll(historyScrollConnection),
+                    contentPadding = PaddingValues(
+                        bottom = Dimens.FabClearance + if (timerActive) 0.dp else navigationBarInset,
+                    ),
+                ) {
                     item(key = "long_timer_warning") {
                         val elapsed by elapsedSeconds.collectAsState()
                         if (uiState.isTracking &&
@@ -584,128 +563,89 @@ fun TrackingScreen(
                             )
                         }
                     }
-                    if (!uiState.isTracking &&
-                        !uiState.isPaused &&
-                        templateState.quickStart.isNotEmpty()
-                    ) {
-                        item(key = "favorites_quick_start") {
+                    item(key = "history_filters") {
+                        Box(sectionInset) { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
+                    }
+                    if (showSyncCenter) {
+                        item(key = "sync_center") {
                             Box(sectionInset) {
-                                FavoriteTemplatesRow(
-                                    templates = templateState.quickStart,
-                                    projects = templateState.projects,
-                                    tasks = templateState.tasks,
-                                    tags = templateState.tags,
-                                    onStart = { start ->
-                                        onDescriptionChange(start.description ?: "")
-                                        onProjectChange(start.projectId)
-                                        onTaskChange(start.taskId)
-                                        onTagsChange(start.tagIds)
-                                        onBillableChange(start.billable)
-                                        onStartTracking()
-                                    },
-                                )
+                                SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter)
                             }
                         }
                     }
-                    if (!uiState.isTracking && !uiState.isPaused && lastEntry != null) {
-                        item(key = "continue_last") {
-                            Box(sectionInset) {
-                                ContinueLastEntryButton(
-                                    entry = lastEntry,
-                                    projects = uiState.projects,
-                                    onContinue = { continueEntry(lastEntry) },
-                                )
-                            }
-                        }
-                    }
+                    trackingHistoryItems(
+                        uiState = uiState,
+                        historyItems = historyListItems,
+                        projectsById = historyProjectsById,
+                        tasksById = historyTasksById,
+                        clientsById = historyClientsById,
+                        syncStatusByEntryId = syncStatusByEntryId,
+                        onEdit = onHistoryEdit,
+                        onDelete = onHistoryDelete,
+                        onDateClick = onHistoryDateClick,
+                        onRetrySync = { onRetrySyncEntry(it.id) },
+                        onContinue = continueEntry.takeIf { !timerActive },
+                        onDuplicate = { onDuplicateEntry(it.id) },
+                    )
                 }
-
-                if (wideLayout) {
-                    Row(Modifier.fillMaxSize()) {
-                        LazyColumn(
-                            modifier = Modifier
-                                .weight(WIDE_PRIMARY_WEIGHT)
-                                .fillMaxSize()
-                                .testTag(TrackingTestTags.PRIMARY_LIST)
-                                .padding(horizontal = 24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            content = primaryContent,
-                        )
-                        VerticalDivider(
-                            modifier = Modifier.fillMaxHeight(),
-                            color = MaterialTheme.colorScheme.outlineVariant,
-                        )
-                        LazyColumn(
-                            state = wideHistoryListState,
-                            modifier = Modifier
-                                .weight(WIDE_HISTORY_WEIGHT)
-                                .fillMaxSize()
-                                .testTag(TrackingTestTags.HISTORY_LIST)
-                                .nestedScroll(historyScrollConnection),
-                            contentPadding = PaddingValues(bottom = LocalFloatingBarInset.current + Dimens.Space16),
-                        ) {
-                            item(key = "history_filters") {
-                                Box(sectionInset) { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
-                            }
-                            if (uiState.syncStatusVisible && uiState.syncOperations.isNotEmpty()) {
-                                item {
-                                    Box(sectionInset) {
-                                        SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter)
-                                    }
-                                }
-                            }
-                            trackingHistoryItems(
-                                uiState = uiState,
-                                historyItems = historyListItems,
-                                projectsById = historyProjectsById,
-                                tasksById = historyTasksById,
-                                clientsById = historyClientsById,
-                                syncStatusByEntryId = syncStatusByEntryId,
-                                onEdit = onHistoryEdit,
-                                onDelete = onHistoryDelete,
-                                onDateClick = onHistoryDateClick,
-                                onRetrySync = { onRetrySyncEntry(it.id) },
-                                onContinue = continueEntry.takeIf { !uiState.isTracking && !uiState.isPaused },
-                                onDuplicate = { onDuplicateEntry(it.id) },
-                            )
-                        }
-                    }
-                } else {
-                    LazyColumn(
-                        state = compactListState,
-                        modifier = Modifier
+                if (fabExpanded) {
+                    val closeLabel = stringResource(R.string.timer_fab_close)
+                    Box(
+                        Modifier
                             .fillMaxSize()
-                            .testTag(TrackingTestTags.HISTORY_LIST)
-                            .nestedScroll(historyScrollConnection),
-                        contentPadding = PaddingValues(bottom = LocalFloatingBarInset.current + Dimens.Space16),
-                    ) {
-                        primaryContent()
-                        item(key = "history_filters") {
-                            Box(sectionInset) { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
-                        }
-                        if (uiState.syncStatusVisible && uiState.syncOperations.isNotEmpty()) {
-                            item {
-                                Box(sectionInset) {
-                                    SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter)
-                                }
+                            .background(MaterialTheme.colorScheme.scrim.copy(alpha = FAB_SCRIM_ALPHA))
+                            .clickable(onClickLabel = closeLabel) { fabExpanded = false },
+                    )
+                }
+            }
+        }
+    }
+
+    if (showStartTimerSheet && !timerActive) {
+        val startAndClose: (() -> Unit) -> Unit = { start ->
+            showStartTimerSheet = false
+            start()
+        }
+        StartTimerSheet(onDismiss = { showStartTimerSheet = false }) {
+            StartTimerForm(
+                uiState = uiState,
+                onDescriptionChange = onDescriptionChange,
+                onProjectChange = onProjectChange,
+                onTaskChange = onTaskChange,
+                onResetEntryFields = onResetEntryFields,
+                autoClearEntryFieldsAfterStop = autoClearEntryFieldsAfterStop,
+                onTagsChange = onTagsChange,
+                onBillableChange = onBillableChange,
+                onStart = { startAndClose(onStartTracking) },
+            )
+            val sheetInset = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space16, vertical = Dimens.Space8)
+            lastEntry?.let { entry ->
+                Box(sheetInset) {
+                    ContinueLastEntryButton(
+                        entry = entry,
+                        projects = uiState.projects,
+                        onContinue = { startAndClose { continueEntry(entry) } },
+                    )
+                }
+            }
+            if (templateState.quickStart.isNotEmpty()) {
+                Box(sheetInset) {
+                    FavoriteTemplatesRow(
+                        templates = templateState.quickStart,
+                        projects = templateState.projects,
+                        tasks = templateState.tasks,
+                        tags = templateState.tags,
+                        onStart = { start ->
+                            startAndClose {
+                                onDescriptionChange(start.description ?: "")
+                                onProjectChange(start.projectId)
+                                onTaskChange(start.taskId)
+                                onTagsChange(start.tagIds)
+                                onBillableChange(start.billable)
+                                onStartTracking()
                             }
-                        }
-                        trackingHistoryItems(
-                            uiState = uiState,
-                            historyItems = historyListItems,
-                            projectsById = historyProjectsById,
-                            tasksById = historyTasksById,
-                            clientsById = historyClientsById,
-                            syncStatusByEntryId = syncStatusByEntryId,
-                            onEdit = onHistoryEdit,
-                            onDelete = onHistoryDelete,
-                            onDateClick = onHistoryDateClick,
-                            onRetrySync = { onRetrySyncEntry(it.id) },
-                            onContinue = continueEntry.takeIf { !uiState.isTracking && !uiState.isPaused },
-                            onDuplicate = { onDuplicateEntry(it.id) },
-                        )
-                    }
+                        },
+                    )
                 }
             }
         }
@@ -1379,28 +1319,7 @@ private fun ContinueLastEntryButton(entry: TimeEntry, projects: List<Project>, o
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (entry.projectId != null) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (project != null) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(Color(project.color.toColorInt())),
-                        )
-                    } else {
-                        Spacer(Modifier.size(8.dp))
-                    }
-                    Text(
-                        text = project?.name ?: " ",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            ProjectTaskLine(project = project, task = null, background = MaterialTheme.colorScheme.background)
             if (entry.tags.isNotEmpty()) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1539,16 +1458,10 @@ internal fun DescriptionFieldWithSuggestions(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 if (project != null) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(project.color.toColorInt())),
-                                    )
-                                    Text(
-                                        text = project.name,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    ProjectTaskLine(
+                                        project = project,
+                                        task = null,
+                                        background = MaterialTheme.colorScheme.surfaceContainer,
                                     )
                                 } else {
                                     Text(
@@ -1624,40 +1537,13 @@ internal fun ProjectTaskDropdown(
 }
 
 /**
- * Timer header: calendar on the left, the organization centred (tap to switch when allowed), and
- * refresh, review inbox and add-entry on the right.
+ * The Time Tracker header: the side-menu button and title, then enable-notifications (when
+ * not granted) and refresh, which spins while a sync runs.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun TimerTopBar(
-    organizationName: String?,
-    canSwitchOrganization: Boolean,
-    memberships: List<Membership>,
-    currentMembershipId: String?,
-    onMembershipChange: (Membership) -> Unit,
-    onOpenCalendar: () -> Unit,
-    onAddEntry: () -> Unit,
-    reviewBadgeCount: Int,
-    onOpenReview: () -> Unit,
-    syncing: Boolean,
-    onRefresh: () -> Unit,
-    onRequestNotifications: (() -> Unit)?,
-) {
-    CenterAlignedTopAppBar(
-        title = {
-            TrackingAppBarTitle(
-                organizationName = organizationName,
-                canSwitchOrganization = canSwitchOrganization,
-                memberships = memberships,
-                currentMembershipId = currentMembershipId,
-                onMembershipChange = onMembershipChange,
-            )
-        },
-        navigationIcon = {
-            IconButton(onClick = onOpenCalendar, modifier = Modifier.testTag(TrackingTestTags.OPEN_CALENDAR_BUTTON)) {
-                Icon(imageVector = Icons.Outlined.CalendarMonth, contentDescription = stringResource(R.string.nav_calendar))
-            }
-        },
+internal fun TimeTrackerTopBar(syncing: Boolean, onRefresh: () -> Unit, onRequestNotifications: (() -> Unit)?) {
+    MainTopBar(
+        title = stringResource(R.string.nav_time_tracker),
         actions = {
             if (onRequestNotifications != null) {
                 IconButton(onClick = onRequestNotifications) {
@@ -1688,119 +1574,8 @@ internal fun TimerTopBar(
                     modifier = Modifier.rotate(syncRotation),
                 )
             }
-            ReviewInboxButton(badgeCount = reviewBadgeCount, onClick = onOpenReview)
-            IconButton(onClick = onAddEntry, modifier = Modifier.testTag(TrackingTestTags.ADD_ENTRY_BUTTON)) {
-                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_time_entry))
-            }
         },
-        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-            navigationIconContentColor = MaterialTheme.colorScheme.primary,
-            actionIconContentColor = MaterialTheme.colorScheme.primary,
-        ),
     )
-}
-
-/** The organization name, with a switcher menu when the user belongs to more than one. */
-@Composable
-internal fun TrackingAppBarTitle(
-    organizationName: String?,
-    canSwitchOrganization: Boolean,
-    memberships: List<Membership>,
-    currentMembershipId: String?,
-    onMembershipChange: (Membership) -> Unit,
-) {
-    if (organizationName == null) {
-        Text(stringResource(R.string.time_tracking), style = MaterialTheme.typography.titleSmall)
-        return
-    }
-    var organizationMenuExpanded by remember { mutableStateOf(false) }
-    Box {
-        if (canSwitchOrganization) {
-            val switchDescription = stringResource(R.string.switch_organization)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clickable { organizationMenuExpanded = true }
-                    .semantics {
-                        role = Role.Button
-                        contentDescription = switchDescription
-                    },
-            ) {
-                Text(
-                    text = organizationName,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Icon(
-                    imageVector = Icons.Default.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(Dimens.IconSmall),
-                )
-            }
-        } else {
-            Text(
-                text = organizationName,
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        androidx.compose.material3.DropdownMenu(
-            expanded = organizationMenuExpanded,
-            onDismissRequest = { organizationMenuExpanded = false },
-        ) {
-            memberships.forEach { membership ->
-                DropdownMenuItem(
-                    text = { Text(membership.organization.name) },
-                    onClick = {
-                        organizationMenuExpanded = false
-                        onMembershipChange(membership)
-                    },
-                    trailingIcon = if (membership.id == currentMembershipId) {
-                        { Icon(imageVector = Icons.Default.Done, contentDescription = null) }
-                    } else {
-                        null
-                    },
-                )
-            }
-        }
-    }
-}
-
-/** Opens Review (inbox + end-of-day review); the badge counts open inbox issues. */
-@Composable
-private fun ReviewInboxButton(badgeCount: Int, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.testTag(TrackingTestTags.OPEN_REVIEW_BUTTON)) {
-        if (badgeCount > 0) {
-            BadgedBox(
-                badge = {
-                    Badge {
-                        Text(
-                            text = if (badgeCount > MAX_BADGE_COUNT) {
-                                stringResource(R.string.review_badge_overflow)
-                            } else {
-                                badgeCount.toString()
-                            },
-                        )
-                    }
-                },
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Inbox,
-                    contentDescription = pluralStringResource(
-                        R.plurals.review_pending_badge_description,
-                        badgeCount,
-                        badgeCount,
-                    ),
-                )
-            }
-        } else {
-            Icon(imageVector = Icons.Outlined.Inbox, contentDescription = stringResource(R.string.nav_review))
-        }
-    }
 }
 
 /**
@@ -2239,7 +2014,6 @@ internal fun canDismissTimeEntryFormSheet(hasTimePicker: Boolean, hasDatePicker:
     !hasTimePicker && !hasDatePicker && !hasSplitPicker
 
 private const val FULL_ROTATION_DEGREES = 360f
-private const val MAX_BADGE_COUNT = 99
 private const val SECONDS_PER_HOUR_LONG = 3600L
 private const val SECONDS_PER_MINUTE_LONG = 60L
 private const val FILTER_ENTER_DURATION_MS = 180
@@ -2250,8 +2024,7 @@ private const val SYNC_ROTATION_DURATION_MS = 900
 private const val ALTERNATING_ROW_COUNT = 2
 private const val GHOST_PRIMARY_WIDTH = 0.62f
 private const val GHOST_SECONDARY_WIDTH = 0.45f
-private const val WIDE_PRIMARY_WEIGHT = 0.9f
-private const val WIDE_HISTORY_WEIGHT = 1.1f
+private const val FAB_SCRIM_ALPHA = 0.32f
 private const val HISTORY_PLACEHOLDER_COUNT = 4
 private const val RECENT_ENTRIES_LIMIT = 5
 private const val DURATION_STEP_MINUTES = 15L

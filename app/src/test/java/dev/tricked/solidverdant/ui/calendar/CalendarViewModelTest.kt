@@ -312,18 +312,33 @@ class CalendarViewModelTest {
     }
 
     @Test
-    fun defaultsToWeekViewWithSevenVisibleDays() = runTest {
+    fun defaultsToDayViewWithOneVisibleDay() = runTest {
         val model = vm(FakeReader(emptyList()))
         val state = model.uiState.value
-        assertEquals(CalendarViewMode.WEEK, state.viewMode)
-        assertEquals(7, state.visibleDays.size)
+        assertEquals(CalendarViewMode.DAY, state.viewMode)
+        assertEquals(1, state.visibleDays.size)
     }
 
     @Test
-    fun dayViewShowsSingleVisibleDay() = runTest {
+    fun weekViewShowsSevenVisibleDays() = runTest {
         val model = vm(FakeReader(emptyList()))
-        model.setViewMode(CalendarViewMode.DAY)
-        assertEquals(1, model.uiState.value.visibleDays.size)
+        model.setViewMode(CalendarViewMode.WEEK)
+        assertEquals(7, model.uiState.value.visibleDays.size)
+    }
+
+    @Test
+    fun dayViewArrowsMoveTheWeekStripAndKeepTheWeekday() = runTest {
+        val model = vm(FakeReader(emptyList()))
+        val wednesday = LocalDate.of(2026, 9, 23)
+        model.selectDate(wednesday)
+
+        model.pageForward()
+        assertEquals(wednesday.plusWeeks(1), model.uiState.value.selectedDate)
+        assertEquals(listOf(wednesday.plusWeeks(1)), model.uiState.value.visibleDays)
+
+        model.pageBackward()
+        model.pageBackward()
+        assertEquals(wednesday.minusWeeks(1), model.uiState.value.selectedDate)
     }
 
     @Test
@@ -418,6 +433,8 @@ class CalendarViewModelTest {
         reader.loadGates += firstMonth
         reader.loadGates += secondMonth
         val model = vm(reader)
+        // The Aug 31 week reaches into September; the default day view would show one month.
+        model.setViewMode(CalendarViewMode.WEEK)
         model.selectDate(LocalDate.of(2026, 8, 31))
 
         model.setOrganization("org1")

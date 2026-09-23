@@ -17,7 +17,7 @@ object CalendarTestTags {
     const val MODE_WEEK = "calendar_mode_week"
     const val MODE_DAY = "calendar_mode_day"
     const val ADD_ENTRY = "calendar_add_entry"
-    const val ADD_BREAK = "calendar_add_break"
+    const val MORE_ACTIONS = "calendar_more_actions"
     const val ADD_BREAK_MENU = "calendar_add_break_menu"
     const val RUNNING_TIMER = "calendar_running_timer"
     const val RUNNING_TIMER_EDIT = "calendar_running_timer_edit"

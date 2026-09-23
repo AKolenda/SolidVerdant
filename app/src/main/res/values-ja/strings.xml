@@ -35,7 +35,15 @@
     <string name="minutes_short">分</string>
     <string name="nav_calendar">カレンダー</string>
     <string name="nav_timer">タイマー</string>
-    <string name="nav_dashboard">ダッシュボード</string>
+    <string name="nav_time_tracker">タイムトラッカー</string>
+    <string name="nav_reports">レポート</string>
+    <string name="main_menu_open">メニューを開く</string>
+    <string name="main_menu_open_with_review">メニューを開く、%1$s</string>
+    <string name="timer_fab_open">新しい時間エントリ</string>
+    <string name="timer_fab_close">新規エントリのオプションを閉じる</string>
+    <string name="timer_manual">手動</string>
+    <string name="start_timer_title">タイマーを開始</string>
+    <string name="calendar_total">合計: %1$s</string>
     <string name="settings_organization">組織</string>
     <string name="settings_section_appearance">外観</string>
     <string name="settings_section_data">データと同期</string>
@@ -137,7 +145,6 @@
     <string name="network_restored">オンラインに戻りました</string>
 
     <!-- Tracking Screen -->
-    <string name="time_tracking">時間追跡</string>
     <string name="switch_organization">組織を切り替える</string>
     <string name="refresh">更新</string><string name="syncing">同期中</string>
     <string name="logout">ログアウト</string>

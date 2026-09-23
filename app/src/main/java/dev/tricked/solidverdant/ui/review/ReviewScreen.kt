@@ -23,7 +23,6 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,13 +34,16 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.navigation.MainMenuButton
+import dev.tricked.solidverdant.ui.navigation.MainTopBar
 
 /**
- * Container for the review-loop home, pushed from the Timer header. Hosts a segmented control that
+ * Container for the review-loop home, a side-menu destination. Hosts a segmented control that
  * switches between [InboxPane] and [ReviewDayPane], and an overflow menu with entry points to the
  * reminder settings and template management screens.
  *
- * Pushed from the Timer header; [onBack] returns there. This is shared scaffolding only. The Inbox agent fills in [InboxPane]; the review/reminders agent
+ * The header shows the side-menu button, or a back arrow when pushed with [onBack]. This is shared
+ * scaffolding only. The Inbox agent fills in [InboxPane]; the review/reminders agent
  * fills in [ReviewDayPane] and [ReminderSettingsScreen]; the templates agent fills in the manage
  * templates screen. Navigation callbacks default to no-ops so the container renders standalone.
  */
@@ -57,8 +59,8 @@ fun ReviewScreen(
     var menuExpanded by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text(stringResource(R.string.review_title)) },
+        MainTopBar(
+            title = stringResource(R.string.review_title),
             navigationIcon = {
                 if (onBack != null) {
                     IconButton(onClick = onBack, modifier = Modifier.testTag("review_back")) {
@@ -67,6 +69,8 @@ fun ReviewScreen(
                             contentDescription = stringResource(R.string.review_navigate_back),
                         )
                     }
+                } else {
+                    MainMenuButton()
                 }
             },
             actions = {

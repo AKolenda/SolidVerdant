@@ -71,7 +71,6 @@ class WeekCalendarViewTest {
                     onCreateRange = { selected = it },
                     onPrevious = {},
                     onNext = {},
-                    onToday = {},
                     projects = emptyList(),
                 )
             }
@@ -107,7 +106,6 @@ class WeekCalendarViewTest {
                     onCreateRange = { selected = it },
                     onPrevious = {},
                     onNext = {},
-                    onToday = {},
                     projects = emptyList(),
                 )
             }
@@ -153,7 +151,6 @@ class WeekCalendarViewTest {
                     onEntryClick = {},
                     onPrevious = {},
                     onNext = {},
-                    onToday = {},
                     projects = listOf(Project(id = "project-1", name = "Project", color = "#123456", clientId = "client-1")),
                     clients = listOf(Client(id = "client-1", name = "Client")),
                     tasks = listOf(
@@ -243,7 +240,6 @@ class WeekCalendarViewTest {
                     onMoveEntry = { source, start, end -> moved = Triple(source, start, end) },
                     onPrevious = {},
                     onNext = {},
-                    onToday = {},
                     projects = emptyList(),
                 )
             }
@@ -295,7 +291,6 @@ class WeekCalendarViewTest {
                     onMoveEntry = { source, start, end -> moved = Triple(source, start, end) },
                     onPrevious = {},
                     onNext = {},
-                    onToday = {},
                     projects = emptyList(),
                 )
             }
@@ -342,7 +337,6 @@ class WeekCalendarViewTest {
                     onEntryLongPress = { longPressed = it.id },
                     onPrevious = {},
                     onNext = {},
-                    onToday = {},
                     projects = emptyList(),
                 )
             }

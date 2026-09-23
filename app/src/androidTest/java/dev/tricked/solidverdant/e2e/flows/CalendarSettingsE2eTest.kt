@@ -21,6 +21,8 @@ import dev.tricked.solidverdant.e2e.BackendPortable
 import dev.tricked.solidverdant.e2e.E2eFixture
 import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.TestTags
+import dev.tricked.solidverdant.e2e.robots.chooseCalendarMenuItem
+import dev.tricked.solidverdant.e2e.robots.openCalendarFromMenu
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -53,14 +55,13 @@ class CalendarSettingsE2eTest {
     }
 
     private fun openCalendar() {
-        e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag("track_open_calendar"), WAIT_MS)
-        e2e.composeRule.onNodeWithTag("track_open_calendar", useUnmergedTree = true).performClick()
+        e2e.composeRule.openCalendarFromMenu()
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_WEEK_GRID), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_CONTENT_READY), WAIT_MS)
     }
 
     private fun openSettings() {
-        e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_SETTINGS, useUnmergedTree = true).performClick()
+        e2e.composeRule.chooseCalendarMenuItem(TestTags.CALENDAR_SETTINGS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_SETTINGS_SHEET), WAIT_MS)
     }
 

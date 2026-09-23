@@ -9,7 +9,6 @@ package dev.tricked.solidverdant.e2e.perf
 import android.util.SparseIntArray
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onFirst
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
@@ -22,6 +21,7 @@ import androidx.test.uiautomator.UiDevice
 import dagger.hilt.android.testing.HiltAndroidTest
 import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.TestTags
+import dev.tricked.solidverdant.e2e.robots.openMenuDestination
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -65,16 +65,13 @@ class ScrollingFramePerformanceTest {
         }
         val tabs = measureFrames(scenario) {
             listOf(
-                "main_nav_stats",
-                "main_nav_track",
-                "track_open_calendar",
-                "main_nav_track",
-                "track_open_review",
-                "main_nav_track",
-            ).forEach { tag ->
-                rule.onAllNodes(hasTestTag(tag)).onFirst().performClick()
-                rule.waitForIdle()
-            }
+                TestTags.NAV_DASHBOARD,
+                TestTags.NAV_TIMER,
+                TestTags.NAV_CALENDAR,
+                TestTags.NAV_TIMER,
+                TestTags.NAV_REVIEW,
+                TestTags.NAV_TIMER,
+            ).forEach { tag -> rule.openMenuDestination(tag) }
         }
 
         println("PERF history_down=$down history_up=$up tab_switches=$tabs")

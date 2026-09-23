@@ -24,13 +24,13 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -50,7 +50,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.testTag
@@ -74,6 +73,7 @@ import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.ui.theme.Dimens
+import dev.tricked.solidverdant.ui.theme.readableOn
 
 private enum class PickerKind { PROJECT, TASK }
 
@@ -124,11 +124,8 @@ fun ProjectTaskDropdown(
             shape = fieldShape,
             testTag = EditTimeEntryTestTags.PROJECT_SELECTOR,
             style = style,
-            leading = {
-                val dotColor = selectedProject?.color?.let(::projectColorOrNull)
-                    ?: MaterialTheme.colorScheme.outline
-                Box(Modifier.size(Dimens.ProjectDot).clip(CircleShape).background(dotColor))
-            },
+            // A folder icon; the project colour shows on the name in the picker instead.
+            leading = { GroupedRowIcon(Icons.Outlined.Folder) },
         )
         if (style == SelectorStyle.Grouped) GroupedDivider(inset = Dimens.SettingsIconInset)
         SearchableSelectorField(
@@ -294,7 +291,17 @@ internal fun GroupedRowIcon(icon: androidx.compose.ui.graphics.vector.ImageVecto
     Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(Dimens.IconSmall))
 }
 
-private fun projectColorOrNull(hex: String): Color? = runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrNull()
+/** A project's colour for its name in the picker, blended until legible on the dialog surface. */
+@Composable
+private fun readableProjectColor(hex: String): Color {
+    val background = MaterialTheme.colorScheme.surfaceContainerHigh
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    return remember(hex, background, onSurface) {
+        runCatching { Color(hex.toColorInt()) }
+            .map { it.readableOn(background = background, towards = onSurface) }
+            .getOrDefault(onSurface)
+    }
+}
 
 internal fun filterProjects(projects: List<Project>, query: String): List<Project> {
     val normalizedQuery = query.trim()
@@ -344,18 +351,7 @@ private fun ProjectPickerDialog(
                 text = project.name,
                 selected = project.id == selectedProjectId,
                 onClick = { onSelect(project.id) },
-                leadingContent = if (showProjectColors) {
-                    {
-                        Box(
-                            modifier = Modifier
-                                .size(Dimens.Space12)
-                                .clip(CircleShape)
-                                .background(Color(project.color.toColorInt())),
-                        )
-                    }
-                } else {
-                    null
-                },
+                textColor = if (showProjectColors) readableProjectColor(project.color) else Color.Unspecified,
             )
         }
         if (filteredProjects.isEmpty()) {
@@ -448,9 +444,10 @@ internal fun PickerItem(
     onClick: () -> Unit,
     leadingContent: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier,
+    textColor: Color = Color.Unspecified,
 ) {
     DropdownMenuItem(
-        text = { Text(text, style = MaterialTheme.typography.bodyLarge) },
+        text = { Text(text, style = MaterialTheme.typography.bodyLarge, color = textColor) },
         onClick = onClick,
         modifier = modifier.semantics { this.selected = selected },
         leadingIcon = leadingContent,

@@ -6,6 +6,7 @@
 
 package dev.tricked.solidverdant.ui.calendar
 
+import android.text.format.DateFormat
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,8 +25,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -35,13 +38,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -65,12 +68,16 @@ import dev.tricked.solidverdant.ui.components.LoadingState
 import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.statistics.hexToColor
 import dev.tricked.solidverdant.ui.theme.Dimens
+import dev.tricked.solidverdant.ui.theme.tabular
+import dev.tricked.solidverdant.ui.tracking.formatClockDuration
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
 import java.time.format.TextStyle
+import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 
 private const val NARROW_CALENDAR_DAYS = 3
@@ -96,7 +103,6 @@ fun WeekCalendarView(
     onCreateRange: (CalendarTimeRange) -> Unit = {},
     onPrevious: () -> Unit,
     onNext: () -> Unit,
-    onToday: () -> Unit,
     projects: List<Project>,
     tasks: List<Task> = emptyList(),
     clients: List<Client> = emptyList(),
@@ -121,7 +127,6 @@ fun WeekCalendarView(
             onCreateRange = onCreateRange,
             onPrevious = onPrevious,
             onNext = onNext,
-            onToday = onToday,
             projects = projects,
             tasks = tasks,
             clients = clients,
@@ -141,7 +146,6 @@ private fun WeekCalendarContent(
     onCreateRange: (CalendarTimeRange) -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
-    onToday: () -> Unit,
     projects: List<Project>,
     tasks: List<Task>,
     clients: List<Client>,
@@ -171,16 +175,42 @@ private fun WeekCalendarContent(
     val projectsById = remember(projects) { projects.associateBy { it.id } }
     val tasksById = remember(tasks) { tasks.associateBy { it.id } }
     val clientsById = remember(clients) { clients.associateBy { it.id } }
+    val totalSeconds = remember(state.bucketsByDate, days) { days.sumOf { state.bucketsByDate[it]?.totalSeconds ?: 0L } }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        WeekNavHeader(
-            days = days,
-            viewMode = state.viewMode,
-            locale = locale,
-            onPrevious = onPrevious,
-            onNext = onNext,
-            onToday = onToday,
-        )
+        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+            CalendarPeriodHeader(
+                title = periodTitle(days, state.viewMode, locale),
+                totalSeconds = totalSeconds,
+                onPrevious = onPrevious,
+                onNext = onNext,
+            )
+            if (state.viewMode == CalendarViewMode.DAY) {
+                // Day view: the selected day's week as a strip, the day circled.
+                CalendarWeekStrip(
+                    days = remember(state.selectedDate, state.weekStart) { weekOf(state.selectedDate, state.weekStart) },
+                    selectedDate = state.selectedDate,
+                    today = today,
+                    locale = locale,
+                    onSelectDate = onSelectDate,
+                )
+            } else {
+                // Day-of-week / date header aligned with the grid gutter.
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Spacer(Modifier.width(CalendarGutterWidth))
+                    days.forEach { day ->
+                        DayHeaderCell(
+                            day = day,
+                            selected = day == state.selectedDate,
+                            isToday = day == today,
+                            locale = locale,
+                            onSelect = { onSelectDate(day) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+        }
 
         // Subtle top-line refresh only when content is already on screen; a first, empty load uses
         // the full-content LoadingState below instead.
@@ -188,20 +218,6 @@ private fun WeekCalendarContent(
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
 
-        // Day-of-week / date header aligned with the grid gutter.
-        Row(modifier = Modifier.fillMaxWidth()) {
-            Spacer(Modifier.width(CalendarGutterWidth))
-            days.forEach { day ->
-                DayHeaderCell(
-                    day = day,
-                    selected = day == state.selectedDate,
-                    isToday = day == today,
-                    locale = locale,
-                    onSelect = { onSelectDate(day) },
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
         HairLine()
 
         if (hasAnyAllDay) {
@@ -304,39 +320,65 @@ private fun WeekGrid(
     }
 }
 
+/** "Wed, Sep 23" over "Total: 00:00:33", with previous/next arrows on the right. */
 @Composable
-private fun WeekNavHeader(
-    days: List<LocalDate>,
-    viewMode: CalendarViewMode,
-    locale: Locale,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
-    onToday: () -> Unit,
-) {
+private fun CalendarPeriodHeader(title: String, totalSeconds: Long, onPrevious: () -> Unit, onNext: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space4),
+        modifier = Modifier.fillMaxWidth().padding(start = Dimens.Space16, end = Dimens.Space4, top = Dimens.Space8),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = stringResource(R.string.calendar_total, formatClockDuration(totalSeconds)),
+                style = MaterialTheme.typography.titleMedium.tabular(),
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+            )
+        }
         IconButton(onClick = onPrevious) {
             Icon(
                 Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                 contentDescription = stringResource(R.string.calendar_show_previous),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Text(
-            text = rangeLabel(days, viewMode, locale),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-            textAlign = TextAlign.Center,
-        )
-        TextButton(onClick = onToday) { Text(stringResource(R.string.calendar_today)) }
         IconButton(onClick = onNext) {
             Icon(
                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = stringResource(R.string.calendar_show_next),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** One week as weekday initials over dates; the selected date sits in a filled accent circle. */
+@Composable
+private fun CalendarWeekStrip(
+    days: List<LocalDate>,
+    selectedDate: LocalDate,
+    today: LocalDate,
+    locale: Locale,
+    onSelectDate: (LocalDate) -> Unit,
+) {
+    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space4, vertical = Dimens.Space4)) {
+        days.forEach { day ->
+            DayHeaderCell(
+                day = day,
+                selected = day == selectedDate,
+                isToday = day == today,
+                locale = locale,
+                onSelect = { onSelectDate(day) },
+                weekdayStyle = TextStyle.NARROW,
+                modifier = Modifier.weight(1f),
             )
         }
     }
@@ -350,48 +392,43 @@ private fun DayHeaderCell(
     locale: Locale,
     onSelect: () -> Unit,
     modifier: Modifier = Modifier,
+    weekdayStyle: TextStyle = TextStyle.SHORT,
 ) {
-    val weekday = day.dayOfWeek.getDisplayName(TextStyle.SHORT, locale)
-    val bg = when {
-        selected -> MaterialTheme.colorScheme.primaryContainer
-        else -> Color.Unspecified
+    val colors = MaterialTheme.colorScheme
+    val dateColor = when {
+        selected -> colors.onPrimary
+        isToday -> colors.primary
+        else -> colors.onSurface
     }
     Column(
         modifier = modifier
             .heightIn(min = Dimens.MinTouchTarget)
-            .padding(Dimens.Space2)
-            .clip(MaterialTheme.shapes.small)
-            .then(if (bg != Color.Unspecified) Modifier.background(bg) else Modifier)
             .clickable(onClick = onSelect)
             .padding(vertical = Dimens.Space4)
             .testTag("week-day-header-$day"),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+        verticalArrangement = Arrangement.spacedBy(Dimens.Space2),
     ) {
         Text(
-            text = weekday,
+            text = day.dayOfWeek.getDisplayName(weekdayStyle, locale),
             style = MaterialTheme.typography.labelSmall,
-            color = calendarDayContentColor(
-                selected = selected,
-                isToday = isToday,
-                primary = MaterialTheme.colorScheme.primary,
-                onPrimaryContainer = MaterialTheme.colorScheme.onPrimaryContainer,
-                default = MaterialTheme.colorScheme.onSurfaceVariant,
-            ),
+            color = if (isToday && !selected) colors.primary else colors.onSurfaceVariant,
             maxLines = 1,
         )
-        Text(
-            text = day.dayOfMonth.toString(),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = if (isToday || selected) FontWeight.Bold else FontWeight.Normal,
-            color = calendarDayContentColor(
-                selected = selected,
-                isToday = isToday,
-                primary = MaterialTheme.colorScheme.primary,
-                onPrimaryContainer = MaterialTheme.colorScheme.onPrimaryContainer,
-                default = Color.Unspecified,
-            ),
-        )
+        Box(
+            modifier = Modifier
+                .size(Dimens.CalendarStripDay)
+                .clip(CircleShape)
+                .then(if (selected) Modifier.background(colors.primary) else Modifier),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = day.dayOfMonth.toString(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = if (isToday || selected) FontWeight.SemiBold else FontWeight.Normal,
+                color = dateColor,
+            )
+        }
     }
 }
 
@@ -603,10 +640,16 @@ private fun DayColumn(
 internal fun HourGridlines(settings: CalendarGridSettings = CalendarGridSettings(), modifier: Modifier = Modifier) {
     val lineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
     val hourHeight = calendarHourHeight(settings)
+    val context = LocalContext.current
+    val locale = appLocale()
+    val hourFormatter = remember(locale) {
+        // "11 AM" keeps 12-hour labels on one line in the hour gutter.
+        DateTimeFormatter.ofPattern(if (DateFormat.is24HourFormat(context)) "HH:mm" else "h a", locale)
+    }
     Box(modifier = modifier.fillMaxWidth().height(calendarTotalHeight(settings))) {
         for (hour in settings.startHour until settings.endHour) {
             Text(
-                text = "%02d:00".format(hour),
+                text = LocalTime.of(hour, 0).format(hourFormatter),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
@@ -667,13 +710,21 @@ private fun HairLine() {
 @Composable
 private fun DeviceCalendarEvent.eventColor(): Color = colorArgb?.let { Color(it) } ?: MaterialTheme.colorScheme.secondary
 
-private fun rangeLabel(days: List<LocalDate>, viewMode: CalendarViewMode, locale: Locale): String {
+private fun periodTitle(days: List<LocalDate>, viewMode: CalendarViewMode, locale: Locale): String {
     if (days.isEmpty()) return ""
     val first = days.first()
     val last = days.last()
     if (viewMode == CalendarViewMode.DAY || first == last) {
-        return first.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(locale))
+        return first.format(DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, "EEEMMMd"), locale))
     }
-    val rangeFormat = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)
+    val rangeFormat = DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, "MMMd"), locale)
     return "${first.format(rangeFormat)} – ${last.format(rangeFormat)}"
 }
+
+/** The seven days of [date]'s week, starting on the account's [weekStart]. */
+internal fun weekOf(date: LocalDate, weekStart: DayOfWeek): List<LocalDate> {
+    val first = date.with(TemporalAdjusters.previousOrSame(weekStart))
+    return (0L until DAYS_PER_WEEK).map(first::plusDays)
+}
+
+private const val DAYS_PER_WEEK = 7L

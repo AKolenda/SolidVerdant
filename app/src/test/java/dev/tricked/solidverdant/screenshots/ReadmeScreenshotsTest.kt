@@ -6,19 +6,35 @@
 
 package dev.tricked.solidverdant.screenshots
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.model.Client
@@ -40,6 +56,9 @@ import dev.tricked.solidverdant.ui.calendar.DayBucket
 import dev.tricked.solidverdant.ui.calendar.MonthCalendarView
 import dev.tricked.solidverdant.ui.calendar.WeekCalendarView
 import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
+import dev.tricked.solidverdant.ui.navigation.MainMenuHeader
+import dev.tricked.solidverdant.ui.navigation.MainMenuSheet
+import dev.tricked.solidverdant.ui.navigation.MainTopBar
 import dev.tricked.solidverdant.ui.review.InboxHeader
 import dev.tricked.solidverdant.ui.review.InboxIssueCard
 import dev.tricked.solidverdant.ui.review.InboxIssueCardActions
@@ -62,7 +81,10 @@ import dev.tricked.solidverdant.ui.templates.TemplateResolver
 import dev.tricked.solidverdant.ui.templates.TemplateRow
 import dev.tricked.solidverdant.ui.templates.templateDisplayLabel
 import dev.tricked.solidverdant.ui.templates.templateProjectTaskSummary
-import dev.tricked.solidverdant.ui.tracking.TrackingControls
+import dev.tricked.solidverdant.ui.tracking.ActiveTimerBar
+import dev.tricked.solidverdant.ui.tracking.StartTimerForm
+import dev.tricked.solidverdant.ui.tracking.TimeTrackerTopBar
+import dev.tricked.solidverdant.ui.tracking.TimerFab
 import dev.tricked.solidverdant.ui.tracking.TrackingUiState
 import dev.tricked.solidverdant.ui.tracking.trackingHistoryItems
 import org.junit.Test
@@ -96,7 +118,26 @@ import dev.tricked.solidverdant.ui.navigation.Screen as NavScreen
 @Config(sdk = [34], qualifiers = "xhdpi")
 class ReadmeScreenshotsTest {
 
-    private class Screen(val name: String, val content: @Composable () -> Unit)
+    /** One README screen: the production shell pieces around it, then its content. */
+    private class Screen(
+        val name: String,
+        val header: (@Composable () -> Unit)? = null,
+        val pushedTitleRes: Int? = null,
+        val bottomBar: @Composable () -> Unit = {},
+        val fab: @Composable () -> Unit = {},
+        val content: @Composable () -> Unit,
+    )
+
+    @Composable
+    private fun Screen.Shell() {
+        ScreenshotHost.AppShell(
+            header = header,
+            pushedTitleRes = pushedTitleRes,
+            bottomBar = bottomBar,
+            fab = fab,
+            content = content,
+        )
+    }
 
     @Test
     fun captureReadmeAndMatrix() {
@@ -116,13 +157,7 @@ class ReadmeScreenshotsTest {
                                 "generated",
                                 "${screen.name}-${theme.id}-${device.id}$localeSuffix.png",
                             ),
-                            content = {
-                                ScreenshotHost.AppShell(
-                                    tab = tabFor(screen.name),
-                                    titleRes = pushedTitleFor(screen.name),
-                                    content = screen.content,
-                                )
-                            },
+                            content = { screen.Shell() },
                         )
                         if (locale == LocaleAxis.ENGLISH &&
                             theme == ScreenshotMatrix.readmeTheme &&
@@ -138,13 +173,7 @@ class ReadmeScreenshotsTest {
                                     "readme",
                                     "${screen.name}.png",
                                 ),
-                                content = {
-                                    ScreenshotHost.AppShell(
-                                        tab = tabFor(screen.name),
-                                        titleRes = pushedTitleFor(screen.name),
-                                        content = screen.content,
-                                    )
-                                },
+                                content = { screen.Shell() },
                             )
                         }
                     }
@@ -153,18 +182,36 @@ class ReadmeScreenshotsTest {
         }
     }
 
-    private fun tabFor(screenName: String): NavScreen = when (screenName) {
-        "statistics" -> NavScreen.Stats
-        "settings", "templates" -> NavScreen.Settings
-        else -> NavScreen.Track
+    private val timeTrackerHeader: @Composable () -> Unit = {
+        TimeTrackerTopBar(syncing = false, onRefresh = {}, onRequestNotifications = null)
     }
 
-    /** Title bar for destinations pushed on top of a tab; tab roots draw their own headers. */
-    private fun pushedTitleFor(screenName: String): Int? = when (screenName) {
-        "calendar-month", "calendar-week" -> dev.tricked.solidverdant.R.string.nav_calendar
-        "inbox", "review" -> dev.tricked.solidverdant.R.string.review_title
-        "templates" -> dev.tricked.solidverdant.R.string.review_menu_manage_templates
-        else -> null
+    /** The Calendar header and new-entry button; the calendar views below are its body. */
+    private val calendarHeader: @Composable () -> Unit = {
+        MainTopBar(
+            title = stringResource(R.string.nav_calendar),
+            actions = {
+                IconButton(onClick = {}) {
+                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.calendar_more_actions))
+                }
+            },
+        )
+    }
+    private val addEntryFab: @Composable () -> Unit = {
+        FloatingActionButton(
+            onClick = {},
+            shape = CircleShape,
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+        ) {
+            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_time_entry))
+        }
+    }
+    private val idleTimerFab: @Composable () -> Unit = {
+        TimerFab(timerActive = false, expanded = false, onExpandedChange = {}, onStartTimer = {}, onAddManual = {})
+    }
+    private val reviewHeader: @Composable () -> Unit = {
+        MainTopBar(title = stringResource(R.string.review_title))
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -244,47 +291,47 @@ class ReadmeScreenshotsTest {
         ),
     )
 
+    private val runningState = TrackingUiState(
+        isTracking = true,
+        elapsedSeconds = 5_112,
+        currentTimeEntry = entry("running", "Landing page build", "2026-06-10T14:00:00Z", null, 0, taskId = "t1"),
+        projects = projects,
+        tasks = tasks,
+        clients = clients,
+        timeEntries = historyEntries,
+        hasLoadedTimeEntries = true,
+        editingDescription = "Landing page build",
+        editingProjectId = "p1",
+        editingTaskId = "t1",
+        editingTags = listOf("tag1"),
+        editingBillable = true,
+        syncOperations = syncOperations,
+    )
+
     private fun groupedHistory(): Map<LocalDate, List<TimeEntry>> = historyEntries.groupBy { LocalDate.parse(it.start.substring(0, 10)) }
         .toSortedMap(compareByDescending { it })
 
     @Suppress("LongMethod")
     private fun buildScreens(): List<Screen> = listOf(
-        // 1. Track — active timer running + history rows with sync chips.
-        Screen("track") {
-            val state = TrackingUiState(
-                isTracking = true,
-                elapsedSeconds = 5_112,
-                currentTimeEntry = entry("running", "Landing page build", "2026-06-10T14:00:00Z", null, 0, taskId = "t1"),
-                projects = projects,
-                tasks = tasks,
-                clients = clients,
-                timeEntries = historyEntries,
-                hasLoadedTimeEntries = true,
-                editingDescription = "Landing page build",
-                editingProjectId = "p1",
-                editingTaskId = "t1",
-                editingTags = listOf("tag1"),
-                editingBillable = true,
-                syncOperations = syncOperations,
-            )
+        // 1. Time Tracker — history with the running timer docked at the bottom.
+        Screen(
+            name = "track",
+            header = timeTrackerHeader,
+            bottomBar = {
+                ActiveTimerBar(
+                    uiState = runningState,
+                    elapsedSeconds = runningState.elapsedSeconds,
+                    onStop = {},
+                    onPause = {},
+                    onResume = {},
+                    onEditActiveEntry = {},
+                )
+            },
+            fab = { TimerFab(timerActive = true, expanded = false, onExpandedChange = {}, onStartTimer = {}, onAddManual = {}) },
+        ) {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                item {
-                    TrackingControls(
-                        uiState = state,
-                        elapsedSeconds = state.elapsedSeconds,
-                        onDescriptionChange = {},
-                        onProjectChange = {},
-                        onTaskChange = {},
-                        onTagsChange = {},
-                        onBillableChange = {},
-                        onStart = {},
-                        onStop = {},
-                        onPause = {},
-                        onResume = {},
-                    )
-                }
                 trackingHistoryItems(
-                    uiState = state,
+                    uiState = runningState,
                     groupedEntries = groupedHistory(),
                     onEdit = {},
                     onDelete = {},
@@ -292,8 +339,8 @@ class ReadmeScreenshotsTest {
                 )
             }
         },
-        // 1b. Timer idle — composer for the next entry above the history.
-        Screen("track-idle") {
+        // 1b. Time Tracker idle — the start-timer sheet for the next entry over the history.
+        Screen(name = "track-idle", header = timeTrackerHeader) {
             val state = TrackingUiState(
                 projects = projects,
                 tasks = tasks,
@@ -306,33 +353,46 @@ class ReadmeScreenshotsTest {
                 editingTaskId = "t2",
                 editingBillable = true,
             )
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                item {
-                    TrackingControls(
+            Box(Modifier.fillMaxSize()) {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    trackingHistoryItems(
                         uiState = state,
-                        onDescriptionChange = {},
-                        onProjectChange = {},
-                        onTaskChange = {},
-                        onTagsChange = {},
-                        onBillableChange = {},
-                        onStart = {},
-                        onStop = {},
-                        onPause = {},
-                        onResume = {},
+                        groupedEntries = groupedHistory(),
+                        onEdit = {},
+                        onDelete = {},
+                        onDateClick = {},
+                        onContinue = {},
                     )
                 }
-                trackingHistoryItems(
-                    uiState = state,
-                    groupedEntries = groupedHistory(),
-                    onEdit = {},
-                    onDelete = {},
-                    onDateClick = {},
-                    onContinue = {},
-                )
+                // A modal sheet opens in its own window, which Roborazzi does not capture; draw
+                // the same scrim and sheet in place.
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f)))
+                Surface(
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                    shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                ) {
+                    Column(Modifier.padding(top = 16.dp, bottom = 24.dp)) {
+                        Text(
+                            text = stringResource(R.string.start_timer_title),
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                        StartTimerForm(
+                            uiState = state,
+                            onDescriptionChange = {},
+                            onProjectChange = {},
+                            onTaskChange = {},
+                            onTagsChange = {},
+                            onBillableChange = {},
+                            onStart = {},
+                        )
+                    }
+                }
             }
         },
         // 2. History list — several entries grouped by day, with sync chips.
-        Screen("history") {
+        Screen(name = "history", header = timeTrackerHeader, fab = idleTimerFab) {
             val state = TrackingUiState(
                 projects = projects,
                 tasks = tasks,
@@ -353,7 +413,7 @@ class ReadmeScreenshotsTest {
             }
         },
         // 3. Calendar — month view with sample entries.
-        Screen("calendar-month") {
+        Screen(name = "calendar-month", header = calendarHeader, fab = addEntryFab) {
             val d10 = LocalDate.of(2026, 6, 10)
             val d09 = LocalDate.of(2026, 6, 9)
             val state = CalendarUiState(
@@ -385,8 +445,32 @@ class ReadmeScreenshotsTest {
                 tasks = tasks,
             )
         },
+        // 3b. Calendar — day view: date and total, the week strip, grey entry cards.
+        Screen(name = "calendar-day", header = calendarHeader, fab = addEntryFab) {
+            val d10 = LocalDate.of(2026, 6, 10)
+            val dayEntries = historyEntries.filter { it.start.startsWith("2026-06-10") }
+            WeekCalendarView(
+                state = CalendarUiState(
+                    viewMode = CalendarViewMode.DAY,
+                    zone = ZoneOffset.UTC,
+                    selectedDate = d10,
+                    weekAnchor = d10,
+                    weekStart = DayOfWeek.MONDAY,
+                    visibleDays = listOf(d10),
+                    isLoading = false,
+                    bucketsByDate = mapOf(d10 to DayBucket(d10, dayEntries, dayEntries.sumOf { it.duration ?: 0 }.toLong())),
+                ),
+                onSelectDate = {},
+                onEntryClick = {},
+                onPrevious = {},
+                onNext = {},
+                projects = projects,
+                tasks = tasks,
+                clients = clients,
+            )
+        },
         // 4. Calendar — week view with a couple of overlay calendar events.
-        Screen("calendar-week") {
+        Screen(name = "calendar-week", header = calendarHeader, fab = addEntryFab) {
             val week = (8..14).map { LocalDate.of(2026, 6, it) } // Mon..Sun
             val mon = week[0]
             val tue = week[1]
@@ -446,12 +530,33 @@ class ReadmeScreenshotsTest {
                 onEntryClick = {},
                 onPrevious = {},
                 onNext = {},
-                onToday = {},
                 projects = projects,
             )
         },
+        // 4b. Side menu — the account, organization and destinations.
+        Screen(name = "menu", header = timeTrackerHeader) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f))) {
+                MainMenuSheet(
+                    selectedRoute = NavScreen.Track.route,
+                    reviewBadgeCount = 4,
+                    onNavigate = {},
+                    modifier = Modifier.fillMaxHeight(),
+                    header = {
+                        MainMenuHeader(
+                            userName = "Alex Morgan",
+                            userEmail = "alex@acme.studio",
+                            organizationName = "Acme Studio",
+                            memberships = emptyList(),
+                            currentMembershipId = "m1",
+                            canSwitchOrganization = true,
+                            onMembershipChange = {},
+                        )
+                    },
+                )
+            }
+        },
         // 5. Dashboard — a full week stacked by four projects.
-        Screen("statistics") {
+        Screen(name = "statistics") {
             val dashboardProjects = listOf(
                 Project(id = "d1", name = "Website Redesign", color = "#5E5CE6"),
                 Project(id = "d2", name = "Mobile App", color = "#FF9F0A"),
@@ -527,7 +632,7 @@ class ReadmeScreenshotsTest {
             )
         },
         // 6. Time Inbox — a few review issue cards.
-        Screen("inbox") {
+        Screen(name = "inbox", header = reviewHeader) {
             val projectsById = projects.associateBy { it.id }
             val issues = listOf(
                 InboxIssue(
@@ -590,7 +695,7 @@ class ReadmeScreenshotsTest {
             }
         },
         // 7. End-of-day review — the guided pane.
-        Screen("review") {
+        Screen(name = "review", header = reviewHeader) {
             val state = ReviewDayUiState(
                 loading = false,
                 hasOrganization = true,
@@ -637,7 +742,7 @@ class ReadmeScreenshotsTest {
             )
         },
         // 8. Edit/create entry sheet.
-        Screen("edit-entry") {
+        Screen(name = "edit-entry", header = timeTrackerHeader) {
             val editing = entry(
                 id = "e2",
                 description = "Landing page build",
@@ -680,7 +785,7 @@ class ReadmeScreenshotsTest {
             }
         },
         // 9. Settings tab.
-        Screen("settings") {
+        Screen(name = "settings") {
             SettingsContent(
                 user = User(id = "u1", name = "Alex Morgan", email = "alex@acme.studio", timezone = "Europe/Amsterdam"),
                 memberships = emptyList(),
@@ -714,7 +819,7 @@ class ReadmeScreenshotsTest {
             )
         },
         // 10. Templates / favorites.
-        Screen("templates") {
+        Screen(name = "templates", pushedTitleRes = R.string.review_menu_manage_templates) {
             val templates = listOf(
                 EntryTemplate("tm1", "org1", "Deep work", "p1", "t1", "Focus block", listOf("tag1"), true, true, 0, 0L),
                 EntryTemplate("tm2", "org1", null, "p1", null, "Daily standup", emptyList(), false, false, 1, 0L),

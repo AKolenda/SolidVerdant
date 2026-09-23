@@ -18,6 +18,8 @@ import dev.tricked.solidverdant.e2e.BackendPortable
 import dev.tricked.solidverdant.e2e.E2eFixture
 import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.TestTags
+import dev.tricked.solidverdant.e2e.robots.chooseCalendarMenuItem
+import dev.tricked.solidverdant.e2e.robots.openCalendarFromMenu
 import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -38,11 +40,8 @@ class BreakEntryE2eTest {
         e2e.prepare(E2eFixture.Empty)
         e2e.launchApp()
 
-        e2e.composeRule.onNodeWithTag("track_open_calendar", useUnmergedTree = true).performClick()
-        e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ADD_BREAK), WAIT_MS)
-        e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_ADD_BREAK, useUnmergedTree = true).performClick()
-        e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ADD_BREAK_MENU), WAIT_MS)
-        e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_ADD_BREAK_MENU, useUnmergedTree = true).performClick()
+        e2e.composeRule.openCalendarFromMenu()
+        e2e.composeRule.chooseCalendarMenuItem(TestTags.CALENDAR_ADD_BREAK_MENU)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(EditTimeEntryTestTags.SAVE_BUTTON), WAIT_MS)
         e2e.composeRule.onNodeWithTag(EditTimeEntryTestTags.SAVE_BUTTON, useUnmergedTree = true).performClick()
 

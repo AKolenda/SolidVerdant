@@ -25,16 +25,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarViewMonth
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FreeBreakfast
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Today
+import androidx.compose.material.icons.filled.ViewDay
+import androidx.compose.material.icons.filled.ViewWeek
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -43,11 +49,14 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -74,6 +83,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -95,6 +106,8 @@ import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
 import dev.tricked.solidverdant.ui.components.ErrorState
 import dev.tricked.solidverdant.ui.components.SyncChip
 import dev.tricked.solidverdant.ui.localization.appLocale
+import dev.tricked.solidverdant.ui.navigation.MainMenuButton
+import dev.tricked.solidverdant.ui.navigation.MainTopBar
 import dev.tricked.solidverdant.ui.theme.Dimens
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -235,19 +248,20 @@ fun CalendarScreen(
         deletedEntry = null
     }
 
-    Box(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            CalendarToolbar(
+    val openNewEntry = {
+        creatingRange = defaultCalendarTimeRange(
+            day = state.selectedDate,
+            zone = state.zone,
+            settings = state.calendarSettings,
+        )
+    }
+    Scaffold(
+        topBar = {
+            CalendarTopBar(
                 state = state,
                 onBack = onBack,
+                onToday = viewModel::jumpToToday,
                 onModeSelected = viewModel::setViewMode,
-                onAddEntry = {
-                    creatingRange = defaultCalendarTimeRange(
-                        day = state.selectedDate,
-                        zone = state.zone,
-                        settings = state.calendarSettings,
-                    )
-                },
                 breaksEnabled = breaksEnabled,
                 onAddBreak = {
                     creatingBreakRange = defaultCalendarTimeRange(
@@ -259,6 +273,23 @@ fun CalendarScreen(
                 onOpenOverlay = { showOverlaySheet = true },
                 onOpenSettings = { showSettingsSheet = true },
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = openNewEntry,
+                shape = CircleShape,
+                // A bright accent button rather than M3's tonal container.
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.testTag(CalendarTestTags.ADD_ENTRY),
+            ) {
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_time_entry))
+            }
+        },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        containerColor = MaterialTheme.colorScheme.background,
+    ) { paddingValues ->
+        Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             visibleRunningEntry?.let { entry ->
                 CalendarRunningTimerCard(
                     entry = entry,
@@ -297,10 +328,6 @@ fun CalendarScreen(
                 }
             }
         }
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(Dimens.Space16),
-        )
     }
 
     contextEntry?.let { entry ->
@@ -676,7 +703,7 @@ private fun CalendarRunningTimerCard(entry: TimeEntry, elapsedSeconds: StateFlow
             .padding(bottom = Dimens.Space8)
             .testTag(CalendarTestTags.RUNNING_TIMER),
         shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.primaryContainer,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
     ) {
         Row(
             modifier = Modifier
@@ -687,19 +714,19 @@ private fun CalendarRunningTimerCard(entry: TimeEntry, elapsedSeconds: StateFlow
             Icon(
                 imageVector = Icons.Default.AccessTime,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                tint = MaterialTheme.colorScheme.error,
             )
             Spacer(Modifier.width(Dimens.Space12))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.calendar_timer_running),
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -707,7 +734,7 @@ private fun CalendarRunningTimerCard(entry: TimeEntry, elapsedSeconds: StateFlow
             Text(
                 text = formatRunningDuration(liveElapsedSeconds),
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             IconButton(
                 onClick = onEdit,
@@ -716,7 +743,7 @@ private fun CalendarRunningTimerCard(entry: TimeEntry, elapsedSeconds: StateFlow
                 Icon(
                     imageVector = Icons.Default.Edit,
                     contentDescription = stringResource(R.string.edit_start_time),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -839,117 +866,129 @@ private fun CalendarSplitDialog(entry: TimeEntry, zone: java.time.ZoneId, onDism
     )
 }
 
+/**
+ * "Calendar" header with the side-menu button (or back when pushed) and the overflow menu:
+ * Today, the Day / Week / Month views, then add break, the device-calendar overlay and settings.
+ */
 @Composable
-private fun CalendarToolbar(
+private fun CalendarTopBar(
     state: CalendarUiState,
     onBack: (() -> Unit)?,
+    onToday: () -> Unit,
     onModeSelected: (CalendarViewMode) -> Unit,
-    onAddEntry: () -> Unit,
     breaksEnabled: Boolean,
     onAddBreak: () -> Unit,
     onOpenOverlay: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
-    val modes = remember {
-        listOf(
-            CalendarViewMode.MONTH to R.string.calendar_view_month,
-            CalendarViewMode.WEEK to R.string.calendar_view_week,
-            CalendarViewMode.DAY to R.string.calendar_view_day,
-        )
+    var menuExpanded by remember { mutableStateOf(false) }
+    val choose: (() -> Unit) -> Unit = { action ->
+        menuExpanded = false
+        action()
     }
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space12, vertical = Dimens.Space8),
-        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-    ) {
-        if (onBack != null) {
-            IconButton(onClick = onBack, modifier = Modifier.testTag(CalendarTestTags.BACK)) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = stringResource(R.string.review_navigate_back),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f)) {
-            modes.forEachIndexed { index, (mode, labelRes) ->
-                SegmentedButton(
-                    selected = state.viewMode == mode,
-                    onClick = { onModeSelected(mode) },
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
-                    modifier = Modifier.testTag(
-                        when (mode) {
-                            CalendarViewMode.MONTH -> CalendarTestTags.MODE_MONTH
-                            CalendarViewMode.WEEK -> CalendarTestTags.MODE_WEEK
-                            CalendarViewMode.DAY -> CalendarTestTags.MODE_DAY
-                        },
-                    ),
-                ) {
-                    Text(stringResource(labelRes))
+    MainTopBar(
+        title = stringResource(R.string.nav_calendar),
+        navigationIcon = {
+            if (onBack != null) {
+                IconButton(onClick = onBack, modifier = Modifier.testTag(CalendarTestTags.BACK)) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = stringResource(R.string.review_navigate_back),
+                    )
                 }
+            } else {
+                MainMenuButton()
             }
-        }
-        IconButton(
-            onClick = onAddEntry,
-            modifier = Modifier.testTag(CalendarTestTags.ADD_ENTRY),
-        ) {
-            Icon(
-                Icons.Default.Add,
-                contentDescription = stringResource(R.string.add_time_entry),
-            )
-        }
-        if (breaksEnabled) {
-            var addMenuExpanded by remember { mutableStateOf(false) }
+        },
+        actions = {
             Box {
                 IconButton(
-                    onClick = { addMenuExpanded = true },
-                    modifier = Modifier.testTag(CalendarTestTags.ADD_BREAK),
+                    onClick = { menuExpanded = true },
+                    modifier = Modifier.testTag(CalendarTestTags.MORE_ACTIONS),
                 ) {
-                    Icon(
-                        Icons.Default.MoreVert,
-                        contentDescription = stringResource(R.string.calendar_more_actions),
-                    )
+                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.calendar_more_actions))
                 }
-                DropdownMenu(
-                    expanded = addMenuExpanded,
-                    onDismissRequest = { addMenuExpanded = false },
-                ) {
+                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.calendar_add_break)) },
-                        modifier = Modifier.testTag(CalendarTestTags.ADD_BREAK_MENU),
-                        onClick = {
-                            addMenuExpanded = false
-                            onAddBreak()
-                        },
+                        text = { Text(stringResource(R.string.calendar_today)) },
+                        leadingIcon = { Icon(Icons.Default.Today, contentDescription = null) },
+                        onClick = { choose(onToday) },
+                    )
+                    HorizontalDivider()
+                    CALENDAR_MODES.forEach { (mode, labelRes) ->
+                        val selected = state.viewMode == mode
+                        DropdownMenuItem(
+                            text = { Text(stringResource(labelRes)) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = when (mode) {
+                                        CalendarViewMode.DAY -> Icons.Default.ViewDay
+                                        CalendarViewMode.WEEK -> Icons.Default.ViewWeek
+                                        CalendarViewMode.MONTH -> Icons.Default.CalendarViewMonth
+                                    },
+                                    contentDescription = null,
+                                )
+                            },
+                            trailingIcon = if (selected) {
+                                { Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                            } else {
+                                null
+                            },
+                            onClick = { choose { onModeSelected(mode) } },
+                            modifier = Modifier
+                                .testTag(calendarModeTag(mode))
+                                .semantics { this.selected = selected },
+                        )
+                    }
+                    HorizontalDivider()
+                    if (breaksEnabled) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.calendar_add_break)) },
+                            leadingIcon = { Icon(Icons.Default.FreeBreakfast, contentDescription = null) },
+                            modifier = Modifier.testTag(CalendarTestTags.ADD_BREAK_MENU),
+                            onClick = { choose(onAddBreak) },
+                        )
+                    }
+                    if (state.viewMode != CalendarViewMode.MONTH) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.calendar_overlay_settings)) },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Layers,
+                                    contentDescription = null,
+                                    tint = if (state.overlayEnabled) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                )
+                            },
+                            modifier = Modifier.testTag(CalendarTestTags.OVERLAY),
+                            onClick = { choose(onOpenOverlay) },
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.calendar_settings)) },
+                        leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                        modifier = Modifier.testTag(CalendarTestTags.SETTINGS),
+                        onClick = { choose(onOpenSettings) },
                     )
                 }
             }
-        }
-        IconButton(
-            onClick = onOpenSettings,
-            modifier = Modifier.testTag(CalendarTestTags.SETTINGS),
-        ) {
-            Icon(
-                Icons.Default.Settings,
-                contentDescription = stringResource(R.string.calendar_settings),
-            )
-        }
-        if (state.viewMode != CalendarViewMode.MONTH) {
-            IconButton(
-                onClick = onOpenOverlay,
-                modifier = Modifier.testTag(CalendarTestTags.OVERLAY),
-            ) {
-                Icon(
-                    Icons.Default.Layers,
-                    contentDescription = stringResource(R.string.calendar_overlay_settings),
-                    tint = if (state.overlayEnabled) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-        }
-    }
+        },
+    )
+}
+
+private val CALENDAR_MODES = listOf(
+    CalendarViewMode.DAY to R.string.calendar_view_day,
+    CalendarViewMode.WEEK to R.string.calendar_view_week,
+    CalendarViewMode.MONTH to R.string.calendar_view_month,
+)
+
+private fun calendarModeTag(mode: CalendarViewMode): String = when (mode) {
+    CalendarViewMode.MONTH -> CalendarTestTags.MODE_MONTH
+    CalendarViewMode.WEEK -> CalendarTestTags.MODE_WEEK
+    CalendarViewMode.DAY -> CalendarTestTags.MODE_DAY
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1146,7 +1185,6 @@ private fun CalendarBody(
                 onCreateRange = onCreateRange,
                 onPrevious = viewModel::pageBackward,
                 onNext = viewModel::pageForward,
-                onToday = viewModel::jumpToToday,
                 projects = projects,
                 tasks = tasks,
                 clients = clients,

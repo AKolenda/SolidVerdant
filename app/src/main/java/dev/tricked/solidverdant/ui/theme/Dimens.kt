@@ -14,11 +14,10 @@ import androidx.compose.ui.unit.dp
  * The values are measured from the canonical screens rather than invented:
  *  - Statistics KPI / donut / trend cards use 16.dp content padding and 8.dp
  *    inner vertical gaps ([CardContentPadding], [CardContentGap]).
- *  - The month/day calendar entry blocks clip to [MaterialTheme.shapes.small]
- *    (8.dp), draw a 4.dp coloured side bar with an 8.dp gap, and are inset with
+ *  - The month/day calendar entry cards clip to [MaterialTheme.shapes.small]
+ *    (8.dp), keep an 8.dp gap between title and duration, and are inset with
  *    8.dp horizontal / 4.dp vertical padding
- *    ([CornerRadius], [EntryBarWidth], [EntryBarGap], [EntryPaddingHorizontal],
- *    [EntryPaddingVertical]).
+ *    ([CornerRadius], [EntryBarGap], [EntryPaddingHorizontal], [EntryPaddingVertical]).
  *  - Calendar day entries coerce to a minimum block height of 34.dp
  *    ([EntryMinHeight]).
  */
@@ -46,8 +45,6 @@ object Dimens {
 
     // --- Calendar entry-block metrics (measured from Day/Month calendar) ---
     val EntryMinHeight = 34.dp
-    val EntryBarWidth = 4.dp
-    val EntryBarHeight = 24.dp
     val EntryBarGap = 8.dp
     val EntryPaddingHorizontal = 8.dp
     val EntryPaddingVertical = 4.dp
@@ -69,8 +66,6 @@ object Dimens {
     val SettingsIconInset = 48.dp
     val AvatarSize = 48.dp
     val ProjectDot = 10.dp
-    val ProjectDotSmall = 8.dp
-    val TimerBarHeight = 64.dp
     val DurationFieldWidth = 104.dp
     val GroupedValueMaxWidth = 180.dp
 
@@ -89,11 +84,20 @@ object Dimens {
     val ChartBarCorner = 3.dp
     val ProgressBarHeight = 4.dp
 
-    // --- Floating pill tab bar ---
-    val TabBarHeight = 64.dp
-    val TabBarItemWidth = 84.dp
-    val TabBarBottomGap = 12.dp
-    val TabBarShadow = 12.dp
+    // --- Docked timer sheet and new-entry button ---
+    val SheetHandleWidth = 32.dp
+    val SheetHandleHeight = 4.dp
+    val SheetShadow = 8.dp
+
+    /** List bottom padding so the last card scrolls clear of the floating new-entry button. */
+    val FabClearance = 88.dp
+
+    /** Widest the Time Tracker history grows on tablets before it is centred. */
+    val ContentMaxWidth = 720.dp
+
+    // --- Calendar day header (week strip) ---
+    val CalendarStripDay = 36.dp
+
     val NarrowCalendarWidth = 600.dp
     val PickerMaxWidth = 560.dp
     val PickerMaxHeight = 640.dp

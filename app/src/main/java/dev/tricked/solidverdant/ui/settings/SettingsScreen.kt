@@ -18,14 +18,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -79,7 +77,7 @@ import dev.tricked.solidverdant.ui.components.GroupedSection
 import dev.tricked.solidverdant.ui.components.GroupedSwitchRow
 import dev.tricked.solidverdant.ui.components.OptionPickerDialog
 import dev.tricked.solidverdant.ui.localization.appLocale
-import dev.tricked.solidverdant.ui.navigation.LocalFloatingBarInset
+import dev.tricked.solidverdant.ui.navigation.MainTopBar
 import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.ui.theme.labelRes
 import dev.tricked.solidverdant.ui.theme.selectableThemeModes
@@ -221,155 +219,154 @@ internal fun SettingsContent(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .padding(bottom = LocalFloatingBarInset.current + Dimens.Space24)
             .testTag(SettingsTestTags.SCREEN),
-        verticalArrangement = Arrangement.spacedBy(Dimens.Space24),
     ) {
-        Text(
-            text = stringResource(R.string.settings_menu),
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(start = Dimens.Space16 + Dimens.Space4, top = Dimens.Space16),
-        )
-
-        GroupedSection {
-            if (user != null) {
-                AccountRow(user)
-                GroupedDivider()
-            }
-            val organizationName = currentMembership?.organization?.name.orEmpty()
-            GroupedRow(
-                title = stringResource(R.string.settings_organization),
-                leadingIcon = Icons.Outlined.Business,
-                value = organizationName,
-                onClick = if (canSwitchOrganization) ({ picker = SettingsPicker.ORGANIZATION }) else null,
-            )
-        }
-
-        GroupedSection(header = stringResource(R.string.settings_section_appearance)) {
-            GroupedRow(
-                title = stringResource(R.string.theme),
-                leadingIcon = Icons.Outlined.Palette,
-                value = stringResource(appTheme.labelRes),
-                onClick = { picker = SettingsPicker.THEME },
-                modifier = Modifier.testTag(SettingsTestTags.THEME_ROW),
-            )
-            GroupedDivider(inset = Dimens.SettingsIconInset)
-            GroupedRow(
-                title = stringResource(R.string.choose_language),
-                leadingIcon = Icons.Outlined.Language,
-                onClick = { openLanguageSettings(context) },
-            )
-        }
-
-        GroupedSection(header = stringResource(R.string.nav_timer)) {
-            GroupedRow(
-                title = stringResource(R.string.long_timer_warning),
-                leadingIcon = Icons.Outlined.Schedule,
-                value = pluralStringResource(R.plurals.hours_short, longTimerHours, longTimerHours),
-                onClick = { picker = SettingsPicker.LONG_TIMER },
-            )
-            GroupedDivider(inset = Dimens.SettingsIconInset)
-            AutoClearEntryFieldsSettings(
-                autoClearEntryFieldsAfterStop = autoClearEntryFieldsAfterStop,
-                clearDescriptionAfterStop = clearDescriptionAfterStop,
-                onAutoClearEntryFieldsAfterStopChange = onAutoClearEntryFieldsAfterStopChange,
-                onClearDescriptionAfterStopChange = onClearDescriptionAfterStopChange,
-            )
-            GroupedDivider(inset = Dimens.SettingsIconInset)
-            GroupedSwitchRow(
-                title = stringResource(R.string.always_show_notifications),
-                subtitle = stringResource(R.string.always_show_notifications_description),
-                leadingIcon = Icons.Outlined.NotificationsActive,
-                checked = alwaysShowNotifications,
-                onCheckedChange = { enabled ->
-                    if (enabled) onRequestNotificationPermission()
-                    onAlwaysShowNotificationsChange(enabled)
-                },
-            )
-            if (liveUpdatesSupported) {
-                GroupedDivider(inset = Dimens.SettingsIconInset)
-                LiveUpdateSettingRow(
-                    enabled = liveUpdateEnabled,
-                    systemEnabled = systemLiveUpdatesEnabled,
-                    onEnabledChange = { enabled ->
-                        if (enabled) onRequestNotificationPermission()
-                        onLiveUpdateEnabledChange(enabled)
-                    },
-                    onOpenSystemSettings = { openLiveUpdateSettings(context) },
+        MainTopBar(title = stringResource(R.string.settings_menu))
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+                .padding(top = Dimens.Space8, bottom = Dimens.Space24),
+            verticalArrangement = Arrangement.spacedBy(Dimens.Space24),
+        ) {
+            GroupedSection {
+                if (user != null) {
+                    AccountRow(user)
+                    GroupedDivider()
+                }
+                val organizationName = currentMembership?.organization?.name.orEmpty()
+                GroupedRow(
+                    title = stringResource(R.string.settings_organization),
+                    leadingIcon = Icons.Outlined.Business,
+                    value = organizationName,
+                    onClick = if (canSwitchOrganization) ({ picker = SettingsPicker.ORGANIZATION }) else null,
                 )
             }
-        }
 
-        GroupedSection(header = stringResource(R.string.nav_review)) {
-            GroupedRow(
-                title = stringResource(R.string.review_menu_reminder_settings),
-                leadingIcon = Icons.Outlined.NotificationsActive,
-                onClick = onOpenReminderSettings,
-                modifier = Modifier.testTag(SettingsTestTags.REMINDERS_ROW),
-            )
-            GroupedDivider(inset = Dimens.SettingsIconInset)
-            GroupedRow(
-                title = stringResource(R.string.review_menu_manage_templates),
-                leadingIcon = Icons.Outlined.Star,
-                onClick = onOpenManageTemplates,
-                modifier = Modifier.testTag(SettingsTestTags.TEMPLATES_ROW),
-            )
-        }
+            GroupedSection(header = stringResource(R.string.settings_section_appearance)) {
+                GroupedRow(
+                    title = stringResource(R.string.theme),
+                    leadingIcon = Icons.Outlined.Palette,
+                    value = stringResource(appTheme.labelRes),
+                    onClick = { picker = SettingsPicker.THEME },
+                    modifier = Modifier.testTag(SettingsTestTags.THEME_ROW),
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedRow(
+                    title = stringResource(R.string.choose_language),
+                    leadingIcon = Icons.Outlined.Language,
+                    onClick = { openLanguageSettings(context) },
+                )
+            }
 
-        GroupedSection(header = stringResource(R.string.settings_section_data)) {
-            GroupedRow(
-                title = stringResource(R.string.sync_center_title),
-                leadingIcon = Icons.Outlined.CloudSync,
-                onClick = onOpenSyncCenter,
-                modifier = Modifier.testTag(SettingsTestTags.SYNC_CENTER_ROW),
-            )
-            GroupedDivider(inset = Dimens.SettingsIconInset)
-            GroupedSwitchRow(
-                title = stringResource(R.string.optimistic_refresh),
-                subtitle = stringResource(R.string.optimistic_refresh_description),
-                leadingIcon = Icons.Outlined.Refresh,
-                checked = optimisticRefresh,
-                onCheckedChange = onOptimisticRefreshChange,
-            )
-            GroupedDivider(inset = Dimens.SettingsIconInset)
-            GroupedRow(
-                title = stringResource(R.string.privacy_menu_entry),
-                leadingIcon = Icons.Outlined.Lock,
-                onClick = onOpenPrivacy,
-            )
-        }
+            GroupedSection(header = stringResource(R.string.nav_timer)) {
+                GroupedRow(
+                    title = stringResource(R.string.long_timer_warning),
+                    leadingIcon = Icons.Outlined.Schedule,
+                    value = pluralStringResource(R.plurals.hours_short, longTimerHours, longTimerHours),
+                    onClick = { picker = SettingsPicker.LONG_TIMER },
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                AutoClearEntryFieldsSettings(
+                    autoClearEntryFieldsAfterStop = autoClearEntryFieldsAfterStop,
+                    clearDescriptionAfterStop = clearDescriptionAfterStop,
+                    onAutoClearEntryFieldsAfterStopChange = onAutoClearEntryFieldsAfterStopChange,
+                    onClearDescriptionAfterStopChange = onClearDescriptionAfterStopChange,
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedSwitchRow(
+                    title = stringResource(R.string.always_show_notifications),
+                    subtitle = stringResource(R.string.always_show_notifications_description),
+                    leadingIcon = Icons.Outlined.NotificationsActive,
+                    checked = alwaysShowNotifications,
+                    onCheckedChange = { enabled ->
+                        if (enabled) onRequestNotificationPermission()
+                        onAlwaysShowNotificationsChange(enabled)
+                    },
+                )
+                if (liveUpdatesSupported) {
+                    GroupedDivider(inset = Dimens.SettingsIconInset)
+                    LiveUpdateSettingRow(
+                        enabled = liveUpdateEnabled,
+                        systemEnabled = systemLiveUpdatesEnabled,
+                        onEnabledChange = { enabled ->
+                            if (enabled) onRequestNotificationPermission()
+                            onLiveUpdateEnabledChange(enabled)
+                        },
+                        onOpenSystemSettings = { openLiveUpdateSettings(context) },
+                    )
+                }
+            }
 
-        GroupedSection(header = stringResource(R.string.server_information)) {
-            GroupedRow(
-                title = stringResource(R.string.server_endpoint),
-                subtitle = serverEndpoint,
-                leadingIcon = Icons.Outlined.Dns,
-                onClick = { copyToClipboard(context, serverEndpoint) },
-                showChevron = false,
-            )
-            GroupedDivider(inset = Dimens.SettingsIconInset)
-            GroupedRow(
-                title = stringResource(R.string.client_id),
-                subtitle = clientId,
-                leadingIcon = Icons.Outlined.Key,
-                onClick = { copyToClipboard(context, clientId) },
-                showChevron = false,
-            )
-        }
+            GroupedSection(header = stringResource(R.string.nav_review)) {
+                GroupedRow(
+                    title = stringResource(R.string.review_menu_reminder_settings),
+                    leadingIcon = Icons.Outlined.NotificationsActive,
+                    onClick = onOpenReminderSettings,
+                    modifier = Modifier.testTag(SettingsTestTags.REMINDERS_ROW),
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedRow(
+                    title = stringResource(R.string.review_menu_manage_templates),
+                    leadingIcon = Icons.Outlined.Star,
+                    onClick = onOpenManageTemplates,
+                    modifier = Modifier.testTag(SettingsTestTags.TEMPLATES_ROW),
+                )
+            }
 
-        AboutSection()
+            GroupedSection(header = stringResource(R.string.settings_section_data)) {
+                GroupedRow(
+                    title = stringResource(R.string.sync_center_title),
+                    leadingIcon = Icons.Outlined.CloudSync,
+                    onClick = onOpenSyncCenter,
+                    modifier = Modifier.testTag(SettingsTestTags.SYNC_CENTER_ROW),
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedSwitchRow(
+                    title = stringResource(R.string.optimistic_refresh),
+                    subtitle = stringResource(R.string.optimistic_refresh_description),
+                    leadingIcon = Icons.Outlined.Refresh,
+                    checked = optimisticRefresh,
+                    onCheckedChange = onOptimisticRefreshChange,
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedRow(
+                    title = stringResource(R.string.privacy_menu_entry),
+                    leadingIcon = Icons.Outlined.Lock,
+                    onClick = onOpenPrivacy,
+                )
+            }
 
-        GroupedSection {
-            GroupedRow(
-                title = stringResource(R.string.logout),
-                leadingIcon = Icons.AutoMirrored.Filled.ExitToApp,
-                destructive = true,
-                onClick = onLogout,
-                modifier = Modifier.testTag(SettingsTestTags.LOGOUT_BUTTON),
-            )
+            GroupedSection(header = stringResource(R.string.server_information)) {
+                GroupedRow(
+                    title = stringResource(R.string.server_endpoint),
+                    subtitle = serverEndpoint,
+                    leadingIcon = Icons.Outlined.Dns,
+                    onClick = { copyToClipboard(context, serverEndpoint) },
+                    showChevron = false,
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedRow(
+                    title = stringResource(R.string.client_id),
+                    subtitle = clientId,
+                    leadingIcon = Icons.Outlined.Key,
+                    onClick = { copyToClipboard(context, clientId) },
+                    showChevron = false,
+                )
+            }
+
+            AboutSection()
+
+            GroupedSection {
+                GroupedRow(
+                    title = stringResource(R.string.logout),
+                    leadingIcon = Icons.AutoMirrored.Filled.ExitToApp,
+                    destructive = true,
+                    onClick = onLogout,
+                    modifier = Modifier.testTag(SettingsTestTags.LOGOUT_BUTTON),
+                )
+            }
         }
     }
 

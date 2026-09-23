@@ -61,7 +61,7 @@ internal fun worstSyncOperationsByEntryId(
     .mapValues { (_, entryOperations) -> entryOperations.maxByOrNull { it.status.ordinal } ?: entryOperations.first() }
 
 data class CalendarUiState(
-    val viewMode: CalendarViewMode = CalendarViewMode.WEEK,
+    val viewMode: CalendarViewMode = CalendarViewMode.DAY,
     /** Account temporal-policy zone; day/week boundaries and "today" are computed in it. */
     val zone: ZoneId = ZoneId.systemDefault(),
     val visibleMonth: YearMonth = YearMonth.now(),
@@ -131,7 +131,8 @@ class CalendarViewModel @Inject constructor(
     val uiState: StateFlow<CalendarUiState> = _uiState.asStateFlow()
 
     // Overlay query inputs kept as flows so event queries react without recollecting time entries.
-    private val viewModeInput = MutableStateFlow(CalendarViewMode.WEEK)
+    // Opens on a single day; Week and Month are in the overflow menu.
+    private val viewModeInput = MutableStateFlow(CalendarViewMode.DAY)
     private val weekAnchorInput = MutableStateFlow(today())
     private val dayCountInput = MutableStateFlow(FULL_WEEK_DAYS)
     private val hasPermissionInput = MutableStateFlow(false)
@@ -315,7 +316,8 @@ class CalendarViewModel @Inject constructor(
         val newAnchor = when (state.viewMode) {
             CalendarViewMode.MONTH -> return
             CalendarViewMode.WEEK -> pageAnchor(state.weekAnchor, weekStart, state.dayCount, direction)
-            CalendarViewMode.DAY -> state.weekAnchor.plusDays(direction.toLong())
+            // The day view pages its week strip, keeping the weekday.
+            CalendarViewMode.DAY -> state.weekAnchor.plusWeeks(direction.toLong())
         }
         weekAnchorInput.value = newAnchor
         val newDays = visibleDaysFor(state.viewMode, newAnchor, state.dayCount)

@@ -10,21 +10,20 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.onFirst
-import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
 import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.TestTags
 import dev.tricked.solidverdant.e2e.robots.TrackRobot
+import dev.tricked.solidverdant.e2e.robots.openMenuDestination
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Every tab, plus Calendar and Review pushed from the Timer header, must compose against real
- * (stress-sized) data without crashing, and returning to Timer must restore the history. Guards the nav graph and each screen's
- * initial composition — the cheapest way to catch "screen X dies on launch" regressions.
+ * Every side-menu destination must compose against real (stress-sized) data without crashing, and
+ * returning to Time Tracker must restore the history. Guards the nav graph and each screen's initial
+ * composition — the cheapest way to catch "screen X dies on launch" regressions.
  */
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
@@ -39,32 +38,25 @@ class TabNavigationE2eTest {
         e2e.launchApp()
         TrackRobot(e2e.composeRule).waitForHistory()
 
-        tap(TestTags.TRACK_OPEN_CALENDAR)
-        // Renders either the month grid (day-cell-<date>) or the week view (week-day-*).
+        e2e.composeRule.openMenuDestination(TestTags.NAV_CALENDAR)
+        // Renders either the month grid (day-cell-<date>) or the day/week view (week-day-*).
         waitForTagPrefix("day-cell-", "week-day-")
 
-        tap(TestTags.NAV_DASHBOARD)
+        e2e.composeRule.openMenuDestination(TestTags.NAV_DASHBOARD)
         waitForTag(TestTags.STATS_SCREEN)
 
-        tap(TestTags.NAV_SETTINGS)
-        waitForTag(TestTags.SETTINGS_SCREEN)
-
-        // Timer restores its pushed Calendar; tapping Timer again pops back to its root.
-        tap(TestTags.NAV_TIMER)
-        waitForTagPrefix("day-cell-", "week-day-")
-        tap(TestTags.NAV_TIMER)
-        waitForTag(TestTags.TRACK_HISTORY_LIST)
-
-        tap(TestTags.TRACK_OPEN_REVIEW)
+        e2e.composeRule.openMenuDestination(TestTags.NAV_REVIEW)
         waitForTag("review_more_actions")
 
-        tap(TestTags.NAV_TIMER)
-        waitForTag(TestTags.TRACK_HISTORY_LIST)
-    }
+        e2e.composeRule.openMenuDestination(TestTags.NAV_SETTINGS)
+        waitForTag(TestTags.SETTINGS_SCREEN)
 
-    private fun tap(tag: String) {
-        e2e.composeRule.onAllNodes(hasTestTag(tag)).onFirst().performClick()
-        e2e.composeRule.waitForIdle()
+        // Calendar restores its saved state when chosen again.
+        e2e.composeRule.openMenuDestination(TestTags.NAV_CALENDAR)
+        waitForTagPrefix("day-cell-", "week-day-")
+
+        e2e.composeRule.openMenuDestination(TestTags.NAV_TIMER)
+        waitForTag(TestTags.TRACK_HISTORY_LIST)
     }
 
     private fun waitForTag(tag: String) {

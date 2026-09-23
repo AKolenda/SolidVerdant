@@ -23,6 +23,7 @@ import dev.tricked.solidverdant.e2e.BackendPortable
 import dev.tricked.solidverdant.e2e.E2eFixture
 import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.TestTags
+import dev.tricked.solidverdant.e2e.robots.openCalendarFromMenu
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -46,8 +47,7 @@ class CalendarEntryEditE2eTest {
         val fixture = e2e.prepare(E2eFixture.Completed(original))
         e2e.launchApp()
 
-        e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag("track_open_calendar"), WAIT_MS)
-        e2e.composeRule.onNodeWithTag("track_open_calendar", useUnmergedTree = true).performClick()
+        e2e.composeRule.openCalendarFromMenu()
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_WEEK_GRID), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_CONTENT_READY), WAIT_MS)
         val entryTag = "week-entry-${requireNotNull(fixture.serverId)}"

@@ -40,12 +40,14 @@ import dev.tricked.solidverdant.ui.auth.AuthViewModel
 import dev.tricked.solidverdant.ui.calendar.CalendarScreen
 import dev.tricked.solidverdant.ui.components.AppStatusOverlay
 import dev.tricked.solidverdant.ui.login.LoginScreen
+import dev.tricked.solidverdant.ui.navigation.MainMenuHeader
 import dev.tricked.solidverdant.ui.navigation.MainNavHost
 import dev.tricked.solidverdant.ui.navigation.ReviewRoutes
+import dev.tricked.solidverdant.ui.navigation.Screen
 import dev.tricked.solidverdant.ui.navigation.SettingsRoutes
 import dev.tricked.solidverdant.ui.navigation.SyncRoutes
-import dev.tricked.solidverdant.ui.navigation.TimerRoutes
 import dev.tricked.solidverdant.ui.navigation.calendarDateFromUri
+import dev.tricked.solidverdant.ui.navigation.navigateToMenuDestination
 import dev.tricked.solidverdant.ui.review.ReviewBadgeViewModel
 import dev.tricked.solidverdant.ui.review.ReviewScreen
 import dev.tricked.solidverdant.ui.settings.SettingsScreen
@@ -290,17 +292,29 @@ fun SolidVerdantApp(
             }
             LaunchedEffect(calendarInitialDate, currentMembership?.organizationId) {
                 if (calendarInitialDate != null && currentMembership != null) {
-                    navController.navigate(TimerRoutes.CALENDAR) {
-                        launchSingleTop = true
-                    }
+                    navController.navigateToMenuDestination(Screen.Calendar.route)
                 }
             }
             MainNavHost(
                 navController = navController,
                 onPrivacyLogout = { authViewModel.logout() },
+                reviewBadgeCount = inboxBadgeCount,
+                menuHeader = {
+                    MainMenuHeader(
+                        userName = authUiState.user?.name,
+                        userEmail = authUiState.user?.email,
+                        organizationName = currentMembership?.organization?.name,
+                        memberships = authUiState.memberships,
+                        currentMembershipId = currentMembership?.id,
+                        // Switching organization while a timer runs would orphan the running entry.
+                        canSwitchOrganization = authUiState.memberships.size > 1 &&
+                            !trackingUiState.isTracking &&
+                            !trackingUiState.isPaused,
+                        onMembershipChange = authViewModel::selectMembership,
+                    )
+                },
                 reviewContent = {
                     ReviewScreen(
-                        onBack = { navController.popBackStack() },
                         onOpenReminderSettings = {
                             navController.navigate(ReviewRoutes.REMINDER_SETTINGS)
                         },
@@ -315,7 +329,6 @@ fun SolidVerdantApp(
                 trackContent = {
                     TrackingScreen(
                         user = authUiState.user,
-                        memberships = authUiState.memberships,
                         currentMembership = authUiState.currentMembership,
                         uiState = trackingUiState,
                         elapsedSeconds = trackingViewModel.elapsedSeconds,
@@ -332,7 +345,6 @@ fun SolidVerdantApp(
                                 )
                             }
                         },
-                        onMembershipChange = authViewModel::selectMembership,
                         onStartTracking = {
                             authUiState.currentMembership?.let { membership ->
                                 authUiState.user?.let { user ->
@@ -439,9 +451,6 @@ fun SolidVerdantApp(
                         onOpenSyncCenter = {
                             navController.navigate(SyncRoutes.SYNC_CENTER)
                         },
-                        onOpenCalendar = { navController.navigate(TimerRoutes.CALENDAR) },
-                        onOpenReview = { navController.navigate(TimerRoutes.REVIEW) },
-                        reviewBadgeCount = inboxBadgeCount,
                         onLoadMoreEntries = trackingViewModel::loadMoreTimeEntries,
                         onLoadNewerEntries = trackingViewModel::loadNewerTimeEntries,
                         onJumpToDate = trackingViewModel::jumpToHistoryDate,
@@ -484,7 +493,6 @@ fun SolidVerdantApp(
                 calendarContent = {
                     if (currentMembership != null) {
                         CalendarScreen(
-                            onBack = { navController.popBackStack() },
                             organizationId = currentMembership.organizationId,
                             memberId = currentMembership.id,
                             initialDate = calendarInitialDate,

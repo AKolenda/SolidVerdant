@@ -8,12 +8,11 @@
 
 package dev.tricked.solidverdant.e2e.flows
 
-import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
 import dev.tricked.solidverdant.e2e.E2eFixture
 import dev.tricked.solidverdant.e2e.E2eRule
+import dev.tricked.solidverdant.e2e.robots.openCalendarFromMenu
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -32,7 +31,7 @@ class CalendarPrefetchE2eTest {
         e2e.prepare(E2eFixture.Empty)
         e2e.launchApp()
 
-        e2e.composeRule.onNodeWithTag("track_open_calendar", useUnmergedTree = true).performClick()
+        e2e.composeRule.openCalendarFromMenu()
         e2e.composeRule.waitUntil(WAIT_MS) { calendarMonthRequests(server).size >= EXPECTED_MONTH_REQUESTS }
 
         val monthEnds = calendarMonthRequests(server).mapNotNull { call ->

@@ -110,7 +110,15 @@
     <!-- Bottom Navigation -->
     <string name="nav_calendar">Calendar</string>
     <string name="nav_timer">Timer</string>
-    <string name="nav_dashboard">Dashboard</string>
+    <string name="nav_time_tracker">Time Tracker</string>
+    <string name="nav_reports">Reports</string>
+    <string name="main_menu_open">Open menu</string>
+    <string name="main_menu_open_with_review">Open menu, %1$s</string>
+    <string name="timer_fab_open">New time entry</string>
+    <string name="timer_fab_close">Close new entry options</string>
+    <string name="timer_manual">Manual</string>
+    <string name="start_timer_title">Start timer</string>
+    <string name="calendar_total">Total: %1$s</string>
     <string name="settings_organization">Organization</string>
     <string name="settings_section_appearance">Appearance</string>
     <string name="settings_section_data">Data &amp; sync</string>
@@ -145,7 +153,6 @@
     <string name="network_restored">Back online</string>
 
     <!-- Tracking Screen -->
-    <string name="time_tracking">Time Tracking</string>
     <string name="switch_organization">Switch organization</string>
     <string name="refresh">Refresh</string><string name="syncing">Syncing</string>
     <string name="logout">Logout</string>

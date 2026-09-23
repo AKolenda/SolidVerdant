@@ -13,7 +13,6 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
@@ -23,6 +22,7 @@ import dev.tricked.solidverdant.e2e.E2eFixture
 import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.TestTags
 import dev.tricked.solidverdant.e2e.robots.TrackRobot
+import dev.tricked.solidverdant.e2e.robots.openCalendarFromMenu
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -50,11 +50,7 @@ class MultiDayEntryE2eTest {
         e2e.launchApp()
         TrackRobot(e2e.composeRule).waitForHistory().assertEntryVisible(fixture.entry.description!!)
 
-        e2e.composeRule.onAllNodes(hasTestTag("track_open_calendar"), useUnmergedTree = true)
-            .onFirst()
-            .performClick()
-        e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_MODE_MONTH, useUnmergedTree = true)
-            .performClick()
+        e2e.composeRule.openCalendarFromMenu(TestTags.CALENDAR_MODE_MONTH)
 
         assertCalendarCellTotal(fixture.startDate, "1h 00m")
         assertCalendarCellTotal(fixture.startDate.plusDays(1), "24h 00m")

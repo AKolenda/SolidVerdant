@@ -56,8 +56,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
@@ -83,6 +81,7 @@ import dev.tricked.solidverdant.ui.components.GroupedDivider
 import dev.tricked.solidverdant.ui.components.SyncChip
 import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.theme.Dimens
+import dev.tricked.solidverdant.ui.theme.readableOn
 import dev.tricked.solidverdant.ui.theme.syncFailed
 import dev.tricked.solidverdant.ui.theme.syncPending
 import dev.tricked.solidverdant.ui.theme.tabular
@@ -318,7 +317,7 @@ private fun EntryTitle(project: Project?, task: Task?, client: Client?, modifier
     val cardColor = MaterialTheme.colorScheme.surfaceContainerHighest
     val projectColor = remember(project.color, onSurface, cardColor) {
         runCatching { Color(project.color.toColorInt()) }
-            .map { readableOn(it, background = cardColor, towards = onSurface) }
+            .map { it.readableOn(background = cardColor, towards = onSurface) }
             .getOrDefault(onSurface)
     }
     val projectLabel = if (task == null) project.name else stringResource(R.string.history_project_task, project.name, task.name)
@@ -337,26 +336,6 @@ private fun EntryTitle(project: Project?, task: Task?, client: Client?, modifier
         overflow = TextOverflow.Ellipsis,
         modifier = modifier,
     )
-}
-
-/**
- * Blend a user-chosen project colour toward [towards] until it reaches normal-text contrast on
- * [background], so a dark project colour stays legible on a dark card.
- */
-private fun readableOn(color: Color, background: Color, towards: Color): Color {
-    var candidate = color
-    var fraction = 0f
-    while (contrastRatio(candidate, background) < MIN_TEXT_CONTRAST && fraction < 1f) {
-        fraction += CONTRAST_BLEND_STEP
-        candidate = lerp(color, towards, fraction.coerceAtMost(1f))
-    }
-    return candidate
-}
-
-private fun contrastRatio(first: Color, second: Color): Float {
-    val a = first.luminance() + RELATIVE_LUMINANCE_FLARE
-    val b = second.luminance() + RELATIVE_LUMINANCE_FLARE
-    return maxOf(a, b) / minOf(a, b)
 }
 
 /**
@@ -635,11 +614,6 @@ private fun SwipeableHistoryRow(shape: Shape, onDelete: (() -> Unit)?, onContinu
 }
 
 private const val HALF_TURN_DEGREES = 180f
-
-/** WCAG AA contrast for normal-size text, and the 0.05 flare term of its contrast formula. */
-private const val MIN_TEXT_CONTRAST = 4.5f
-private const val RELATIVE_LUMINANCE_FLARE = 0.05f
-private const val CONTRAST_BLEND_STEP = 0.1f
 
 /** The day label: the weekday plus day and month, with the year only outside the current year. */
 internal fun formatHistoryDayLabel(date: LocalDate, context: android.content.Context, zone: ZoneId, locale: Locale): String {
