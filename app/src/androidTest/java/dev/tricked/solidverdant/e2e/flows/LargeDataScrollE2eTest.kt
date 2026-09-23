@@ -25,6 +25,7 @@ import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.TestTags
 import dev.tricked.solidverdant.e2e.robots.openCalendarFromMenu
 import dev.tricked.solidverdant.e2e.robots.openMenuDestination
+import dev.tricked.solidverdant.e2e.robots.openReviewFromSettings
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -68,7 +69,7 @@ class LargeDataScrollE2eTest {
         e2e.composeRule.waitForScrollable()
         e2e.composeRule.swipeScrollable(times = 8)
 
-        e2e.composeRule.openMenuDestination(TestTags.NAV_REVIEW, timeoutMs = 30_000)
+        e2e.composeRule.openReviewFromSettings(timeoutMs = 30_000)
         e2e.composeRule.waitForTag("review_more_actions")
         e2e.composeRule.swipeScrollableIfPresent(times = 8)
 

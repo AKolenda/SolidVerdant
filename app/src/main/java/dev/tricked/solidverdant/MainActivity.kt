@@ -25,7 +25,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
@@ -48,7 +47,6 @@ import dev.tricked.solidverdant.ui.navigation.SettingsRoutes
 import dev.tricked.solidverdant.ui.navigation.SyncRoutes
 import dev.tricked.solidverdant.ui.navigation.calendarDateFromUri
 import dev.tricked.solidverdant.ui.navigation.navigateToMenuDestination
-import dev.tricked.solidverdant.ui.review.ReviewBadgeViewModel
 import dev.tricked.solidverdant.ui.review.ReviewScreen
 import dev.tricked.solidverdant.ui.settings.SettingsScreen
 import dev.tricked.solidverdant.ui.statistics.StatisticsScreen
@@ -276,11 +274,6 @@ fun SolidVerdantApp(
         authState == AuthState.LoggedIn -> {
             val navController = rememberNavController()
             val currentMembership = authUiState.currentMembership
-            val reviewBadgeViewModel: ReviewBadgeViewModel = hiltViewModel()
-            LaunchedEffect(currentMembership?.organizationId) {
-                reviewBadgeViewModel.setOrganization(currentMembership?.organizationId)
-            }
-            val inboxBadgeCount by reviewBadgeViewModel.openIssueCount.collectAsState()
             LaunchedEffect(pendingReviewRoute, currentMembership?.organizationId) {
                 val route = pendingReviewRoute
                 if (route != null && currentMembership != null) {
@@ -298,7 +291,6 @@ fun SolidVerdantApp(
             MainNavHost(
                 navController = navController,
                 onPrivacyLogout = { authViewModel.logout() },
-                reviewBadgeCount = inboxBadgeCount,
                 menuHeader = {
                     MainMenuHeader(
                         userName = authUiState.user?.name,
@@ -314,7 +306,9 @@ fun SolidVerdantApp(
                     )
                 },
                 reviewContent = {
+                    // Opened from Settings or a review notification, so it goes back to its opener.
                     ReviewScreen(
+                        onBack = { navController.popBackStack() },
                         onOpenReminderSettings = {
                             navController.navigate(ReviewRoutes.REMINDER_SETTINGS)
                         },
@@ -483,6 +477,7 @@ fun SolidVerdantApp(
                         onAutoClearEntryFieldsAfterStopChange = trackingViewModel::setAutoClearEntryFieldsAfterStop,
                         onClearDescriptionAfterStopChange = trackingViewModel::setClearDescriptionAfterStop,
                         onLongTimerHoursChange = trackingViewModel::setLongTimerHours,
+                        onOpenReview = { navController.navigate(Screen.Review.route) },
                         onOpenReminderSettings = { navController.navigate(ReviewRoutes.REMINDER_SETTINGS) },
                         onOpenManageTemplates = { navController.navigate(ReviewRoutes.MANAGE_TEMPLATES) },
                         onOpenSyncCenter = { navController.navigate(SyncRoutes.SYNC_CENTER) },
@@ -595,6 +590,20 @@ fun SolidVerdantApp(
                             onDuplicateEntry = trackingViewModel::duplicateTimeEntry,
                             onSplitEntry = trackingViewModel::splitTimeEntry,
                             onStopEntry = { trackingViewModel.stopTimeEntry() },
+                            onContinueEntry = { entry ->
+                                authUiState.user?.let { user ->
+                                    trackingViewModel.updateDescription(entry.description ?: "")
+                                    trackingViewModel.updateProject(entry.projectId)
+                                    trackingViewModel.updateTask(entry.taskId)
+                                    trackingViewModel.updateTags(entry.tags.map { it.id })
+                                    trackingViewModel.updateBillable(entry.billable)
+                                    trackingViewModel.startTimeEntry(
+                                        organizationId = currentMembership.organizationId,
+                                        memberId = currentMembership.id,
+                                        userId = user.id,
+                                    )
+                                }
+                            },
                             onUndoDelete = trackingViewModel::undoDelete,
                             onRetrySyncEntry = trackingViewModel::retrySync,
                             onDiscardFailedSync = trackingViewModel::discardFailedSync,

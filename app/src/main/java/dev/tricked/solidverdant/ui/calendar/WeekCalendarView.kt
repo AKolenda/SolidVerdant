@@ -7,11 +7,9 @@
 package dev.tricked.solidverdant.ui.calendar
 
 import android.text.format.DateFormat
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -48,6 +46,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -98,7 +97,6 @@ fun WeekCalendarView(
     state: CalendarUiState,
     onSelectDate: (LocalDate) -> Unit,
     onEntryClick: (TimeEntry) -> Unit,
-    onEntryLongPress: (TimeEntry) -> Unit = {},
     onMoveEntry: (TimeEntry, String, String) -> Unit = { _, _, _ -> },
     onCreateRange: (CalendarTimeRange) -> Unit = {},
     onPrevious: () -> Unit,
@@ -122,7 +120,6 @@ fun WeekCalendarView(
             days = days,
             onSelectDate = onSelectDate,
             onEntryClick = onEntryClick,
-            onEntryLongPress = onEntryLongPress,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
             onPrevious = onPrevious,
@@ -141,7 +138,6 @@ private fun WeekCalendarContent(
     days: List<LocalDate>,
     onSelectDate: (LocalDate) -> Unit,
     onEntryClick: (TimeEntry) -> Unit,
-    onEntryLongPress: (TimeEntry) -> Unit,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
     onPrevious: () -> Unit,
@@ -234,6 +230,8 @@ private fun WeekCalendarContent(
                     )
 
                 else -> WeekGrid(
+                    onPrevious = onPrevious,
+                    onNext = onNext,
                     days = days,
                     today = today,
                     now = now,
@@ -245,7 +243,6 @@ private fun WeekCalendarContent(
                     tasksById = tasksById,
                     clientsById = clientsById,
                     onEntryClick = onEntryClick,
-                    onEntryLongPress = onEntryLongPress,
                     onMoveEntry = onMoveEntry,
                     onCreateRange = onCreateRange,
                     syncStatusByEntryId = syncStatusByEntryId,
@@ -257,6 +254,8 @@ private fun WeekCalendarContent(
 
 @Composable
 private fun WeekGrid(
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
     days: List<LocalDate>,
     today: LocalDate,
     now: Instant,
@@ -268,7 +267,6 @@ private fun WeekGrid(
     tasksById: Map<String, Task>,
     clientsById: Map<String, Client>,
     onEntryClick: (TimeEntry) -> Unit,
-    onEntryLongPress: (TimeEntry) -> Unit,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
     syncStatusByEntryId: Map<String, EntrySyncStatus>,
@@ -280,6 +278,7 @@ private fun WeekGrid(
         modifier = Modifier
             .fillMaxSize()
             .testTag(CalendarTestTags.WEEK_GRID)
+            .calendarSwipePaging(onPrevious = onPrevious, onNext = onNext)
             .verticalScroll(scrollState),
     ) {
         val totalHeight = calendarTotalHeight(settings)
@@ -306,7 +305,6 @@ private fun WeekGrid(
                         tasksById = tasksById,
                         clientsById = clientsById,
                         onEntryClick = onEntryClick,
-                        onEntryLongPress = onEntryLongPress,
                         onMoveEntry = onMoveEntry,
                         onCreateRange = onCreateRange,
                         syncStatusByEntryId = syncStatusByEntryId,
@@ -475,7 +473,6 @@ private fun AllDayRow(days: List<LocalDate>, allDayByDay: Map<LocalDate, List<De
 }
 
 @Composable
-@OptIn(ExperimentalFoundationApi::class)
 private fun DayColumn(
     day: LocalDate,
     isToday: Boolean,
@@ -488,7 +485,6 @@ private fun DayColumn(
     tasksById: Map<String, Task>,
     clientsById: Map<String, Client>,
     onEntryClick: (TimeEntry) -> Unit,
-    onEntryLongPress: (TimeEntry) -> Unit,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
     syncStatusByEntryId: Map<String, EntrySyncStatus>,
@@ -614,10 +610,8 @@ private fun DayColumn(
                 time = duration,
                 modifier = entryModifier
                     .height((totalHeight * block.heightFraction).coerceAtLeast(Dimens.EntryMinHeight))
-                    .combinedClickable(
-                        onClick = { onEntryClick(entry) },
-                        onLongClick = { onEntryLongPress(entry) },
-                    )
+                    // Tap opens the entry's actions; a hold lifts it for dragging.
+                    .clickable(role = Role.Button) { onEntryClick(entry) }
                     .testTag("week-entry-${entry.id}")
                     .semantics { contentDescription = a11y },
                 syncStatus = syncStatusByEntryId[entry.id],
@@ -638,7 +632,7 @@ private fun DayColumn(
  */
 @Composable
 internal fun HourGridlines(settings: CalendarGridSettings = CalendarGridSettings(), modifier: Modifier = Modifier) {
-    val lineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+    val lineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = GRIDLINE_ALPHA)
     val hourHeight = calendarHourHeight(settings)
     val context = LocalContext.current
     val locale = appLocale()
@@ -646,26 +640,43 @@ internal fun HourGridlines(settings: CalendarGridSettings = CalendarGridSettings
         // "11 AM" keeps 12-hour labels on one line in the hour gutter.
         DateTimeFormatter.ofPattern(if (DateFormat.is24HourFormat(context)) "HH:mm" else "h a", locale)
     }
-    Box(modifier = modifier.fillMaxWidth().height(calendarTotalHeight(settings))) {
+    val labelStyle = MaterialTheme.typography.labelSmall
+    // Each label sits centred on its hour line rather than hanging below it.
+    val labelHalfHeight = with(LocalDensity.current) { labelStyle.lineHeight.toDp() } / 2
+    val totalHeight = calendarTotalHeight(settings)
+    Box(modifier = modifier.fillMaxWidth().height(totalHeight)) {
         for (hour in settings.startHour until settings.endHour) {
-            Text(
-                text = LocalTime.of(hour, 0).format(hourFormatter),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .offset(y = hourHeight * (hour - settings.startHour))
-                    .width(CalendarGutterWidth)
-                    .padding(end = Dimens.Space4),
-                textAlign = TextAlign.End,
-            )
+            val lineY = hourHeight * (hour - settings.startHour)
+            // The first line is the grid's top edge; a centred label there would be clipped.
+            if (hour > settings.startHour) {
+                Text(
+                    text = LocalTime.of(hour, 0).format(hourFormatter),
+                    style = labelStyle,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .offset(y = lineY - labelHalfHeight)
+                        .width(CalendarGutterWidth)
+                        .padding(end = Dimens.Space8),
+                    textAlign = TextAlign.End,
+                )
+            }
             Spacer(
                 modifier = Modifier
-                    .offset(x = CalendarGutterWidth, y = hourHeight * (hour - settings.startHour))
+                    .offset(x = CalendarGutterWidth, y = lineY)
                     .fillMaxWidth()
-                    .height(1.dp)
+                    .height(Dimens.Space1)
                     .background(lineColor),
             )
         }
+        // The gutter divider separates the time column from the day.
+        Spacer(
+            modifier = Modifier
+                .offset(x = CalendarGutterWidth)
+                .width(Dimens.Space1)
+                .height(totalHeight)
+                .background(lineColor),
+        )
     }
 }
 
@@ -728,3 +739,4 @@ internal fun weekOf(date: LocalDate, weekStart: DayOfWeek): List<LocalDate> {
 }
 
 private const val DAYS_PER_WEEK = 7L
+private const val GRIDLINE_ALPHA = 0.7f

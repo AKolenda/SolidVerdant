@@ -13,7 +13,6 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -42,7 +41,7 @@ class MainNavHostTest {
     }
 
     @Composable
-    private fun Host(reviewBadgeCount: Int = 0) {
+    private fun Host() {
         navController = rememberNavController()
         MainNavHost(
             navController = navController,
@@ -51,7 +50,6 @@ class MainNavHostTest {
             statsContent = { Destination("STATS_CONTENT") },
             settingsContent = { Destination("SETTINGS_CONTENT") },
             reviewContent = { Destination("REVIEW_CONTENT") },
-            reviewBadgeCount = reviewBadgeCount,
             menuHeader = { Text("MENU_HEADER") },
             syncCenterContent = { Destination("SYNC_CENTER_CONTENT") },
         )
@@ -82,8 +80,6 @@ class MainNavHostTest {
         composeRule.onNodeWithText("CALENDAR_CONTENT").assertIsDisplayed()
         choose(Screen.Stats)
         composeRule.onNodeWithText("STATS_CONTENT").assertIsDisplayed()
-        choose(Screen.Review)
-        composeRule.onNodeWithText("REVIEW_CONTENT").assertIsDisplayed()
         choose(Screen.Settings)
         composeRule.onNodeWithText("SETTINGS_CONTENT").assertIsDisplayed()
         choose(Screen.Track)
@@ -116,13 +112,13 @@ class MainNavHostTest {
     }
 
     @Test
-    fun openReviewItemsShowTheirCountOnTheReviewItem() {
-        composeRule.setContent { Host(reviewBadgeCount = 3) }
-
-        // The ☰ dot is visual only, so the button's label carries the count for screen readers.
-        composeRule.onNodeWithContentDescription("Open menu, Review, 3 items to review").assertExists()
+    fun reviewIsNotAMenuItemButItsRouteStillOpens() {
+        composeRule.setContent { Host() }
         composeRule.onNodeWithTag(MAIN_MENU_BUTTON_TAG).performClick()
+        composeRule.onNode(hasTestTag(mainNavTag(Screen.Review.route))).assertDoesNotExist()
 
-        composeRule.onNodeWithText("3").assertIsDisplayed()
+        // Settings and review notifications still open it.
+        composeRule.runOnIdle { navController.navigate(Screen.Review.route) }
+        composeRule.onNodeWithText("REVIEW_CONTENT").assertIsDisplayed()
     }
 }

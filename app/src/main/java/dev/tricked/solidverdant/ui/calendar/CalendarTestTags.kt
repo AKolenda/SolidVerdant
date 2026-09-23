@@ -35,6 +35,8 @@ object CalendarTestTags {
     const val SETTINGS_DENSITY_COMFORTABLE = "calendar_settings_density_comfortable"
     const val SETTINGS_DENSITY_SPACIOUS = "calendar_settings_density_spacious"
     const val ENTRY_ACTIONS = "calendar_entry_actions"
+    const val CONTINUE_ENTRY = "calendar_continue_entry"
+    const val EDIT_ENTRY = "calendar_edit_entry"
     const val EDIT_START_TIME = "calendar_edit_start_time"
     const val STOP_ENTRY = "calendar_stop_entry"
     const val DUPLICATE_ENTRY = "calendar_duplicate_entry"

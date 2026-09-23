@@ -37,10 +37,12 @@ import dev.tricked.solidverdant.sync.StopPayload
 import dev.tricked.solidverdant.sync.UpdatePayload
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
+import retrofit2.HttpException
 import timber.log.Timber
 import java.time.Duration
 import java.time.YearMonth
@@ -52,6 +54,21 @@ import javax.inject.Singleton
 
 private const val MONTH_PAGE_SIZE = 250
 private const val MAX_MONTH_ENTRIES = 15_000
+
+/**
+ * How far before a month its query reaches for entries that start earlier and run into it. The
+ * server filters both bounds by start time, so an unbounded lower edge re-downloaded the whole
+ * history for every month; a month of carry-in covers any realistic multi-day entry.
+ */
+private const val MONTH_CARRY_IN_DAYS = 31L
+
+// A rate-limited month page waits for the server's Retry-After (clamped) before trying again.
+private const val RATE_LIMIT_ATTEMPTS = 3
+private const val HTTP_TOO_MANY_REQUESTS = 429
+private const val MIN_RETRY_AFTER_SECONDS = 1L
+private const val MAX_RETRY_AFTER_SECONDS = 60L
+private const val DEFAULT_RETRY_AFTER_SECONDS = 5L
+private const val MILLIS_PER_SECOND = 1_000L
 
 @Singleton
 @Suppress("LargeClass")
@@ -139,6 +156,7 @@ class TimeEntryRepository @Inject constructor(
         val pullStartedAtMs = clock.nowMs()
         val pageSize = MONTH_PAGE_SIZE
         var offset = 0
+        val queryStart = month.atDay(1).minusDays(MONTH_CARRY_IN_DAYS).atStartOfDay(zone).toInstant().toString()
         val queryEnd = month.plusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toString()
         // Tombstoning (SV-020) must be scoped to exactly what was fetched: the union of every
         // returned id, bounded by the tightest [minStart, maxStart] actually observed across all
@@ -148,19 +166,21 @@ class TimeEntryRepository @Inject constructor(
         var minStart: String? = null
         var maxStart: String? = null
         while (offset < MAX_MONTH_ENTRIES) {
-            val response = remote.getTimeEntries(
-                TimeEntriesQuery(
-                    organizationId = organizationId,
-                    memberId = memberId,
-                    limit = pageSize,
-                    offset = offset,
-                    onlyFullDates = false,
-                    // Solidtime filters both bounds by the entry's start timestamp. Omitting the
-                    // lower bound is required to retain a long entry that carries into this month.
-                    start = null,
-                    end = queryEnd,
-                ),
-            ).getOrElse {
+            val response = waitingOutRateLimits {
+                remote.getTimeEntries(
+                    TimeEntriesQuery(
+                        organizationId = organizationId,
+                        memberId = memberId,
+                        limit = pageSize,
+                        offset = offset,
+                        onlyFullDates = false,
+                        // Solidtime filters both bounds by the entry's start timestamp, so the lower
+                        // bound reaches back far enough to keep a long entry that carries into the month.
+                        start = queryStart,
+                        end = queryEnd,
+                    ),
+                )
+            }.getOrElse {
                 if (it is CancellationException) throw it
                 Timber.e(it, "Failed loading calendar month %s", month)
                 throw it
@@ -191,6 +211,21 @@ class TimeEntryRepository @Inject constructor(
                 pullStartedAtMs = pullStartedAtMs,
             )
         }
+    }
+
+    /** Run [request], waiting out up to [RATE_LIMIT_ATTEMPTS] HTTP 429 replies as the server asks. */
+    private suspend fun <T> waitingOutRateLimits(request: suspend () -> Result<T>): Result<T> {
+        repeat(RATE_LIMIT_ATTEMPTS) {
+            val result = request()
+            val error = result.exceptionOrNull()
+            if (error !is HttpException || error.code() != HTTP_TOO_MANY_REQUESTS) return result
+            val waitSeconds = error.response()?.headers()?.get("Retry-After")?.trim()?.toLongOrNull()
+                ?.coerceIn(MIN_RETRY_AFTER_SECONDS, MAX_RETRY_AFTER_SECONDS)
+                ?: DEFAULT_RETRY_AFTER_SECONDS
+            Timber.w("Rate limited while loading calendar entries; retrying in %d s", waitSeconds)
+            delay(waitSeconds * MILLIS_PER_SECOND)
+        }
+        return request()
     }
 
     fun observeActiveEntry(orgId: String): Flow<TimeEntry?> = timeEntryDao.observeActive(orgId).map { entity ->

@@ -14,4 +14,18 @@
     </plurals>
     <string name="history_not_billable">Not billable</string>
     <string name="history_no_tags">No tags</string>
+    <string name="entry_continue">Continue</string>
+    <plurals name="history_delete_stack_title">
+        <item quantity="one">Delete %1$d entry?</item>
+        <item quantity="other">Delete %1$d entries?</item>
+    </plurals>
+    <string name="history_delete_stack_message">Every entry in this stack will be removed and queued for deletion.</string>
+    <string name="review_issue_no_project">No project</string>
+    <string name="review_issue_no_description">No description</string>
+    <string name="review_issue_overlap">Overlaps another entry</string>
+    <plurals name="review_issue_long">
+        <item quantity="one">Longer than %1$d hour</item>
+        <item quantity="other">Longer than %1$d hours</item>
+    </plurals>
+    <string name="review_issue_separator">" · "</string>
 </resources>

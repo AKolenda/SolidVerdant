@@ -113,7 +113,6 @@
     <string name="nav_time_tracker">Time Tracker</string>
     <string name="nav_reports">Reports</string>
     <string name="main_menu_open">Open menu</string>
-    <string name="main_menu_open_with_review">Open menu, %1$s</string>
     <string name="timer_fab_open">New time entry</string>
     <string name="timer_fab_close">Close new entry options</string>
     <string name="timer_manual">Manual</string>

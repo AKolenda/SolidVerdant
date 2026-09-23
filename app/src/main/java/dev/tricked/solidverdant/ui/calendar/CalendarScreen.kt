@@ -15,6 +15,7 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -29,6 +30,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.CallSplit
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarViewMonth
@@ -37,10 +39,14 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FreeBreakfast
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.filled.ViewDay
 import androidx.compose.material.icons.filled.ViewWeek
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -80,9 +86,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -144,6 +153,8 @@ fun CalendarScreen(
     onDuplicateEntry: (String) -> Unit = {},
     onSplitEntry: (String, String) -> Unit = { _, _ -> },
     onStopEntry: (TimeEntry) -> Unit = {},
+    /** Start a new timer with the entry's details; offered only while no timer runs. */
+    onContinueEntry: (TimeEntry) -> Unit = {},
     onUndoDelete: (TimeEntry) -> Unit = {},
     onRetrySyncEntry: (String) -> Unit = {},
     onDiscardFailedSync: (String) -> Unit = {},
@@ -318,8 +329,8 @@ fun CalendarScreen(
                         projects = projects,
                         clients = clients,
                         tasks = tasks,
-                        onEntryClick = { editing = it },
-                        onEntryLongPress = { contextEntry = it },
+                        // A tap offers continue, edit, duplicate and delete.
+                        onEntryClick = { contextEntry = it },
                         syncStatusByEntryId = syncOperationByEntryId.mapValues { (_, operation) -> operation.status },
                         onMoveEntry = moveEntryWithWarning,
                         onCreateRange = { creatingRange = it },
@@ -341,6 +352,14 @@ fun CalendarScreen(
             syncOperation = syncOperationByEntryId[entry.id],
             sheetState = entryActionsSheetState,
             onDismiss = { contextEntry = null },
+            onContinue = if (visibleRunningEntry == null && isCompletedTimeEntry(entry) && entry.type != TimeEntryType.BREAK) {
+                {
+                    contextEntry = null
+                    onContinueEntry(entry)
+                }
+            } else {
+                null
+            },
             onEdit = {
                 contextEntry = null
                 editing = entry
@@ -548,6 +567,7 @@ private fun CalendarEntryActionsSheet(
     syncOperation: TimeEntryRepository.SyncOperation?,
     sheetState: androidx.compose.material3.SheetState,
     onDismiss: () -> Unit,
+    onContinue: (() -> Unit)?,
     onEdit: () -> Unit,
     onDuplicate: () -> Unit,
     onSplit: () -> Unit,
@@ -641,14 +661,25 @@ private fun CalendarEntryActionsSheet(
                     else -> Unit
                 }
             }
+            // The entry sheet: Continue first, then edit, duplicate and a red delete.
+            onContinue?.let { continueEntry ->
+                CalendarEntryActionButton(
+                    label = stringResource(R.string.entry_continue),
+                    icon = Icons.Default.PlayArrow,
+                    onClick = continueEntry,
+                    actionTestTag = CalendarTestTags.CONTINUE_ENTRY,
+                )
+            }
             CalendarEntryActionButton(
                 label = stringResource(if (running) R.string.edit_start_time else R.string.edit),
+                icon = Icons.Default.Edit,
                 onClick = onEdit,
-                actionTestTag = if (running) CalendarTestTags.EDIT_START_TIME else null,
+                actionTestTag = if (running) CalendarTestTags.EDIT_START_TIME else CalendarTestTags.EDIT_ENTRY,
             )
             if (running) {
                 CalendarEntryActionButton(
                     label = stringResource(R.string.stop_tracking),
+                    icon = Icons.Default.Stop,
                     onClick = onStop,
                     actionTestTag = CalendarTestTags.STOP_ENTRY,
                 )
@@ -656,34 +687,51 @@ private fun CalendarEntryActionsSheet(
             if (!running && isCompletedTimeEntry(entry)) {
                 CalendarEntryActionButton(
                     label = stringResource(R.string.duplicate_entry),
+                    icon = Icons.Outlined.ContentCopy,
                     onClick = onDuplicate,
                     actionTestTag = CalendarTestTags.DUPLICATE_ENTRY,
                 )
                 CalendarEntryActionButton(
                     label = stringResource(R.string.split_entry),
+                    icon = Icons.AutoMirrored.Outlined.CallSplit,
                     onClick = onSplit,
                     actionTestTag = CalendarTestTags.SPLIT_ENTRY,
                 )
             }
             CalendarEntryActionButton(
                 label = stringResource(if (unsynced) R.string.calendar_action_discard else R.string.delete),
+                icon = Icons.Outlined.Delete,
                 onClick = onDelete,
                 actionTestTag = CalendarTestTags.DELETE_ENTRY,
+                destructive = true,
             )
         }
     }
 }
 
+/** One row of the entry sheet: an icon and label, in the error colour for [destructive] actions. */
 @Composable
-private fun CalendarEntryActionButton(label: String, onClick: () -> Unit, actionTestTag: String? = null) {
-    TextButton(
-        onClick = onClick,
+private fun CalendarEntryActionButton(
+    label: String,
+    onClick: () -> Unit,
+    actionTestTag: String? = null,
+    icon: ImageVector? = null,
+    destructive: Boolean = false,
+) {
+    val color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = Dimens.MinTouchTarget)
-            .then(actionTestTag?.let { Modifier.testTag(it) } ?: Modifier),
+            .clip(MaterialTheme.shapes.small)
+            .clickable(role = Role.Button, onClick = onClick)
+            .then(actionTestTag?.let { Modifier.testTag(it) } ?: Modifier)
+            .padding(horizontal = Dimens.Space8),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Space16),
     ) {
-        Text(label, modifier = Modifier.fillMaxWidth())
+        if (icon != null) Icon(icon, contentDescription = null, tint = color)
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = color)
     }
 }
 
@@ -1140,7 +1188,6 @@ private fun CalendarBody(
     clients: List<Client>,
     tasks: List<Task>,
     onEntryClick: (TimeEntry) -> Unit,
-    onEntryLongPress: (TimeEntry) -> Unit,
     syncStatusByEntryId: Map<String, TimeEntryRepository.EntrySyncStatus>,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
@@ -1156,7 +1203,6 @@ private fun CalendarBody(
             onPreviousMonth = viewModel::previousMonth,
             onNextMonth = viewModel::nextMonth,
             onEntryClick = onEntryClick,
-            onEntryLongPress = onEntryLongPress,
             syncStatusByEntryId = syncStatusByEntryId,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
@@ -1179,7 +1225,6 @@ private fun CalendarBody(
                 state = state,
                 onSelectDate = viewModel::selectDate,
                 onEntryClick = onEntryClick,
-                onEntryLongPress = onEntryLongPress,
                 syncStatusByEntryId = syncStatusByEntryId,
                 onMoveEntry = onMoveEntry,
                 onCreateRange = onCreateRange,

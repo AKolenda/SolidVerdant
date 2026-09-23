@@ -60,6 +60,7 @@ object SettingsTestTags {
     const val SCREEN = "settings_screen"
     const val LOGOUT_BUTTON = "settings_logout_button"
     const val THEME_ROW = "settings_theme_row"
+    const val REVIEW_ROW = "settings_review_row"
     const val REMINDERS_ROW = "settings_reminders_row"
     const val TEMPLATES_ROW = "settings_templates_row"
     const val SYNC_CENTER_ROW = "settings_sync_center_row"

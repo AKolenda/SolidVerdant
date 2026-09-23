@@ -9,11 +9,9 @@
 package dev.tricked.solidverdant.e2e.flows
 
 import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
 import dev.tricked.solidverdant.data.model.TimeEntryType
@@ -59,7 +57,7 @@ class CalendarSyncRecoveryE2eTest {
         e2e.composeRule.waitForIdle()
         e2e.composeRule.onNodeWithTag(entryTag, useUnmergedTree = true)
             .performScrollTo()
-            .performTouchInput { longClick() }
+            .performClick()
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ENTRY_ACTIONS), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ENTRY_SYNC_STATUS), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ENTRY_SYNC_DISCARD), WAIT_MS)
@@ -104,7 +102,7 @@ class CalendarSyncRecoveryE2eTest {
         e2e.composeRule.waitForIdle()
         e2e.composeRule.onNodeWithTag(entryTag, useUnmergedTree = true)
             .performScrollTo()
-            .performTouchInput { longClick() }
+            .performClick()
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ENTRY_ACTIONS), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ENTRY_SYNC_RETRY), WAIT_MS)
 

@@ -28,6 +28,10 @@ object TrackingTestTags {
     const val ENTRY_EDIT_BUTTON = "track_entry_edit"
     const val ENTRY_DUPLICATE_ACTION = "track_entry_duplicate"
     const val ENTRY_DELETE_ACTION = "track_entry_delete"
+    const val ENTRY_CONTINUE_ACTION = "track_entry_continue"
+    const val DELETE_CONFIRM = "track_delete_confirm"
+    const val ENTRY_REVIEW_ISSUES = "track_entry_review_issues"
+    const val DELETE_CANCEL = "track_delete_cancel"
     const val CONTINUE_BUTTON = "track_continue_last"
     const val SHEET = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.SHEET
     const val SHEET_PROJECT_TASK_SELECTOR = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.PROJECT_TASK_SELECTOR
@@ -50,6 +54,8 @@ object TrackingTestTags {
     const val ELAPSED_TIMER = "track_elapsed_timer"
     const val SYNC_STATUS_CARD = "track_sync_status_card"
     const val SYNC_DETAILS_BUTTON = "track_sync_details"
+    const val SEARCH_BUTTON = "track_search_button"
+    const val SEARCH_CLOSE_BUTTON = "track_search_close"
     const val FILTER_OPEN_BUTTON = "track_filter_open"
     const val FILTER_SEARCH_FIELD = "track_filter_search"
     const val FILTER_CLOSE_BUTTON = "track_filter_close"

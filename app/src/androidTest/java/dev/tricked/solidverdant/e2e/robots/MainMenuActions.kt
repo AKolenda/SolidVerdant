@@ -13,6 +13,7 @@ import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
 import dev.tricked.solidverdant.e2e.TestTags
 
@@ -48,5 +49,14 @@ fun ComposeTestRule.openCalendarFromMenu(modeTag: String? = TestTags.CALENDAR_MO
 fun ComposeTestRule.chooseCalendarMenuItem(itemTag: String, timeoutMs: Long = MENU_TIMEOUT_MS) {
     tapFirstEnabled(TestTags.CALENDAR_MORE_ACTIONS, timeoutMs)
     tapFirstEnabled(itemTag, timeoutMs)
+    waitForIdle()
+}
+
+/** Review left the side menu (its checks are on the history cards); Settings opens it. */
+fun ComposeTestRule.openReviewFromSettings(timeoutMs: Long = MENU_TIMEOUT_MS) {
+    openMenuDestination(TestTags.NAV_SETTINGS, timeoutMs)
+    val row = hasTestTag(TestTags.SETTINGS_REVIEW_ROW)
+    waitUntilAtLeastOneExists(row, timeoutMs)
+    onAllNodes(row, useUnmergedTree = true).onFirst().performScrollTo().performClick()
     waitForIdle()
 }

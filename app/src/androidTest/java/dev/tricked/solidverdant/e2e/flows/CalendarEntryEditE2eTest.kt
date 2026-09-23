@@ -55,6 +55,9 @@ class CalendarEntryEditE2eTest {
         e2e.composeRule.onNodeWithTag(entryTag, useUnmergedTree = true)
             .performScrollTo()
             .performClick()
+        // A tap opens the entry's actions; Edit opens the editor.
+        e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_EDIT_ENTRY), WAIT_MS)
+        e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_EDIT_ENTRY, useUnmergedTree = true).performClick()
 
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.ENTRY_SAVE), WAIT_MS)
         val descriptionField = e2e.composeRule.onNodeWithTag(TestTags.ENTRY_DESCRIPTION, useUnmergedTree = true)

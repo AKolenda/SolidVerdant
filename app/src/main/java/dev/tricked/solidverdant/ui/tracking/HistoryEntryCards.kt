@@ -29,8 +29,9 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SyncProblem
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.LocalOffer
 import androidx.compose.material.icons.outlined.Paid
 import androidx.compose.material3.DropdownMenu
@@ -178,8 +179,13 @@ internal fun HistoryEntryCard(
     onDuplicate: ((TimeEntry) -> Unit)?,
     onRetrySync: (TimeEntry) -> Unit,
     onContinue: ((TimeEntry) -> Unit)?,
+    onDeleteStack: ((List<TimeEntry>) -> Unit)? = null,
+    reviewIssues: Map<String, Set<EntryReviewIssue>> = emptyMap(),
 ) {
     val lead = group.lead
+    val groupIssues = remember(group.entries, reviewIssues) {
+        group.entries.flatMapTo(sortedSetOf()) { reviewIssues[it.id].orEmpty() }
+    }
     val stacked = group.entries.size > 1
     var expanded by rememberSaveable(group.key) { mutableStateOf(false) }
     val shape = MaterialTheme.shapes.large
@@ -204,7 +210,8 @@ internal fun HistoryEntryCard(
     ) {
         SwipeableHistoryRow(
             shape = shape,
-            onDelete = if (stacked) null else ({ onDelete(lead) }),
+            // Swiping a stack away deletes every entry in it, after the caller's confirmation.
+            onDelete = if (stacked) onDeleteStack?.let { deleteStack -> { deleteStack(group.entries) } } else ({ onDelete(lead) }),
             onContinue = onContinue?.let { continueEntry -> { continueEntry(lead) } },
         ) {
             Column(
@@ -244,7 +251,7 @@ internal fun HistoryEntryCard(
                                 onToggle = { expanded = !expanded },
                             )
                         } else {
-                            EntryActionsMenu(entry = lead, onDuplicate = onDuplicate, onDelete = onDelete)
+                            EntryActionsMenu(entry = lead, onContinue = onContinue, onDuplicate = onDuplicate, onDelete = onDelete)
                         }
                     }
                     Text(
@@ -259,6 +266,7 @@ internal fun HistoryEntryCard(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(end = Dimens.Space12),
                     )
+                    if (groupIssues.isNotEmpty()) EntryReviewLine(groupIssues)
                     EntryMetaRow(
                         entry = lead,
                         timeRangeEntry = lead.takeUnless { stacked },
@@ -280,6 +288,7 @@ internal fun HistoryEntryCard(
                             onEdit = onEdit,
                             onDelete = onDelete,
                             onDuplicate = onDuplicate,
+                            onContinue = onContinue,
                         )
                     }
                 }
@@ -391,7 +400,7 @@ private fun EntryMetaRow(
             if (syncStatus != null && canRetrySync(syncStatus)) {
                 IconButton(onClick = onRetrySync, modifier = Modifier.size(Dimens.MinTouchTarget).testTag(retryTag)) {
                     Icon(
-                        Icons.Default.SyncProblem,
+                        Icons.Default.Refresh,
                         contentDescription = stringResource(R.string.sync_retry_entry),
                         tint = if (syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED) {
                             MaterialTheme.colorScheme.syncFailed
@@ -456,6 +465,7 @@ private fun GroupedEntryRow(
     onEdit: (TimeEntry) -> Unit,
     onDelete: (TimeEntry) -> Unit,
     onDuplicate: ((TimeEntry) -> Unit)?,
+    onContinue: ((TimeEntry) -> Unit)?,
 ) {
     Row(
         modifier = Modifier
@@ -474,7 +484,7 @@ private fun GroupedEntryRow(
             style = MaterialTheme.typography.bodyMedium.tabular(),
             color = MaterialTheme.colorScheme.onSurface,
         )
-        EntryActionsMenu(entry = entry, onDuplicate = onDuplicate, onDelete = onDelete)
+        EntryActionsMenu(entry = entry, onContinue = onContinue, onDuplicate = onDuplicate, onDelete = onDelete)
     }
 }
 
@@ -506,9 +516,53 @@ private fun GroupToggle(count: Int, expanded: Boolean, label: String, onToggle: 
     }
 }
 
-/** "⋯" button anchoring Duplicate and Delete for one entry. */
+/** The entry's review checks in one warning line, so problems are fixed from the card itself. */
 @Composable
-private fun EntryActionsMenu(entry: TimeEntry, onDuplicate: ((TimeEntry) -> Unit)?, onDelete: (TimeEntry) -> Unit) {
+private fun EntryReviewLine(issues: Set<EntryReviewIssue>) {
+    val longHours = LocalLongEntryHours.current
+    val labels = issues.map { issue ->
+        when (issue) {
+            EntryReviewIssue.NO_PROJECT -> stringResource(R.string.review_issue_no_project)
+            EntryReviewIssue.NO_DESCRIPTION -> stringResource(R.string.review_issue_no_description)
+            EntryReviewIssue.OVERLAP -> stringResource(R.string.review_issue_overlap)
+            EntryReviewIssue.LONG_DURATION -> pluralStringResource(R.plurals.review_issue_long, longHours, longHours)
+        }
+    }
+    Row(
+        modifier = Modifier.padding(top = Dimens.Space4, end = Dimens.Space12),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Space4 + Dimens.Space2),
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.ErrorOutline,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.tertiary,
+            modifier = Modifier.size(Dimens.IconSmall),
+        )
+        Text(
+            text = labels.joinToString(stringResource(R.string.review_issue_separator)),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.tertiary,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.testTag(TrackingTestTags.ENTRY_REVIEW_ISSUES),
+        )
+    }
+}
+
+/** Hours after which a finished entry counts as long; the Time Tracker provides the preference. */
+internal val LocalLongEntryHours = androidx.compose.runtime.staticCompositionLocalOf { DEFAULT_LONG_ENTRY_HOURS }
+
+private const val DEFAULT_LONG_ENTRY_HOURS = 10
+
+/** "⋯" button anchoring Continue (while no timer runs), Duplicate and Delete for one entry. */
+@Composable
+private fun EntryActionsMenu(
+    entry: TimeEntry,
+    onContinue: ((TimeEntry) -> Unit)?,
+    onDuplicate: ((TimeEntry) -> Unit)?,
+    onDelete: (TimeEntry) -> Unit,
+) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }, modifier = Modifier.testTag(TrackingTestTags.entryActionsButton(entry.id))) {
@@ -519,6 +573,17 @@ private fun EntryActionsMenu(entry: TimeEntry, onDuplicate: ((TimeEntry) -> Unit
             )
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            if (onContinue != null) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.entry_continue)) },
+                    leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+                    onClick = {
+                        open = false
+                        onContinue(entry)
+                    },
+                    modifier = Modifier.testTag(TrackingTestTags.ENTRY_CONTINUE_ACTION),
+                )
+            }
             if (onDuplicate != null) {
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.duplicate_entry)) },
@@ -546,7 +611,7 @@ private fun EntryActionsMenu(entry: TimeEntry, onDuplicate: ((TimeEntry) -> Unit
 /**
  * Card wrapped in iOS-style swipe actions: swipe left to delete, swipe right to continue the entry
  * as a new timer (only offered while no timer runs). Both are also TalkBack custom actions. A null
- * [onDelete] disables the delete swipe, used for stacks where one swipe would remove several entries.
+ * [onDelete] disables the delete swipe; the caller confirms a delete before anything is removed.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

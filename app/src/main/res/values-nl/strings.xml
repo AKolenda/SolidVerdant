@@ -39,7 +39,6 @@
     <string name="nav_time_tracker">Tijdregistratie</string>
     <string name="nav_reports">Rapporten</string>
     <string name="main_menu_open">Menu openen</string>
-    <string name="main_menu_open_with_review">Menu openen, %1$s</string>
     <string name="timer_fab_open">Nieuwe tijdregistratie</string>
     <string name="timer_fab_close">Opties voor nieuwe registratie sluiten</string>
     <string name="timer_manual">Handmatig</string>

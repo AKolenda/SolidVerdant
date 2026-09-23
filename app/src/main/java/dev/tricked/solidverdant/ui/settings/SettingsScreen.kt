@@ -32,6 +32,7 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.outlined.Business
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Lock
@@ -112,6 +113,7 @@ fun SettingsScreen(
     onAutoClearEntryFieldsAfterStopChange: (Boolean) -> Unit,
     onClearDescriptionAfterStopChange: (Boolean) -> Unit,
     onLongTimerHoursChange: (Int) -> Unit,
+    onOpenReview: () -> Unit,
     onOpenReminderSettings: () -> Unit,
     onOpenManageTemplates: () -> Unit,
     onOpenSyncCenter: () -> Unit,
@@ -167,6 +169,7 @@ fun SettingsScreen(
         onAutoClearEntryFieldsAfterStopChange = onAutoClearEntryFieldsAfterStopChange,
         onClearDescriptionAfterStopChange = onClearDescriptionAfterStopChange,
         onLongTimerHoursChange = onLongTimerHoursChange,
+        onOpenReview = onOpenReview,
         onOpenReminderSettings = onOpenReminderSettings,
         onOpenManageTemplates = onOpenManageTemplates,
         onOpenSyncCenter = onOpenSyncCenter,
@@ -203,6 +206,7 @@ internal fun SettingsContent(
     onAutoClearEntryFieldsAfterStopChange: (Boolean) -> Unit,
     onClearDescriptionAfterStopChange: (Boolean) -> Unit,
     onLongTimerHoursChange: (Int) -> Unit,
+    onOpenReview: () -> Unit,
     onOpenReminderSettings: () -> Unit,
     onOpenManageTemplates: () -> Unit,
     onOpenSyncCenter: () -> Unit,
@@ -300,6 +304,13 @@ internal fun SettingsContent(
             }
 
             GroupedSection(header = stringResource(R.string.nav_review)) {
+                GroupedRow(
+                    title = stringResource(R.string.review_title),
+                    leadingIcon = Icons.Outlined.Inbox,
+                    onClick = onOpenReview,
+                    modifier = Modifier.testTag(SettingsTestTags.REVIEW_ROW),
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
                 GroupedRow(
                     title = stringResource(R.string.review_menu_reminder_settings),
                     leadingIcon = Icons.Outlined.NotificationsActive,

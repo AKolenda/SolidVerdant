@@ -13,9 +13,4 @@
     <string name="reminder_settings_title">Reminder settings</string>
     <string name="manage_templates_title">Manage templates</string>
     <string name="review_navigate_back">Back</string>
-    <string name="review_badge_overflow">99+</string>
-    <plurals name="review_pending_badge_description">
-        <item quantity="one">Review, %1$d item to review</item>
-        <item quantity="other">Review, %1$d items to review</item>
-    </plurals>
 </resources>

@@ -69,7 +69,7 @@ class ScrollingFramePerformanceTest {
                 TestTags.NAV_TIMER,
                 TestTags.NAV_CALENDAR,
                 TestTags.NAV_TIMER,
-                TestTags.NAV_REVIEW,
+                TestTags.NAV_SETTINGS,
                 TestTags.NAV_TIMER,
             ).forEach { tag -> rule.openMenuDestination(tag) }
         }

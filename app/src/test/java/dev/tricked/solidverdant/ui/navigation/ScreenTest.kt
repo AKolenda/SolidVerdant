@@ -13,14 +13,14 @@ class ScreenTest {
     @Test
     fun menuScreens_haveUniqueStableRoutesInMenuOrder() {
         val routes = menuScreens.map { it.route }
-        // Calendar deep links and review notifications resolve these strings.
-        assertEquals(listOf("track", "calendar", "stats", "review", "settings"), routes)
+        // Calendar deep links and device tests resolve these strings.
+        assertEquals(listOf("track", "calendar", "stats", "settings"), routes)
         assertEquals(routes.size, routes.toSet().size)
     }
 
     @Test
     fun pushedDestinations_keepTheMenuItemThatOpenedThem() {
-        assertEquals("review", nextSelectedDestination("review", ReviewRoutes.END_OF_DAY))
+        assertEquals("settings", nextSelectedDestination("settings", Screen.Review.route))
         assertEquals("settings", nextSelectedDestination("settings", SyncRoutes.SYNC_CENTER))
         assertEquals("track", nextSelectedDestination("track", SyncRoutes.SYNC_CENTER))
     }

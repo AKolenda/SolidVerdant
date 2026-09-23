@@ -9,11 +9,9 @@ package dev.tricked.solidverdant.ui.calendar
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -52,6 +50,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -83,7 +82,6 @@ fun MonthCalendarView(
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
     onEntryClick: (TimeEntry) -> Unit,
-    onEntryLongPress: (TimeEntry) -> Unit = {},
     onMoveEntry: (TimeEntry, String, String) -> Unit = { _, _, _ -> },
     onCreateRange: (CalendarTimeRange) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -148,7 +146,6 @@ fun MonthCalendarView(
             clients = clients,
             scrollState = timelineScrollState,
             onEntryClick = onEntryClick,
-            onEntryLongPress = onEntryLongPress,
             syncStatusByEntryId = syncStatusByEntryId,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
@@ -198,7 +195,9 @@ private fun MonthCalendarGrid(
         if (state.isLoading) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space4))
         }
-        MonthCalendarGridWeeks(state, today, onSelectDate, onCollapse)
+        Column(Modifier.calendarSwipePaging(onPrevious = onPreviousMonth, onNext = onNextMonth)) {
+            MonthCalendarGridWeeks(state, today, onSelectDate, onCollapse)
+        }
     }
 }
 
@@ -290,7 +289,6 @@ private fun ColumnScope.SelectedDayEntries(
     clients: List<Client>,
     scrollState: ScrollState,
     onEntryClick: (TimeEntry) -> Unit,
-    onEntryLongPress: (TimeEntry) -> Unit,
     syncStatusByEntryId: Map<String, EntrySyncStatus>,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
@@ -323,7 +321,6 @@ private fun ColumnScope.SelectedDayEntries(
             scrollState = scrollState,
             fillViewport = true,
             onEntryClick = onEntryClick,
-            onEntryLongPress = onEntryLongPress,
             syncStatusByEntryId = syncStatusByEntryId,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
@@ -341,7 +338,6 @@ private fun ColumnScope.SelectedDayEntries(
             scrollState = scrollState,
             fillViewport = true,
             onEntryClick = onEntryClick,
-            onEntryLongPress = onEntryLongPress,
             syncStatusByEntryId = syncStatusByEntryId,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
@@ -360,7 +356,6 @@ private fun ColumnScope.SelectedDayEntries(
                     settings = settings,
                     scrollState = scrollState,
                     onEntryClick = onEntryClick,
-                    onEntryLongPress = onEntryLongPress,
                     syncStatusByEntryId = syncStatusByEntryId,
                     onMoveEntry = onMoveEntry,
                     onCreateRange = onCreateRange,
@@ -377,7 +372,6 @@ private fun ColumnScope.SelectedDayEntries(
  * so a day rendered here is visually identical to the same day inside the week grid.
  */
 @Composable
-@OptIn(ExperimentalFoundationApi::class)
 fun DayTimeline(
     day: LocalDate,
     entries: List<TimeEntry>,
@@ -388,7 +382,6 @@ fun DayTimeline(
     now: Instant,
     settings: CalendarGridSettings = CalendarGridSettings(),
     onEntryClick: (TimeEntry) -> Unit,
-    onEntryLongPress: (TimeEntry) -> Unit = {},
     syncStatusByEntryId: Map<String, EntrySyncStatus> = emptyMap(),
     onMoveEntry: (TimeEntry, String, String) -> Unit = { _, _, _ -> },
     onCreateRange: (CalendarTimeRange) -> Unit = {},
@@ -491,10 +484,8 @@ fun DayTimeline(
                     time = duration,
                     modifier = entryModifier
                         .height((totalHeight * height).coerceAtLeast(Dimens.EntryMinHeight))
-                        .combinedClickable(
-                            onClick = { onEntryClick(entry) },
-                            onLongClick = { onEntryLongPress(entry) },
-                        )
+                        // Tap opens the entry's actions; a hold lifts it for dragging.
+                        .clickable(role = Role.Button) { onEntryClick(entry) }
                         .testTag("entry-row-${entry.id}")
                         .semantics { contentDescription = a11y },
                     syncStatus = syncStatusByEntryId[entry.id],

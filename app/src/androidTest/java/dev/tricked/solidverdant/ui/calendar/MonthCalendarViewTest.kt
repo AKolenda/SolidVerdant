@@ -72,20 +72,25 @@ class MonthCalendarViewTest {
             bucketsByDate = mapOf(date to DayBucket(date, listOf(entry), 3600)),
             isLoading = false,
         )
-        var longPressed: String? = null
+        var clicked: String? = null
+        var moved: String? = null
         composeRule.setContent {
             MonthCalendarView(
                 state,
                 onSelectDate = {},
                 onPreviousMonth = {},
                 onNextMonth = {},
-                onEntryClick = {},
-                onEntryLongPress = { longPressed = it.id },
+                onEntryClick = { clicked = it.id },
+                onMoveEntry = { moving, _, _ -> moved = moving.id },
             )
         }
         composeRule.onNodeWithTag("day-cell-2026-07-06").performClick()
+        // A hold lifts the entry for dragging; releasing in place neither opens it nor moves it.
         composeRule.onNodeWithTag("entry-row-${entry.id}").performScrollTo().performTouchInput { longClick() }
 
-        composeRule.runOnIdle { assertEquals(entry.id, longPressed) }
+        composeRule.runOnIdle {
+            assertEquals(null, clicked)
+            assertEquals(null, moved)
+        }
     }
 }

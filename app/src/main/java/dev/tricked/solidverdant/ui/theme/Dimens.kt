@@ -98,6 +98,9 @@ object Dimens {
     // --- Calendar day header (week strip) ---
     val CalendarStripDay = 36.dp
 
+    /** Horizontal travel that turns a calendar swipe into the previous/next day, week or month. */
+    val CalendarSwipeThreshold = 72.dp
+
     val NarrowCalendarWidth = 600.dp
     val PickerMaxWidth = 560.dp
     val PickerMaxHeight = 640.dp

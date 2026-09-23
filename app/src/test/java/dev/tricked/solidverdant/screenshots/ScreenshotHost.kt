@@ -189,7 +189,7 @@ object ScreenshotHost {
         fab: @Composable () -> Unit = {},
         content: @Composable () -> Unit,
     ) {
-        CompositionLocalProvider(LocalMainMenu provides MainMenuController(open = {}, badgeCount = SAMPLE_REVIEW_BADGE)) {
+        CompositionLocalProvider(LocalMainMenu provides MainMenuController(open = {})) {
             Scaffold(
                 topBar = {
                     when {
@@ -214,8 +214,6 @@ object ScreenshotHost {
             }
         }
     }
-
-    private const val SAMPLE_REVIEW_BADGE = 4
 
     /** Repository root (the folder that owns settings.gradle.kts), regardless of Gradle's cwd. */
     private val repoRoot: File by lazy {

@@ -38,7 +38,6 @@
     <string name="nav_time_tracker">タイムトラッカー</string>
     <string name="nav_reports">レポート</string>
     <string name="main_menu_open">メニューを開く</string>
-    <string name="main_menu_open_with_review">メニューを開く、%1$s</string>
     <string name="timer_fab_open">新しい時間エントリ</string>
     <string name="timer_fab_close">新規エントリのオプションを閉じる</string>
     <string name="timer_manual">手動</string>

@@ -106,6 +106,12 @@ class CalendarViewModel @Inject constructor(
     private var entriesJob: Job? = null
     private var syncOperationsJob: Job? = null
     private var visibleLoadJob: Job? = null
+
+    // When each month last finished loading, per organization and zone. Navigating within the
+    // same weeks (the day view pages often) reuses the Room copy instead of re-downloading it.
+    private val monthLoadedAtMs = HashMap<MonthKey, Long>()
+
+    private data class MonthKey(val organizationId: String, val month: YearMonth, val zone: ZoneId)
     private var visibleLoadGeneration = 0L
     private var calendarSettingsWritesInFlight = 0
 
@@ -309,7 +315,7 @@ class CalendarViewModel @Inject constructor(
     fun pageBackward() = page(-1)
 
     /** Re-fetch the current calendar page without changing the user's current selection. */
-    fun retryLoad() = loadForVisibleDays()
+    fun retryLoad() = loadForVisibleDays(force = true)
 
     private fun page(direction: Int) {
         val state = _uiState.value
@@ -519,10 +525,15 @@ class CalendarViewModel @Inject constructor(
         return start to end
     }
 
-    private fun loadForVisibleDays() {
+    private fun loadForVisibleDays(force: Boolean = false) {
         val org = organizationId ?: return
         val member = memberId ?: return
         val state = _uiState.value
+        val now = clock.nowMs()
+        val isFresh = { month: YearMonth ->
+            !force && monthLoadedAtMs[MonthKey(org, month, state.zone)]?.let { now - it < MONTH_FRESH_MS } == true
+        }
+        val markLoaded = { month: YearMonth -> monthLoadedAtMs[MonthKey(org, month, state.zone)] = clock.nowMs() }
         val visibleMonths = when (state.viewMode) {
             CalendarViewMode.MONTH -> listOf(state.visibleMonth)
             else -> {
@@ -536,13 +547,20 @@ class CalendarViewModel @Inject constructor(
             }
         }
         val months = monthsWithAdjacentPeriods(visibleMonths)
-        _uiState.update { it.copy(isLoading = true, loadError = false, isStale = false) }
+        val staleVisible = visibleMonths.filterNot(isFresh)
+        val stalePrefetch = months.filterNot { it in visibleMonths || isFresh(it) }
+        if (staleVisible.isEmpty() && stalePrefetch.isEmpty() && visibleLoadJob?.isActive != true) {
+            _uiState.update { it.copy(isLoading = false) }
+            return
+        }
+        _uiState.update { it.copy(isLoading = staleVisible.isNotEmpty(), loadError = false, isStale = false) }
         val requestGeneration = ++visibleLoadGeneration
         visibleLoadJob?.cancel()
         visibleLoadJob = viewModelScope.launch {
             try {
-                visibleMonths.forEach {
+                staleVisible.forEach {
                     reader.loadMonth(org, member, it, state.zone)
+                    markLoaded(it)
                     currentCoroutineContext().ensureActive()
                 }
             } catch (e: CancellationException) {
@@ -562,9 +580,10 @@ class CalendarViewModel @Inject constructor(
             if (requestGeneration == visibleLoadGeneration && this@CalendarViewModel.organizationId == org) {
                 _uiState.update { it.copy(isLoading = false, loadError = false, isStale = false) }
             }
-            months.filterNot { it in visibleMonths }.forEach { month ->
+            stalePrefetch.forEach { month ->
                 try {
                     reader.loadMonth(org, member, month, state.zone)
+                    markLoaded(month)
                     currentCoroutineContext().ensureActive()
                 } catch (e: CancellationException) {
                     throw e
@@ -588,6 +607,9 @@ class CalendarViewModel @Inject constructor(
 }
 
 private const val FULL_WEEK_DAYS = 7
+
+/** A month loaded this recently is served from Room when navigating; Retry always reloads it. */
+private const val MONTH_FRESH_MS = 60_000L
 private const val MIN_VISIBLE_DAYS = 1
 
 internal fun monthsWithAdjacentPeriods(visibleMonths: List<YearMonth>): List<YearMonth> {

@@ -16,8 +16,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import dev.tricked.solidverdant.R
 
 /**
- * The side-menu destinations, in menu order. Route strings are stable: calendar deep links, review
- * notifications and device tests depend on them.
+ * The app's root destinations. Route strings are stable: calendar deep links, review notifications
+ * and device tests depend on them. Review is not in the side menu (its checks show on the history
+ * cards); Settings opens it.
  */
 sealed class Screen(val route: String, val labelRes: Int, val icon: ImageVector) {
     data object Track : Screen("track", R.string.nav_time_tracker, Icons.Outlined.Timer)
@@ -27,7 +28,8 @@ sealed class Screen(val route: String, val labelRes: Int, val icon: ImageVector)
     data object Settings : Screen("settings", R.string.settings_menu, Icons.Outlined.Settings)
 }
 
-val menuScreens: List<Screen> = listOf(Screen.Track, Screen.Calendar, Screen.Stats, Screen.Review, Screen.Settings)
+/** The side-menu destinations, in menu order. */
+val menuScreens: List<Screen> = listOf(Screen.Track, Screen.Calendar, Screen.Stats, Screen.Settings)
 
 /** Test tag of a side-menu item, shared by production UI and device robots. */
 fun mainNavTag(route: String): String = "main_nav_$route"

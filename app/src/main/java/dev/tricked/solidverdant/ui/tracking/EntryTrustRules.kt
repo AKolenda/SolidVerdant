@@ -37,8 +37,48 @@ data class HistoryFilter(
     val syncStatus: TimeEntryRepository.EntrySyncStatus? = null,
 )
 
+/** A review check shown on the entry's own history card, where the entry can be fixed in place. */
+enum class EntryReviewIssue { NO_PROJECT, NO_DESCRIPTION, OVERLAP, LONG_DURATION }
+
 /** Deterministic, local checks. Server policy remains authoritative. */
 object EntryTrustRules {
+    /**
+     * Review checks for completed work entries, keyed by entry id; entries without an issue are
+     * absent. Overlaps are found in one pass over the entries sorted by start: an entry overlaps
+     * when it starts before the latest end seen so far, and so does the entry holding that end.
+     * Breaks are never flagged. Advisory only: nothing is changed without the user.
+     */
+    fun reviewIssues(entries: List<TimeEntry>, longThreshold: Duration, now: Instant = Instant.now()): Map<String, Set<EntryReviewIssue>> {
+        val issues = HashMap<String, MutableSet<EntryReviewIssue>>()
+        fun flag(entry: TimeEntry, issue: EntryReviewIssue) {
+            issues.getOrPut(entry.id) { mutableSetOf() } += issue
+        }
+        val completedWork = entries.filter { !isRunningTimeEntry(it) && !isBreakTimeEntry(it) }
+        completedWork.forEach { entry ->
+            if (entry.projectId == null) flag(entry, EntryReviewIssue.NO_PROJECT)
+            if (entry.description.isNullOrBlank()) flag(entry, EntryReviewIssue.NO_DESCRIPTION)
+        }
+        completedWork.groupBy { it.organizationId }.values.forEach { organizationEntries ->
+            val intervals = organizationEntries
+                .mapNotNull { entry -> resolveTimeEntryInterval(entry, now)?.let { (start, end) -> Triple(entry, start, end) } }
+                .sortedBy { it.second }
+            var latest: Triple<TimeEntry, Instant, Instant>? = null
+            intervals.forEach { interval ->
+                val (entry, start, end) = interval
+                val holder = latest
+                if (holder != null && start < holder.third) {
+                    flag(entry, EntryReviewIssue.OVERLAP)
+                    flag(holder.first, EntryReviewIssue.OVERLAP)
+                }
+                if (holder == null || end > holder.third) latest = interval
+                if (!longThreshold.isZero && !longThreshold.isNegative && Duration.between(start, end) >= longThreshold) {
+                    flag(entry, EntryReviewIssue.LONG_DURATION)
+                }
+            }
+        }
+        return issues
+    }
+
     fun overlapCount(entries: List<TimeEntry>, now: Instant = Instant.now()): Int =
         entries.groupBy { it.organizationId }.values.sumOf { organizationEntries ->
             val intervals = organizationEntries.mapNotNull { entry ->

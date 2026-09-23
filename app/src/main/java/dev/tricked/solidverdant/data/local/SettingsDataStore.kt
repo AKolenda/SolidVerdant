@@ -90,7 +90,6 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         private const val LEGACY_CACHED_KEEP_ENTRY_FIELDS_AFTER_STOP = "keep_entry_fields_after_stop"
         private const val TRACKING_STATE_JSON = "tracking_state_json"
         private const val TRACKING_DRAFT_JSON = "tracking_draft_json"
-        private const val REVIEW_BADGE_COUNT_PREFIX = "review_badge_count_"
         private val ALWAYS_SHOW_NOTIFICATION = booleanPreferencesKey("always_show_notification")
         private val APP_THEME = stringPreferencesKey("app_theme")
         private val OPTIMISTIC_REFRESH = booleanPreferencesKey("optimistic_refresh")
@@ -233,14 +232,6 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
                 putString(TRACKING_DRAFT_JSON, json.encodeToString(draft))
             }
         }.apply()
-    }
-
-    fun getCachedReviewBadgeCount(organizationId: String): Int = immediateCache.getInt(REVIEW_BADGE_COUNT_PREFIX + organizationId, 0)
-
-    fun cacheReviewBadgeCount(organizationId: String, count: Int) {
-        immediateCache.edit()
-            .putInt(REVIEW_BADGE_COUNT_PREFIX + organizationId, count.coerceAtLeast(0))
-            .apply()
     }
 
     /** Clear cached account data while preserving the user's app preferences. */

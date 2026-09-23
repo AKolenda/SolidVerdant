@@ -342,6 +342,39 @@ class CalendarViewModelTest {
     }
 
     @Test
+    fun paging_within_freshly_loaded_months_reuses_room_instead_of_downloading_again() = runTest {
+        val reader = FakeReader(emptyList())
+        val model = vm(reader)
+        model.selectDate(LocalDate.of(2026, 7, 8))
+        model.setOrganization("org1")
+        val firstLoads = reader.loadCalls
+        assertEquals("the visible month and both neighbours", 3, firstLoads)
+
+        // Other days of the same weeks: every month they need was just loaded.
+        model.selectDate(LocalDate.of(2026, 7, 10))
+        model.pageForward()
+        assertEquals(firstLoads, reader.loadCalls)
+        assertFalse(model.uiState.value.isLoading)
+
+        // A page into August only fetches the month that is not fresh yet.
+        model.selectDate(LocalDate.of(2026, 8, 20))
+        assertEquals(listOf(YearMonth.of(2026, 9)), reader.loadedMonths.drop(firstLoads))
+    }
+
+    @Test
+    fun retry_reloads_months_even_when_they_are_fresh() = runTest {
+        val reader = FakeReader(emptyList())
+        val model = vm(reader)
+        model.selectDate(LocalDate.of(2026, 7, 8))
+        model.setOrganization("org1")
+        val firstLoads = reader.loadCalls
+
+        model.retryLoad()
+
+        assertEquals(firstLoads * 2, reader.loadCalls)
+    }
+
+    @Test
     fun prefetches_the_month_before_and_after_the_visible_month() = runTest {
         val reader = FakeReader(emptyList())
         val model = vm(reader)

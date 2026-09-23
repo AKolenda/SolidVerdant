@@ -13,16 +13,11 @@ import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -69,7 +64,10 @@ import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -106,6 +104,7 @@ import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -188,6 +187,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -246,7 +246,12 @@ fun TrackingScreen(
     var hasUserScrolledHistory by remember { mutableStateOf(false) }
     var calendarInitialDate by remember { mutableStateOf<LocalDate?>(null) }
     var historyFilter by remember { mutableStateOf(HistoryFilter()) }
-    var deletedEntry by remember { mutableStateOf<TimeEntry?>(null) }
+    // Search lives behind the header's search button, not in the history list.
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    var filterOptionsOpen by remember { mutableStateOf(false) }
+    var deletedEntries by remember { mutableStateOf<List<TimeEntry>>(emptyList()) }
+    // Entries waiting for the delete confirmation: one entry, or a whole stack.
+    var pendingDelete by remember { mutableStateOf<List<TimeEntry>>(emptyList()) }
     val snackbarHostState = remember { SnackbarHostState() }
     var longTimerSnoozedUntil by remember { mutableLongStateOf(0L) }
     val context = LocalContext.current
@@ -304,15 +309,15 @@ fun TrackingScreen(
         historyFilter.startDate?.let(onJumpToDate)
     }
 
-    LaunchedEffect(deletedEntry) {
-        val entry = deletedEntry ?: return@LaunchedEffect
+    LaunchedEffect(deletedEntries) {
+        val entries = deletedEntries.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
         val result = snackbarHostState.showSnackbar(
             message = entryDeletedMessage,
             actionLabel = undoLabel,
             withDismissAction = true,
         )
-        if (result == SnackbarResult.ActionPerformed) onUndoDelete(entry)
-        deletedEntry = null
+        if (result == SnackbarResult.ActionPerformed) entries.forEach(onUndoDelete)
+        deletedEntries = emptyList()
     }
     val historyScrollConnection = remember(onLoadMoreEntries) {
         object : NestedScrollConnection {
@@ -416,17 +421,32 @@ fun TrackingScreen(
         ),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TimeTrackerTopBar(
-                syncing = routineSyncInProgress,
-                onRefresh = onRefresh,
-                onRequestNotifications = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                    !NotificationPermissionHelper.hasNotificationPermission(context)
-                ) {
-                    { notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
-                } else {
-                    null
-                },
-            )
+            Column {
+                TimeTrackerTopBar(
+                    searchOpen = searchOpen,
+                    onSearch = { searchOpen = true },
+                    syncing = routineSyncInProgress,
+                    onRefresh = onRefresh,
+                    onRequestNotifications = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        !NotificationPermissionHelper.hasNotificationPermission(context)
+                    ) {
+                        { notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
+                    } else {
+                        null
+                    },
+                )
+                if (searchOpen) {
+                    HistorySearchBar(
+                        filter = historyFilter,
+                        onChange = { historyFilter = it },
+                        onOpenOptions = { filterOptionsOpen = true },
+                        onClose = {
+                            searchOpen = false
+                            historyFilter = HistoryFilter()
+                        },
+                    )
+                }
+            }
         },
         bottomBar = {
             if (timerActive) {
@@ -493,6 +513,12 @@ fun TrackingScreen(
                     )
                 }
             }
+            // The Review checks, shown on each entry's card.
+            val reviewIssues by produceState(emptyMap<String, Set<EntryReviewIssue>>(), uiState.timeEntries, longTimerHours) {
+                value = withContext(Dispatchers.Default) {
+                    EntryTrustRules.reviewIssues(uiState.timeEntries, Duration.ofHours(longTimerHours.toLong()))
+                }
+            }
             val historyProjectsById = remember(uiState.projects) { uiState.projects.associateBy { it.id } }
             val historyTasksById = remember(uiState.tasks) { uiState.tasks.associateBy { it.id } }
             val historyClientsById = remember(uiState.clients) { uiState.clients.associateBy { it.id } }
@@ -508,24 +534,20 @@ fun TrackingScreen(
                     if (entry.id in uiState.conflictedEntryIds) showConflictLocked() else showEditDialog = entry
                 }
             }
-            val onHistoryDelete = remember(uiState.conflictedEntryIds) {
-                { entry: TimeEntry ->
-                    if (entry.id in uiState.conflictedEntryIds) {
-                        showConflictLocked()
-                    } else {
-                        deletedEntry = entry
-                        onDeleteEntry(entry.id)
-                    }
+            val requestDelete = remember(uiState.conflictedEntryIds) {
+                { entries: List<TimeEntry> ->
+                    if (entries.any { it.id in uiState.conflictedEntryIds }) showConflictLocked() else pendingDelete = entries
                 }
             }
+            val onHistoryDelete = remember(requestDelete) { { entry: TimeEntry -> requestDelete(listOf(entry)) } }
             val onHistoryDateClick = remember<(LocalDate) -> Unit> { { date -> calendarInitialDate = date } }
 
             LaunchedEffect(uiState.historyJumpDate, historyListItems) {
                 val target = uiState.historyJumpDate ?: return@LaunchedEffect
                 val historyIndex = historyHeaderIndex(target, historyListItems)
                 if (historyIndex >= 0) {
-                    // The long-timer warning and filter rows, then the sync card when shown.
-                    val leadingItemCount = 2 + (if (showSyncCenter) 1 else 0)
+                    // The long-timer warning row, then the sync card when shown.
+                    val leadingItemCount = 1 + (if (showSyncCenter) 1 else 0)
                     historyListState.scrollToItem(leadingItemCount + historyIndex)
                 }
                 onHistoryJumpConsumed()
@@ -533,60 +555,61 @@ fun TrackingScreen(
 
             val sectionInset = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space16, vertical = Dimens.Space8)
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                LazyColumn(
-                    state = historyListState,
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .widthIn(max = Dimens.ContentMaxWidth)
-                        .fillMaxWidth()
-                        .testTag(TrackingTestTags.HISTORY_LIST)
-                        .nestedScroll(historyScrollConnection),
-                    contentPadding = PaddingValues(
-                        bottom = Dimens.FabClearance + if (timerActive) 0.dp else navigationBarInset,
-                    ),
-                ) {
-                    item(key = "long_timer_warning") {
-                        val elapsed by elapsedSeconds.collectAsState()
-                        if (uiState.isTracking &&
-                            elapsed >= longTimerHours * SECONDS_PER_HOUR_LONG &&
-                            elapsed >= longTimerSnoozedUntil
-                        ) {
-                            LongTimerWarning(
-                                modifier = sectionInset,
-                                hours = longTimerHours,
-                                onStop = onStopTracking,
-                                onKeepRunning = {
-                                    longTimerSnoozedUntil = elapsed + SECONDS_PER_HOUR_LONG
-                                    TimeTrackingNotificationService.snoozeLongTimerWarning(context)
-                                },
-                                onAdjust = { uiState.currentTimeEntry?.let { showEditDialog = it } },
-                            )
-                        }
-                    }
-                    item(key = "history_filters") {
-                        Box(sectionInset) { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
-                    }
-                    if (showSyncCenter) {
-                        item(key = "sync_center") {
-                            Box(sectionInset) {
-                                SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter)
+                CompositionLocalProvider(LocalLongEntryHours provides longTimerHours) {
+                    LazyColumn(
+                        state = historyListState,
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .widthIn(max = Dimens.ContentMaxWidth)
+                            .fillMaxWidth()
+                            .testTag(TrackingTestTags.HISTORY_LIST)
+                            .nestedScroll(historyScrollConnection),
+                        contentPadding = PaddingValues(
+                            bottom = Dimens.FabClearance + if (timerActive) 0.dp else navigationBarInset,
+                        ),
+                    ) {
+                        item(key = "long_timer_warning") {
+                            val elapsed by elapsedSeconds.collectAsState()
+                            if (uiState.isTracking &&
+                                elapsed >= longTimerHours * SECONDS_PER_HOUR_LONG &&
+                                elapsed >= longTimerSnoozedUntil
+                            ) {
+                                LongTimerWarning(
+                                    modifier = sectionInset,
+                                    hours = longTimerHours,
+                                    onStop = onStopTracking,
+                                    onKeepRunning = {
+                                        longTimerSnoozedUntil = elapsed + SECONDS_PER_HOUR_LONG
+                                        TimeTrackingNotificationService.snoozeLongTimerWarning(context)
+                                    },
+                                    onAdjust = { uiState.currentTimeEntry?.let { showEditDialog = it } },
+                                )
                             }
                         }
+                        if (showSyncCenter) {
+                            item(key = "sync_center") {
+                                Box(sectionInset) {
+                                    SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter)
+                                }
+                            }
+                        }
+                        trackingHistoryItems(
+                            uiState = uiState,
+                            historyItems = historyListItems,
+                            projectsById = historyProjectsById,
+                            tasksById = historyTasksById,
+                            clientsById = historyClientsById,
+                            syncStatusByEntryId = syncStatusByEntryId,
+                            onEdit = onHistoryEdit,
+                            onDelete = onHistoryDelete,
+                            onDateClick = onHistoryDateClick,
+                            onRetrySync = { onRetrySyncEntry(it.id) },
+                            onContinue = continueEntry.takeIf { !timerActive },
+                            onDuplicate = { onDuplicateEntry(it.id) },
+                            onDeleteStack = requestDelete,
+                            reviewIssues = reviewIssues,
+                        )
                     }
-                    trackingHistoryItems(
-                        uiState = uiState,
-                        historyItems = historyListItems,
-                        projectsById = historyProjectsById,
-                        tasksById = historyTasksById,
-                        clientsById = historyClientsById,
-                        syncStatusByEntryId = syncStatusByEntryId,
-                        onEdit = onHistoryEdit,
-                        onDelete = onHistoryDelete,
-                        onDateClick = onHistoryDateClick,
-                        onRetrySync = { onRetrySyncEntry(it.id) },
-                        onContinue = continueEntry.takeIf { !timerActive },
-                        onDuplicate = { onDuplicateEntry(it.id) },
-                    )
                 }
                 if (fabExpanded) {
                     val closeLabel = stringResource(R.string.timer_fab_close)
@@ -599,6 +622,15 @@ fun TrackingScreen(
                 }
             }
         }
+    }
+
+    if (filterOptionsOpen) {
+        HistoryFiltersSheet(
+            filter = historyFilter,
+            uiState = uiState,
+            onChange = { historyFilter = it },
+            onDismiss = { filterOptionsOpen = false },
+        )
     }
 
     if (showStartTimerSheet && !timerActive) {
@@ -651,6 +683,19 @@ fun TrackingScreen(
         }
     }
 
+    if (pendingDelete.isNotEmpty()) {
+        val entries = pendingDelete
+        DeleteEntriesDialog(
+            count = entries.size,
+            onConfirm = {
+                pendingDelete = emptyList()
+                deletedEntries = entries
+                entries.forEach { onDeleteEntry(it.id) }
+            },
+            onDismiss = { pendingDelete = emptyList() },
+        )
+    }
+
     // Edit dialog
     showEditDialog?.let { entry ->
         TimeEntryFormSheet(
@@ -673,7 +718,7 @@ fun TrackingScreen(
             onDuplicate = { onDuplicateEntry(entry.id) },
             onSplit = { atIso -> onSplitEntry(entry.id, atIso) },
             onDelete = {
-                deletedEntry = entry
+                deletedEntries = listOf(entry)
                 onDeleteEntry(entry.id)
             },
         )
@@ -767,160 +812,188 @@ fun TrackingScreen(
     }
 }
 
+/** How many search options beyond the text query are active; shown on the filter button. */
+private fun HistoryFilter.activeOptionsCount(): Int = listOfNotNull(
+    billable, runningOnly.takeIf { it },
+    syncStatus, startDate, endDate, clientId, projectId, taskId, tagId,
+    missingProjectOnly.takeIf { it }, missingDescriptionOnly.takeIf { it },
+    needsCategorization.takeIf { it },
+).size
+
+/**
+ * The search bar under the Time Tracker header, opened from its search button: the query, a filter
+ * button (with the active option count) that opens the options sheet, and close, which clears both.
+ */
+@Composable
+private fun HistorySearchBar(filter: HistoryFilter, onChange: (HistoryFilter) -> Unit, onOpenOptions: () -> Unit, onClose: () -> Unit) {
+    val activeOptions = filter.activeOptionsCount()
+    val transparent = Color.Transparent
+    Surface(color = MaterialTheme.colorScheme.surface) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = Dimens.Space4, end = Dimens.Space4, bottom = Dimens.Space4),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextField(
+                value = filter.query,
+                onValueChange = { onChange(filter.copy(query = it)) },
+                placeholder = { Text(stringResource(R.string.search_history)) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                singleLine = true,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = transparent,
+                    unfocusedContainerColor = transparent,
+                    focusedIndicatorColor = transparent,
+                    unfocusedIndicatorColor = transparent,
+                ),
+                modifier = Modifier.weight(1f).testTag(TrackingTestTags.FILTER_SEARCH_FIELD),
+            )
+            IconButton(onClick = onOpenOptions, modifier = Modifier.testTag(TrackingTestTags.FILTER_OPEN_BUTTON)) {
+                BadgedBox(badge = { if (activeOptions > 0) Badge { Text(activeOptions.toString()) } }) {
+                    Icon(
+                        Icons.Default.FilterList,
+                        contentDescription = if (activeOptions > 0) {
+                            pluralStringResource(R.plurals.active_filters_count, activeOptions, activeOptions)
+                        } else {
+                            stringResource(R.string.search_options)
+                        },
+                    )
+                }
+            }
+            IconButton(onClick = onClose, modifier = Modifier.testTag(TrackingTestTags.SEARCH_CLOSE_BUTTON)) {
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_search))
+            }
+        }
+    }
+}
+
+/** The search options in a sheet: status, date and categorisation chips, then catalogue pickers. */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 @Suppress("LongMethod")
-private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onChange: (HistoryFilter) -> Unit) {
-    var optionsExpanded by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+private fun HistoryFiltersSheet(
+    filter: HistoryFilter,
+    uiState: TrackingUiState,
+    onChange: (HistoryFilter) -> Unit,
+    onDismiss: () -> Unit,
+) {
     var showDateRangePicker by remember { mutableStateOf(false) }
-    val activeOptionsCount = listOfNotNull(
-        filter.billable, filter.runningOnly.takeIf { it },
-        filter.syncStatus, filter.startDate, filter.endDate, filter.clientId, filter.projectId, filter.taskId, filter.tagId,
-        filter.missingProjectOnly.takeIf { it }, filter.missingDescriptionOnly.takeIf { it },
-        filter.needsCategorization.takeIf { it },
-    ).size
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
-        OutlinedTextField(
-            value = filter.query,
-            onValueChange = { onChange(filter.copy(query = it)) },
-            label = { Text(stringResource(R.string.search_history)) },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            trailingIcon = if (filter.query.isNotBlank()) {
-                {
-                    IconButton(onClick = { onChange(filter.copy(query = "")) }) {
-                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_search))
-                    }
-                }
-            } else {
-                null
-            },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.FILTER_SEARCH_FIELD),
-        )
-        OutlinedButton(
-            onClick = { optionsExpanded = !optionsExpanded },
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag(
-                    if (optionsExpanded) TrackingTestTags.FILTER_CLOSE_BUTTON else TrackingTestTags.FILTER_OPEN_BUTTON,
-                ),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = Dimens.Space16)
+                .padding(bottom = Dimens.Space24),
+            verticalArrangement = Arrangement.spacedBy(Dimens.Space8),
         ) {
-            Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(Dimens.IconMedium))
-            Spacer(Modifier.width(Dimens.Space8))
             Text(
-                stringResource(if (optionsExpanded) R.string.hide_search_options else R.string.search_options),
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                text = stringResource(R.string.search_options),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
             )
-            if (activeOptionsCount > 0) {
-                Text(
-                    pluralStringResource(R.plurals.active_filters_count, activeOptionsCount, activeOptionsCount),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = filter.billable == true,
+                    onClick = { onChange(filter.copy(billable = if (filter.billable == true) null else true)) },
+                    label = { Text(stringResource(R.string.billable)) },
+                )
+                FilterChip(
+                    selected = filter.billable == false,
+                    onClick = { onChange(filter.copy(billable = if (filter.billable == false) null else false)) },
+                    label = { Text(stringResource(R.string.non_billable)) },
+                )
+                FilterChip(
+                    selected = filter.runningOnly,
+                    onClick = { onChange(filter.copy(runningOnly = !filter.runningOnly)) },
+                    label = { Text(stringResource(R.string.running_entries)) },
+                )
+                FilterChip(
+                    selected = filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED,
+                    onClick = {
+                        val toggled = if (filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED) {
+                            null
+                        } else {
+                            TimeEntryRepository.EntrySyncStatus.FAILED
+                        }
+                        onChange(filter.copy(syncStatus = toggled))
+                    },
+                    label = { Text(stringResource(R.string.sync_failed)) },
+                )
+                val today = LocalDate.now(uiState.zone)
+                FilterChip(
+                    selected = filter.startDate == today && filter.endDate == today,
+                    onClick = { onChange(filter.copy(startDate = today, endDate = today)) },
+                    label = { Text(stringResource(R.string.today)) },
+                )
+                FilterChip(
+                    selected = filter.startDate == today.minusDays(LAST_7_DAYS_OFFSET) && filter.endDate == today,
+                    onClick = { onChange(filter.copy(startDate = today.minusDays(LAST_7_DAYS_OFFSET), endDate = today)) },
+                    label = { Text(stringResource(R.string.stats_last_7_days)) },
+                )
+                FilterChip(
+                    selected = filter.startDate != null &&
+                        filter.endDate != null &&
+                        !(filter.startDate == today && filter.endDate == today) &&
+                        !(filter.startDate == today.minusDays(LAST_7_DAYS_OFFSET) && filter.endDate == today),
+                    onClick = { showDateRangePicker = true },
+                    label = { Text(stringResource(R.string.stats_custom)) },
+                )
+                FilterChip(
+                    selected = filter.needsCategorization,
+                    onClick = { onChange(filter.copy(needsCategorization = !filter.needsCategorization)) },
+                    label = { Text(stringResource(R.string.needs_categorization)) },
+                )
+                FilterChip(
+                    selected = filter.missingProjectOnly,
+                    onClick = { onChange(filter.copy(missingProjectOnly = !filter.missingProjectOnly)) },
+                    label = { Text(stringResource(R.string.without_project)) },
+                )
+                FilterChip(
+                    selected = filter.missingDescriptionOnly,
+                    onClick = { onChange(filter.copy(missingDescriptionOnly = !filter.missingDescriptionOnly)) },
+                    label = { Text(stringResource(R.string.without_description)) },
                 )
             }
-        }
-        AnimatedVisibility(
-            visible = optionsExpanded,
-            enter = fadeIn(tween(FILTER_ENTER_DURATION_MS)) + expandVertically(tween(FILTER_EXPAND_DURATION_MS)),
-            exit = fadeOut(tween(FILTER_EXIT_DURATION_MS)) + shrinkVertically(tween(FILTER_COLLAPSE_DURATION_MS)),
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = filter.billable == true,
-                        onClick = { onChange(filter.copy(billable = if (filter.billable == true) null else true)) },
-                        label = { Text(stringResource(R.string.billable)) },
-                    )
-                    FilterChip(
-                        selected = filter.billable == false,
-                        onClick = { onChange(filter.copy(billable = if (filter.billable == false) null else false)) },
-                        label = { Text(stringResource(R.string.non_billable)) },
-                    )
-                    FilterChip(
-                        selected = filter.runningOnly,
-                        onClick = { onChange(filter.copy(runningOnly = !filter.runningOnly)) },
-                        label = { Text(stringResource(R.string.running_entries)) },
-                    )
-                    FilterChip(
-                        selected = filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED,
-                        onClick = {
-                            val toggled = if (filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED) {
-                                null
-                            } else {
-                                TimeEntryRepository.EntrySyncStatus.FAILED
-                            }
-                            onChange(filter.copy(syncStatus = toggled))
-                        },
-                        label = { Text(stringResource(R.string.sync_failed)) },
-                    )
-                    val today = LocalDate.now(uiState.zone)
-                    FilterChip(
-                        selected = filter.startDate == today && filter.endDate == today,
-                        onClick = { onChange(filter.copy(startDate = today, endDate = today)) },
-                        label = { Text(stringResource(R.string.today)) },
-                    )
-                    FilterChip(
-                        selected = filter.startDate == today.minusDays(LAST_7_DAYS_OFFSET) && filter.endDate == today,
-                        onClick = { onChange(filter.copy(startDate = today.minusDays(LAST_7_DAYS_OFFSET), endDate = today)) },
-                        label = { Text(stringResource(R.string.stats_last_7_days)) },
-                    )
-                    FilterChip(
-                        selected = filter.startDate != null &&
-                            filter.endDate != null &&
-                            !(filter.startDate == today && filter.endDate == today) &&
-                            !(filter.startDate == today.minusDays(LAST_7_DAYS_OFFSET) && filter.endDate == today),
-                        onClick = { showDateRangePicker = true },
-                        label = { Text(stringResource(R.string.stats_custom)) },
-                    )
-                    FilterChip(
-                        selected = filter.needsCategorization,
-                        onClick = { onChange(filter.copy(needsCategorization = !filter.needsCategorization)) },
-                        label = { Text(stringResource(R.string.needs_categorization)) },
-                    )
-                    FilterChip(
-                        selected = filter.missingProjectOnly,
-                        onClick = { onChange(filter.copy(missingProjectOnly = !filter.missingProjectOnly)) },
-                        label = { Text(stringResource(R.string.without_project)) },
-                    )
-                    FilterChip(
-                        selected = filter.missingDescriptionOnly,
-                        onClick = { onChange(filter.copy(missingDescriptionOnly = !filter.missingDescriptionOnly)) },
-                        label = { Text(stringResource(R.string.without_description)) },
-                    )
-                    if (filter != HistoryFilter()) {
-                        TextButton(onClick = { onChange(HistoryFilter()) }) { Text(stringResource(R.string.clear_filters)) }
+            FilterDropdown(
+                label = stringResource(R.string.client),
+                selectedId = filter.clientId,
+                options = uiState.clients.map { it.id to it.name },
+                onSelect = { onChange(filter.copy(clientId = it, projectId = null, taskId = null)) },
+            )
+            FilterDropdown(
+                label = stringResource(R.string.project),
+                selectedId = filter.projectId,
+                options = uiState.projects
+                    .filter { filter.clientId == null || it.clientId == filter.clientId }
+                    .map { it.id to it.name },
+                onSelect = { onChange(filter.copy(projectId = it, taskId = null)) },
+            )
+            if (filter.projectId != null) {
+                FilterDropdown(
+                    label = stringResource(R.string.task),
+                    selectedId = filter.taskId,
+                    options = uiState.tasks.filter { it.projectId == filter.projectId }.map { it.id to it.name },
+                    onSelect = { onChange(filter.copy(taskId = it)) },
+                )
+            }
+            FilterDropdown(
+                label = stringResource(R.string.tags),
+                selectedId = filter.tagId,
+                options = uiState.tags.map { it.id to it.name },
+                onSelect = { onChange(filter.copy(tagId = it)) },
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = Dimens.Space8),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8, Alignment.End),
+            ) {
+                if (filter.activeOptionsCount() > 0) {
+                    TextButton(onClick = { onChange(HistoryFilter(query = filter.query)) }) {
+                        Text(stringResource(R.string.clear_filters))
                     }
                 }
-                FilterDropdown(
-                    label = stringResource(R.string.client),
-                    selectedId = filter.clientId,
-                    options = uiState.clients.map { it.id to it.name },
-                    onSelect = { onChange(filter.copy(clientId = it, projectId = null, taskId = null)) },
-                )
-                FilterDropdown(
-                    label = stringResource(R.string.project),
-                    selectedId = filter.projectId,
-                    options = uiState.projects
-                        .filter { filter.clientId == null || it.clientId == filter.clientId }
-                        .map { it.id to it.name },
-                    onSelect = { onChange(filter.copy(projectId = it, taskId = null)) },
-                )
-                if (filter.projectId != null) {
-                    FilterDropdown(
-                        label = stringResource(R.string.task),
-                        selectedId = filter.taskId,
-                        options = uiState.tasks.filter { it.projectId == filter.projectId }.map { it.id to it.name },
-                        onSelect = { onChange(filter.copy(taskId = it)) },
-                    )
+                Button(onClick = onDismiss, modifier = Modifier.testTag(TrackingTestTags.FILTER_CLOSE_BUTTON)) {
+                    Text(stringResource(R.string.done))
                 }
-                FilterDropdown(
-                    label = stringResource(R.string.tags),
-                    selectedId = filter.tagId,
-                    options = uiState.tags.map { it.id to it.name },
-                    onSelect = { onChange(filter.copy(tagId = it)) },
-                )
             }
         }
     }
@@ -1091,6 +1164,8 @@ internal fun LazyListScope.trackingHistoryItems(
     onRetrySync: (TimeEntry) -> Unit = {},
     onContinue: ((TimeEntry) -> Unit)? = null,
     onDuplicate: ((TimeEntry) -> Unit)? = null,
+    onDeleteStack: ((List<TimeEntry>) -> Unit)? = null,
+    reviewIssues: Map<String, Set<EntryReviewIssue>> = emptyMap(),
 ) {
     if (!uiState.hasLoadedTimeEntries && uiState.timeEntries.isEmpty()) {
         item(key = "history_loading_header") { HistoryLoadingHeader() }
@@ -1129,6 +1204,8 @@ internal fun LazyListScope.trackingHistoryItems(
                     syncStatusByEntryId = syncStatusByEntryId,
                     onEdit = onEdit,
                     onDelete = onDelete,
+                    onDeleteStack = onDeleteStack,
+                    reviewIssues = reviewIssues,
                     onDuplicate = onDuplicate,
                     onRetrySync = onRetrySync,
                     onContinue = onContinue,
@@ -1178,6 +1255,8 @@ internal fun LazyListScope.trackingHistoryItems(
     onRetrySync: (TimeEntry) -> Unit = {},
     onContinue: ((TimeEntry) -> Unit)? = null,
     onDuplicate: ((TimeEntry) -> Unit)? = null,
+    onDeleteStack: ((List<TimeEntry>) -> Unit)? = null,
+    reviewIssues: Map<String, Set<EntryReviewIssue>> = emptyMap(),
 ) {
     val now = Instant.now()
     trackingHistoryItems(
@@ -1199,6 +1278,8 @@ internal fun LazyListScope.trackingHistoryItems(
         onRetrySync = onRetrySync,
         onContinue = onContinue,
         onDuplicate = onDuplicate,
+        onDeleteStack = onDeleteStack,
+        reviewIssues = reviewIssues,
     )
 }
 
@@ -1536,15 +1617,61 @@ internal fun ProjectTaskDropdown(
     )
 }
 
+/** Confirms deleting one history entry, or every entry of a stack ([count] > 1). */
+@Composable
+private fun DeleteEntriesDialog(count: Int, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                if (count > 1) {
+                    pluralStringResource(R.plurals.history_delete_stack_title, count, count)
+                } else {
+                    stringResource(R.string.calendar_delete_entry_title)
+                },
+            )
+        },
+        text = {
+            Text(stringResource(if (count > 1) R.string.history_delete_stack_message else R.string.calendar_delete_entry_message))
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+                modifier = Modifier.testTag(TrackingTestTags.DELETE_CONFIRM),
+            ) { Text(stringResource(R.string.delete)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.testTag(TrackingTestTags.DELETE_CANCEL)) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
+}
+
 /**
- * The Time Tracker header: the side-menu button and title, then enable-notifications (when
- * not granted) and refresh, which spins while a sync runs.
+ * The Time Tracker header: the side-menu button and title, then search, enable-notifications
+ * (when not granted) and refresh, which spins while a sync runs.
  */
 @Composable
-internal fun TimeTrackerTopBar(syncing: Boolean, onRefresh: () -> Unit, onRequestNotifications: (() -> Unit)?) {
+internal fun TimeTrackerTopBar(
+    syncing: Boolean,
+    onRefresh: () -> Unit,
+    onRequestNotifications: (() -> Unit)?,
+    searchOpen: Boolean = false,
+    onSearch: (() -> Unit)? = null,
+) {
     MainTopBar(
         title = stringResource(R.string.nav_time_tracker),
         actions = {
+            if (onSearch != null && !searchOpen) {
+                IconButton(onClick = onSearch, modifier = Modifier.testTag(TrackingTestTags.SEARCH_BUTTON)) {
+                    Icon(Icons.Default.Search, contentDescription = stringResource(R.string.search_history))
+                }
+            }
             if (onRequestNotifications != null) {
                 IconButton(onClick = onRequestNotifications) {
                     Icon(

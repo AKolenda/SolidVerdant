@@ -16,6 +16,7 @@ import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.TestTags
 import dev.tricked.solidverdant.e2e.robots.TrackRobot
 import dev.tricked.solidverdant.e2e.robots.openMenuDestination
+import dev.tricked.solidverdant.e2e.robots.openReviewFromSettings
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -45,11 +46,11 @@ class TabNavigationE2eTest {
         e2e.composeRule.openMenuDestination(TestTags.NAV_DASHBOARD)
         waitForTag(TestTags.STATS_SCREEN)
 
-        e2e.composeRule.openMenuDestination(TestTags.NAV_REVIEW)
-        waitForTag("review_more_actions")
-
         e2e.composeRule.openMenuDestination(TestTags.NAV_SETTINGS)
         waitForTag(TestTags.SETTINGS_SCREEN)
+
+        e2e.composeRule.openReviewFromSettings()
+        waitForTag("review_more_actions")
 
         // Calendar restores its saved state when chosen again.
         e2e.composeRule.openMenuDestination(TestTags.NAV_CALENDAR)

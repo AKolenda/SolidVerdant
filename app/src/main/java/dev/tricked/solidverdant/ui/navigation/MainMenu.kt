@@ -26,8 +26,6 @@ import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.Timer
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -52,7 +50,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -64,9 +61,9 @@ import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.ui.theme.Dimens
 
-/** Opens the side menu from a destination's ☰ button; [badgeCount] marks open review items. */
+/** Opens the side menu from a destination's ☰ button. */
 @Immutable
-class MainMenuController(val open: () -> Unit, val badgeCount: Int)
+class MainMenuController(val open: () -> Unit)
 
 /** The side menu for the current destination; null where there is none (previews, component tests). */
 val LocalMainMenu = compositionLocalOf<MainMenuController?> { null }
@@ -74,23 +71,12 @@ val LocalMainMenu = compositionLocalOf<MainMenuController?> { null }
 /** Test tag of the organization switcher in the side-menu header. */
 const val MAIN_MENU_ORGANIZATION_TAG: String = "main_menu_organization"
 
-/** The ☰ button of a menu destination, with a dot while review items are open. Empty without a menu. */
+/** The ☰ button of a menu destination; empty without a menu (previews, component tests). */
 @Composable
 fun MainMenuButton() {
     val menu = LocalMainMenu.current ?: return
-    // The dot is visual only; screen readers hear the open review count with the button.
-    val description = if (menu.badgeCount > 0) {
-        stringResource(
-            R.string.main_menu_open_with_review,
-            pluralStringResource(R.plurals.review_pending_badge_description, menu.badgeCount, menu.badgeCount),
-        )
-    } else {
-        stringResource(R.string.main_menu_open)
-    }
     IconButton(onClick = menu.open, modifier = Modifier.testTag(MAIN_MENU_BUTTON_TAG)) {
-        BadgedBox(badge = { if (menu.badgeCount > 0) Badge() }) {
-            Icon(Icons.Default.Menu, contentDescription = description)
-        }
+        Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.main_menu_open))
     }
 }
 
@@ -116,7 +102,6 @@ fun MainTopBar(
 @Composable
 fun MainMenuSheet(
     selectedRoute: String?,
-    reviewBadgeCount: Int,
     onNavigate: (Screen) -> Unit,
     modifier: Modifier = Modifier,
     header: @Composable ColumnScope.() -> Unit = {},
@@ -127,21 +112,11 @@ fun MainMenuSheet(
             MenuDivider()
             menuScreens.forEach { screen ->
                 if (screen == Screen.Settings) MenuDivider()
-                val badge = reviewBadgeCount.takeIf { screen == Screen.Review && it > 0 }
                 NavigationDrawerItem(
                     label = { Text(stringResource(screen.labelRes)) },
                     icon = { Icon(screen.icon, contentDescription = null) },
                     selected = screen.route == selectedRoute,
                     onClick = { onNavigate(screen) },
-                    badge = badge?.let { count ->
-                        {
-                            Text(
-                                text = if (count > MAX_BADGE_COUNT) stringResource(R.string.review_badge_overflow) else count.toString(),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                        }
-                    },
                     colors = NavigationDrawerItemDefaults.colors(
                         unselectedContainerColor = MaterialTheme.colorScheme.surface,
                     ),
@@ -306,5 +281,3 @@ internal fun initialsOf(name: String): String = name.trim()
     .take(2)
     .joinToString("") { it.first().uppercase() }
     .ifEmpty { "?" }
-
-private const val MAX_BADGE_COUNT = 99

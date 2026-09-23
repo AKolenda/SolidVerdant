@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -161,12 +162,39 @@ class TimeEntryRepositoryReadTest {
         assertTrue(failure is TimeoutCancellationException)
     }
 
-    @Test fun month_load_keeps_lower_start_unbounded_for_carry_in_entries() = runTest {
+    @Test fun month_load_reaches_a_month_back_for_carry_in_entries_but_not_the_whole_history() = runTest {
         repo.loadMonth("org1", "member1", YearMonth.of(2026, 7), ZoneId.of("Europe/Amsterdam"))
 
         val query = requireNotNull(remote.lastTimeEntriesQuery)
-        assertNull(query.start)
+        // 31 days before 1 July, local midnight in Amsterdam (UTC+2).
+        assertEquals("2026-05-30T22:00:00Z", query.start)
         assertEquals("2026-07-31T22:00:00Z", query.end)
+    }
+
+    @Test fun month_load_waits_out_a_rate_limit_and_retries() = runTest {
+        var calls = 0
+        remote.entries = listOf(srv("after-wait"))
+        remote.timeEntriesQueryValidator = {
+            calls++
+            if (calls == 1) rateLimited(retryAfterSeconds = 2) else null
+        }
+
+        repo.loadMonth("org1", "member1", YearMonth.of(2026, 7), ZoneId.of("UTC"))
+
+        assertEquals(2, calls)
+        assertEquals(listOf("after-wait"), repo.observeTimeEntries("org1").first().map { it.id })
+    }
+
+    private fun rateLimited(retryAfterSeconds: Int): retrofit2.HttpException {
+        val raw = okhttp3.Response.Builder()
+            .code(429)
+            .message("Too Many Requests")
+            .protocol(okhttp3.Protocol.HTTP_1_1)
+            .request(okhttp3.Request.Builder().url("https://time.example/api").build())
+            .header("Retry-After", retryAfterSeconds.toString())
+            .build()
+        val body = "".toResponseBody()
+        return retrofit2.HttpException(retrofit2.Response.error<Any>(body, raw))
     }
 
     @Test fun tombstoning_accepts_server_id_sets_larger_than_sqlite_bind_limit() = runTest {

@@ -18,8 +18,10 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
@@ -35,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -71,7 +74,6 @@ fun MainNavHost(
     statsContent: @Composable () -> Unit,
     settingsContent: @Composable () -> Unit,
     reviewContent: @Composable () -> Unit = {},
-    reviewBadgeCount: Int = 0,
     menuHeader: @Composable ColumnScope.() -> Unit = {},
     onPrivacyLogout: () -> Unit = {},
     syncCenterContent: @Composable () -> Unit = {
@@ -84,9 +86,7 @@ fun MainNavHost(
     LaunchedEffect(destinationRoute) { selectedRoute = nextSelectedDestination(selectedRoute, destinationRoute) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    val menu = remember(drawerState, scope, reviewBadgeCount) {
-        MainMenuController(open = { scope.launch { drawerState.open() } }, badgeCount = reviewBadgeCount)
-    }
+    val menu = remember(drawerState, scope) { MainMenuController(open = { scope.launch { drawerState.open() } }) }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -96,7 +96,6 @@ fun MainNavHost(
         drawerContent = {
             MainMenuSheet(
                 selectedRoute = selectedRoute,
-                reviewBadgeCount = reviewBadgeCount,
                 header = menuHeader,
                 onNavigate = { screen ->
                     scope.launch { drawerState.close() }
@@ -120,17 +119,17 @@ fun MainNavHost(
                 popEnterTransition = { EnterTransition.None },
                 popExitTransition = { ExitTransition.None },
             ) {
-                composable(Screen.Track.route) { trackContent() }
-                composable(Screen.Calendar.route) { calendarContent() }
-                composable(Screen.Stats.route) { statsContent() }
-                composable(Screen.Review.route) { reviewContent() }
-                composable(Screen.Settings.route) { settingsContent() }
+                page(Screen.Track.route) { trackContent() }
+                page(Screen.Calendar.route) { calendarContent() }
+                page(Screen.Stats.route) { statsContent() }
+                page(Screen.Review.route) { reviewContent() }
+                page(Screen.Settings.route) { settingsContent() }
 
-                composable(ReviewRoutes.END_OF_DAY) { EndOfDayReviewHost(onBack = { navController.popBackStack() }) }
-                composable(ReviewRoutes.REMINDER_SETTINGS) { ReminderSettingsScreen(onBack = { navController.popBackStack() }) }
-                composable(ReviewRoutes.MANAGE_TEMPLATES) { ManageTemplatesScreen(onBack = { navController.popBackStack() }) }
-                composable(SyncRoutes.SYNC_CENTER) { syncCenterContent() }
-                composable(SettingsRoutes.PRIVACY) {
+                page(ReviewRoutes.END_OF_DAY) { EndOfDayReviewHost(onBack = { navController.popBackStack() }) }
+                page(ReviewRoutes.REMINDER_SETTINGS) { ReminderSettingsScreen(onBack = { navController.popBackStack() }) }
+                page(ReviewRoutes.MANAGE_TEMPLATES) { ManageTemplatesScreen(onBack = { navController.popBackStack() }) }
+                page(SyncRoutes.SYNC_CENTER) { syncCenterContent() }
+                page(SettingsRoutes.PRIVACY) {
                     PrivacyScreen(
                         onBack = { navController.popBackStack() },
                         onLogout = {
@@ -141,6 +140,16 @@ fun MainNavHost(
                 }
             }
         }
+    }
+}
+
+/**
+ * A destination on an opaque page. The predictive back swipe draws the destination below while the
+ * current one slides away, so a screen without its own background would show both at once.
+ */
+private fun NavGraphBuilder.page(route: String, content: @Composable () -> Unit) {
+    composable(route) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() }
     }
 }
 

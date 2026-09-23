@@ -183,15 +183,33 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         waitUntilTagExists(TestTags.TRACK_SHEET_SAVE_BUTTON)
     }
 
-    /** History rows delete with an iOS-style swipe to the left. */
+    /** History rows delete with a swipe to the left, confirmed in the delete prompt. */
     fun tapFirstEntryDelete(): TrackRobot = apply {
         scrollHistoryTo(TestTags.TRACK_ENTRY_ROW)
         waitUntilTagExists(TestTags.TRACK_ENTRY_ROW)
         firstNodeWithTag(TestTags.TRACK_ENTRY_ROW).assertIsDisplayed().performTouchInput { swipeLeft() }
+        waitUntilEnabledTagExists(TestTags.TRACK_DELETE_CONFIRM)
+        firstEnabledNodeWithTag(TestTags.TRACK_DELETE_CONFIRM).performClick()
+        waitUntilTagIsGone(TestTags.TRACK_DELETE_CONFIRM)
     }
 
+    /** True while search is closed: the header shows its search button and no search field. */
+    fun isHistorySearchHidden(): Boolean {
+        waitUntilTagExists(TestTags.TRACK_SEARCH_BUTTON)
+        return nodesWithTag(TestTags.TRACK_FILTER_SEARCH_FIELD).fetchSemanticsNodes().isEmpty()
+    }
+
+    /** Open the search bar from the header's search button. */
+    fun openHistorySearch(): TrackRobot = apply {
+        if (nodesWithTag(TestTags.TRACK_FILTER_SEARCH_FIELD).fetchSemanticsNodes().isNotEmpty()) return@apply
+        waitUntilEnabledTagExists(TestTags.TRACK_SEARCH_BUTTON)
+        firstEnabledNodeWithTag(TestTags.TRACK_SEARCH_BUTTON).performClick()
+        waitUntilTagExists(TestTags.TRACK_FILTER_SEARCH_FIELD)
+    }
+
+    /** Open the search options sheet from the search bar, opening search first when needed. */
     fun openHistoryFilters(): TrackRobot = apply {
-        scrollHistoryTo(TestTags.TRACK_FILTER_OPEN_BUTTON)
+        openHistorySearch()
         waitUntilEnabledTagExists(TestTags.TRACK_FILTER_OPEN_BUTTON)
         firstEnabledNodeWithTag(TestTags.TRACK_FILTER_OPEN_BUTTON).performClick()
         waitUntilTagExists(TestTags.TRACK_FILTER_SEARCH_FIELD)
@@ -202,26 +220,16 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         firstNodeWithTag(TestTags.TRACK_FILTER_SEARCH_FIELD).performTextInput(text)
     }
 
+    /** Close the options sheet with Done; the search bar and its query stay. */
     fun closeHistoryFilters(): TrackRobot = apply {
         firstEnabledNodeWithTag(TestTags.TRACK_FILTER_CLOSE_BUTTON).performClick()
         waitUntilTagIsGone(TestTags.TRACK_FILTER_CLOSE_BUTTON)
         waitUntilTagExists(TestTags.TRACK_FILTER_SEARCH_FIELD)
-        // API 29 can retain the outgoing text-field semantics after the collapsed control is
-        // available. The enabled collapsed control is the authoritative state and is also the
-        // control the next step must interact with.
         waitUntilEnabledTagExists(TestTags.TRACK_FILTER_OPEN_BUTTON)
     }
 
     fun assertHistorySearch(text: String): TrackRobot = apply {
         firstNodeWithTag(TestTags.TRACK_FILTER_SEARCH_FIELD).assertTextContains(text)
-    }
-
-    fun historyFilterOpenWidthRatio(): Float {
-        scrollHistoryTo(TestTags.TRACK_FILTER_OPEN_BUTTON)
-        waitUntilTagExists(TestTags.TRACK_FILTER_OPEN_BUTTON)
-        val openWidth = firstNodeWithTag(TestTags.TRACK_FILTER_OPEN_BUTTON).fetchSemanticsNode().boundsInRoot.width
-        val historyWidth = firstNodeWithTag(TestTags.TRACK_HISTORY_LIST).fetchSemanticsNode().boundsInRoot.width
-        return openWidth / historyWidth
     }
 
     fun duplicateOpenEntry(): TrackRobot = apply {

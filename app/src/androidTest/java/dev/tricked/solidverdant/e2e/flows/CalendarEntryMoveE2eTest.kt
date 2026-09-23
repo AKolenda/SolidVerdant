@@ -56,6 +56,8 @@ class CalendarEntryMoveE2eTest {
             .performScrollTo()
             .performTouchInput {
                 down(center)
+                // Entries lift for dragging after a hold.
+                advanceEventTime(viewConfiguration.longPressTimeoutMillis + LONG_PRESS_MARGIN_MS)
                 moveBy(Offset(0f, -height.toFloat()), delayMillis = 250)
                 up()
             }
@@ -82,3 +84,5 @@ class CalendarEntryMoveE2eTest {
         const val WAIT_MS = 15_000L
     }
 }
+
+private const val LONG_PRESS_MARGIN_MS = 100L

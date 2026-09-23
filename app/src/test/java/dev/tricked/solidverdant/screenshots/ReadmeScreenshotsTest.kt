@@ -183,7 +183,7 @@ class ReadmeScreenshotsTest {
     }
 
     private val timeTrackerHeader: @Composable () -> Unit = {
-        TimeTrackerTopBar(syncing = false, onRefresh = {}, onRequestNotifications = null)
+        TimeTrackerTopBar(syncing = false, onRefresh = {}, onRequestNotifications = null, onSearch = {})
     }
 
     /** The Calendar header and new-entry button; the calendar views below are its body. */
@@ -538,7 +538,6 @@ class ReadmeScreenshotsTest {
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f))) {
                 MainMenuSheet(
                     selectedRoute = NavScreen.Track.route,
-                    reviewBadgeCount = 4,
                     onNavigate = {},
                     modifier = Modifier.fillMaxHeight(),
                     header = {
@@ -808,6 +807,7 @@ class ReadmeScreenshotsTest {
                 onAutoClearEntryFieldsAfterStopChange = {},
                 onClearDescriptionAfterStopChange = {},
                 onLongTimerHoursChange = {},
+                onOpenReview = {},
                 onOpenReminderSettings = {},
                 onOpenManageTemplates = {},
                 onOpenSyncCenter = {},

@@ -38,9 +38,9 @@ object TestTags {
     const val NAV_TIMER = "main_nav_track"
     const val NAV_CALENDAR = "main_nav_calendar"
     const val NAV_DASHBOARD = "main_nav_stats"
-    const val NAV_REVIEW = "main_nav_review"
     const val NAV_SETTINGS = "main_nav_settings"
     const val SETTINGS_SCREEN = SettingsTestTags.SCREEN
+    const val SETTINGS_REVIEW_ROW = SettingsTestTags.REVIEW_ROW
     const val SETTINGS_LOGOUT_BUTTON = SettingsTestTags.LOGOUT_BUTTON
     const val SETTINGS_LIVE_UPDATE_SWITCH = SettingsTestTags.LIVE_UPDATE_SWITCH
     const val TRACK_ADD_ENTRY_BUTTON = TrackingTestTags.ADD_ENTRY_BUTTON
@@ -48,6 +48,7 @@ object TestTags {
     const val TRACK_ENTRY_EDIT_BUTTON = TrackingTestTags.ENTRY_EDIT_BUTTON
     const val TRACK_CONTINUE_BUTTON = TrackingTestTags.CONTINUE_BUTTON
     const val TRACK_SHEET = TrackingTestTags.SHEET
+    const val TRACK_DELETE_CONFIRM = TrackingTestTags.DELETE_CONFIRM
     const val TRACK_SHEET_PROJECT_TASK_SELECTOR = TrackingTestTags.SHEET_PROJECT_TASK_SELECTOR
     const val TRACK_SHEET_TASK_SELECTOR = TrackingTestTags.SHEET_TASK_SELECTOR
     const val TRACK_PROJECT_TASK_LIST = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.PROJECT_TASK_LIST
@@ -66,6 +67,7 @@ object TestTags {
     const val TRACK_SHEET_VALIDATION_BANNER = TrackingTestTags.SHEET_VALIDATION_BANNER
     const val TRACK_SYNC_STATUS_CARD = TrackingTestTags.SYNC_STATUS_CARD
     const val TRACK_SYNC_DETAILS_BUTTON = TrackingTestTags.SYNC_DETAILS_BUTTON
+    const val TRACK_SEARCH_BUTTON = TrackingTestTags.SEARCH_BUTTON
     const val TRACK_FILTER_OPEN_BUTTON = TrackingTestTags.FILTER_OPEN_BUTTON
     const val TRACK_FILTER_SEARCH_FIELD = TrackingTestTags.FILTER_SEARCH_FIELD
     const val TRACK_FILTER_CLOSE_BUTTON = TrackingTestTags.FILTER_CLOSE_BUTTON
@@ -101,6 +103,7 @@ object TestTags {
     const val CALENDAR_SETTINGS_DENSITY_SPACIOUS = CalendarTestTags.SETTINGS_DENSITY_SPACIOUS
     const val CALENDAR_ENTRY_ACTIONS = CalendarTestTags.ENTRY_ACTIONS
     const val CALENDAR_EDIT_START_TIME = CalendarTestTags.EDIT_START_TIME
+    const val CALENDAR_EDIT_ENTRY = CalendarTestTags.EDIT_ENTRY
     const val CALENDAR_STOP_ENTRY = CalendarTestTags.STOP_ENTRY
     const val CALENDAR_DUPLICATE_ENTRY = CalendarTestTags.DUPLICATE_ENTRY
     const val CALENDAR_SPLIT_ENTRY = CalendarTestTags.SPLIT_ENTRY

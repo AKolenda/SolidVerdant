@@ -13,4 +13,18 @@
     </plurals>
     <string name="history_not_billable">Niet factureerbaar</string>
     <string name="history_no_tags">Geen tags</string>
+    <string name="entry_continue">Doorgaan</string>
+    <plurals name="history_delete_stack_title">
+        <item quantity="one">%1$d registratie verwijderen?</item>
+        <item quantity="other">%1$d registraties verwijderen?</item>
+    </plurals>
+    <string name="history_delete_stack_message">Alle registraties in deze stapel worden verwijderd en voor verwijdering klaargezet.</string>
+    <string name="review_issue_no_project">Geen project</string>
+    <string name="review_issue_no_description">Geen beschrijving</string>
+    <string name="review_issue_overlap">Overlapt met een andere registratie</string>
+    <plurals name="review_issue_long">
+        <item quantity="one">Langer dan %1$d uur</item>
+        <item quantity="other">Langer dan %1$d uur</item>
+    </plurals>
+    <string name="review_issue_separator">" · "</string>
 </resources>

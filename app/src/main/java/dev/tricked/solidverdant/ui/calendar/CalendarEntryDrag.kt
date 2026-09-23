@@ -8,6 +8,8 @@ package dev.tricked.solidverdant.ui.calendar
 
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
@@ -19,7 +21,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.zIndex
 import dev.tricked.solidverdant.data.model.TimeEntry
@@ -30,10 +34,11 @@ import java.time.ZoneId
 import kotlin.math.roundToInt
 
 /**
- * Adds one direct move gesture to a rendered entry block. The completed entry follows the pointer
- * while dragging; the drop position is snapped to the calendar grid and the complete interval is
- * preserved through the caller's Room/outbox mutation path. Taps remain available to the caller's
- * normal click modifier.
+ * Adds the hold-then-drag move gesture to a rendered entry block. After a long press the
+ * completed entry lifts and follows the pointer; the drop position is snapped to the calendar grid
+ * and the complete interval is preserved through the caller's Room/outbox mutation path. Until the
+ * long press lands, a drag belongs to the grid, so a swipe or scroll that starts on an entry still
+ * pages or scrolls the calendar, and taps remain available to the caller's click modifier.
  */
 @Composable
 internal fun calendarEntryDragModifier(
@@ -59,6 +64,7 @@ internal fun calendarEntryDragModifier(
     if (!canMove || columnWidthPx <= 0f || gridHeightPx <= 0f || blockHeightPx <= 0f) return sizedModifier
 
     val onMoveEntryState by rememberUpdatedState(onMoveEntry)
+    val haptic = LocalHapticFeedback.current
     val baseTopPx = blockStartFraction * gridHeightPx
     var dragOffset by remember(entry.id, day) { mutableStateOf(Offset.Zero) }
     var isDragging by remember(entry.id, day) { mutableStateOf(false) }
@@ -91,26 +97,18 @@ internal fun calendarEntryDragModifier(
             }
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
-                while (true) {
-                    val event = awaitPointerEvent()
-                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                    val displacement = change.position - down.position
-                    if (displacement.getDistance() > viewConfiguration.touchSlop) {
-                        isDragging = true
-                    }
-                    if (displacement != Offset.Zero) {
-                        change.consume()
-                    }
-                    if (isDragging) {
-                        totalDrag = displacement
-                        dragOffset = displacement
-                    }
-                    if (!change.pressed) {
-                        if (isDragging) dispatchMove()
-                        reset()
-                        break
-                    }
+                // Null when the pointer lifts or moves (a tap, scroll or swipe) before the hold.
+                val lifted = awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
+                isDragging = true
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                lifted.consume()
+                val completed = drag(lifted.id) { change ->
+                    totalDrag = change.position - down.position
+                    dragOffset = totalDrag
+                    change.consume()
                 }
+                if (completed && totalDrag != Offset.Zero) dispatchMove()
+                reset()
             }
         }
 }
