@@ -140,7 +140,7 @@ fun EntryTimeRow(
 fun ValueChip(text: String, onClick: () -> Unit, testTag: String, description: String) {
     Surface(
         shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        color = MaterialTheme.colorScheme.surfaceVariant,
         contentColor = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier
             .heightIn(min = Dimens.MinTouchTarget)

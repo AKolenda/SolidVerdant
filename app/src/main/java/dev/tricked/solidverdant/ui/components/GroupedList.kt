@@ -187,9 +187,9 @@ fun GroupedSwitchRow(
                     checkedTrackColor = MaterialTheme.colorScheme.primary,
                     checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                     checkedBorderColor = MaterialTheme.colorScheme.primary,
-                    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
                     uncheckedThumbColor = MaterialTheme.colorScheme.surface,
-                    uncheckedBorderColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    uncheckedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
                 ),
             )
         },

@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
@@ -135,6 +136,7 @@ fun CalendarScreen(
     onDiscardFailedSync: (String) -> Unit = {},
     onOpenSyncCenter: () -> Unit = {},
     preventOverlap: Boolean = false,
+    onBack: (() -> Unit)? = null,
     viewModel: CalendarViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(organizationId, memberId) { viewModel.setOrganization(organizationId, memberId) }
@@ -237,6 +239,7 @@ fun CalendarScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             CalendarToolbar(
                 state = state,
+                onBack = onBack,
                 onModeSelected = viewModel::setViewMode,
                 onAddEntry = {
                     creatingRange = defaultCalendarTimeRange(
@@ -839,6 +842,7 @@ private fun CalendarSplitDialog(entry: TimeEntry, zone: java.time.ZoneId, onDism
 @Composable
 private fun CalendarToolbar(
     state: CalendarUiState,
+    onBack: (() -> Unit)?,
     onModeSelected: (CalendarViewMode) -> Unit,
     onAddEntry: () -> Unit,
     breaksEnabled: Boolean,
@@ -857,6 +861,15 @@ private fun CalendarToolbar(
         modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space12, vertical = Dimens.Space8),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
     ) {
+        if (onBack != null) {
+            IconButton(onClick = onBack, modifier = Modifier.testTag(CalendarTestTags.BACK)) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                    contentDescription = stringResource(R.string.review_navigate_back),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
         SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f)) {
             modes.forEachIndexed { index, (mode, labelRes) ->
                 SegmentedButton(

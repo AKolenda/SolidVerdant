@@ -10,6 +10,7 @@ import java.time.LocalDate
 
 /** Stable semantics owned by the calendar UI and consumed by on-device tests. */
 object CalendarTestTags {
+    const val BACK = "calendar_back"
     const val WEEK_GRID = "calendar_week_grid"
     const val CURRENT_TIME_MARKER = "calendar_current_time_marker"
     const val MODE_MONTH = "calendar_mode_month"

@@ -484,6 +484,7 @@ fun SolidVerdantApp(
                 calendarContent = {
                     if (currentMembership != null) {
                         CalendarScreen(
+                            onBack = { navController.popBackStack() },
                             organizationId = currentMembership.organizationId,
                             memberId = currentMembership.id,
                             initialDate = calendarInitialDate,

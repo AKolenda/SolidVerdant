@@ -25,6 +25,8 @@ import dev.tricked.solidverdant.data.local.AppThemeMode
 
 // Default light/dark palettes follow the iOS system colours (grouped background, system blue,
 // system red, separator greys) so the app reads like a native grouped-list time tracker.
+// surfaceContainerHighest is the grouped-cell colour so default M3 cards render as iOS cells;
+// grey controls placed on cells (chips, tracks) use surfaceVariant.
 private val ZenLightColorScheme = lightColorScheme(
     primary = Color(0xFF007AFF),
     onPrimary = Color.White,
@@ -61,7 +63,7 @@ private val ZenLightColorScheme = lightColorScheme(
     surfaceContainerLow = Color(0xFFFFFFFF),
     surfaceContainer = Color(0xFFFFFFFF),
     surfaceContainerHigh = Color(0xFFF2F2F7),
-    surfaceContainerHighest = Color(0xFFEEEEF0),
+    surfaceContainerHighest = Color(0xFFFFFFFF),
 )
 
 private val ZenDarkColorScheme = darkColorScheme(
@@ -100,7 +102,7 @@ private val ZenDarkColorScheme = darkColorScheme(
     surfaceContainerLow = Color(0xFF1C1C1E),
     surfaceContainer = Color(0xFF1C1C1E),
     surfaceContainerHigh = Color(0xFF2C2C2E),
-    surfaceContainerHighest = Color(0xFF3A3A3C),
+    surfaceContainerHighest = Color(0xFF1C1C1E),
 )
 
 private val VerdantLightColorScheme = lightColorScheme(

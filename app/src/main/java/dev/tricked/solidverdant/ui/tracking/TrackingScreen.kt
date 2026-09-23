@@ -2114,7 +2114,7 @@ private fun TagChip(name: String) {
         maxLines = 1,
         modifier = Modifier
             .clip(MaterialTheme.shapes.extraSmall)
-            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(horizontal = Dimens.Space4 + Dimens.Space2, vertical = Dimens.Space2),
     )
 }
