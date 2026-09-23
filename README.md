@@ -62,24 +62,24 @@ The shots below are generated on the JVM (no device) by the Roborazzi + Robolect
 
 <table>
   <tr>
-    <td align="center"><img src=".github/screenshots/readme/track.png" width="240" alt="Track screen with a running timer and history" /><br /><sub><b>Track</b><br />Running timer &amp; history</sub></td>
-    <td align="center"><img src=".github/screenshots/readme/history.png" width="240" alt="History list grouped by day" /><br /><sub><b>History</b><br />Entries grouped by day</sub></td>
+    <td align="center"><img src=".github/screenshots/readme/track.png" width="240" alt="Timer tab with a running timer above the history" /><br /><sub><b>Timer</b><br />Running timer &amp; history</sub></td>
+    <td align="center"><img src=".github/screenshots/readme/track-idle.png" width="240" alt="Timer tab ready to start a new entry" /><br /><sub><b>Timer — idle</b><br />Next entry, project &amp; tags</sub></td>
+    <td align="center"><img src=".github/screenshots/readme/edit-entry.png" width="240" alt="Edit time entry sheet" /><br /><sub><b>Edit Entry</b><br />Grouped edit sheet</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src=".github/screenshots/readme/statistics.png" width="240" alt="Dashboard with period selector and stacked daily chart" /><br /><sub><b>Dashboard</b><br />Periods, by day &amp; by project</sub></td>
+    <td align="center"><img src=".github/screenshots/readme/settings.png" width="240" alt="Settings tab" /><br /><sub><b>Settings</b><br />Account, appearance &amp; sync</sub></td>
+    <td align="center"><img src=".github/screenshots/readme/calendar-week.png" width="240" alt="Calendar week view with overlay events" /><br /><sub><b>Calendar — Week</b><br />Opened from the Timer header</sub></td>
+  </tr>
+  <tr>
     <td align="center"><img src=".github/screenshots/readme/calendar-month.png" width="240" alt="Calendar month view" /><br /><sub><b>Calendar — Month</b><br />Month overview</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src=".github/screenshots/readme/calendar-week.png" width="240" alt="Calendar week view with overlay events" /><br /><sub><b>Calendar — Week</b><br />Week with calendar overlay</sub></td>
-    <td align="center"><img src=".github/screenshots/readme/statistics.png" width="240" alt="Statistics with KPIs and charts" /><br /><sub><b>Statistics</b><br />KPIs, filters &amp; charts</sub></td>
     <td align="center"><img src=".github/screenshots/readme/inbox.png" width="240" alt="Time Inbox review issue cards" /><br /><sub><b>Time Inbox</b><br />Review issue cards</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src=".github/screenshots/readme/review.png" width="240" alt="End-of-day guided review" /><br /><sub><b>End-of-day Review</b><br />Guided cleanup</sub></td>
-    <td align="center"><img src=".github/screenshots/readme/edit-entry.png" width="240" alt="Edit time entry sheet" /><br /><sub><b>Edit Entry</b><br />Create / edit sheet</sub></td>
     <td align="center"><img src=".github/screenshots/readme/templates.png" width="240" alt="Templates and favorites" /><br /><sub><b>Templates</b><br />Favorites &amp; quick starts</sub></td>
   </tr>
 </table>
 
 <p align="center">
-  <em>Rendered in the Neo dark theme.</em>
+  <em>Rendered in the default dark theme.</em>
 </p>
 
 The Live activity shots below were captured on a connected Android 16 device.
@@ -172,7 +172,7 @@ Generate the README screenshots (pure JVM, no device/emulator — Roborazzi + Ro
 ./gradlew :app:recordRoborazziDebug
 ```
 This renders every screen across a light/dark × phone/tablet matrix into `.github/screenshots/generated/`
-and writes the Neo-dark phone hero set to `.github/screenshots/readme/`.
+and writes the dark phone hero set to `.github/screenshots/readme/`.
 
 ### Device and live Solidtime tests
 
