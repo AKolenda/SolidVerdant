@@ -71,6 +71,17 @@ object Dimens {
     val ProjectDot = 10.dp
     val GroupedValueMaxWidth = 180.dp
 
+    // --- Segmented control (iOS UISegmentedControl proportions) ---
+    /** Visible track height; the tappable row around it stays [MinTouchTarget] tall. */
+    val SegmentedTrackHeight = 32.dp
+    val SegmentedThumbInset = 2.dp
+    val SegmentedThumbShadow = 2.dp
+
+    // --- Dashboard charts ---
+    val ChartHeight = 160.dp
+    val ChartBarCorner = 3.dp
+    val ProgressBarHeight = 4.dp
+
     // --- Floating pill tab bar ---
     val TabBarHeight = 64.dp
     val TabBarItemWidth = 84.dp
