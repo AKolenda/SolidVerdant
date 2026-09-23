@@ -175,7 +175,7 @@ class ReadmeScreenshotsTest {
     private val zone = ZoneId.of("UTC")
 
     private val projects = listOf(
-        Project(id = "p1", name = "Website Redesign", color = "#386A20"),
+        Project(id = "p1", name = "Website Redesign", color = "#386A20", clientId = "c1"),
         Project(id = "p2", name = "Internal Tools", color = "#386666"),
         Project(id = "p3", name = "Client — Acme", color = "#8A5A00", isArchived = true),
     )
@@ -224,6 +224,7 @@ class ReadmeScreenshotsTest {
             projectId = "p1",
             entryTags = listOf(tags[1]),
         ),
+        entry("e6", "Landing page build", "2026-06-10T07:00:00Z", "2026-06-10T08:30:00Z", 5400, taskId = "t1", entryTags = listOf(tags[0])),
     )
 
     private val syncOperations = listOf(
@@ -326,6 +327,7 @@ class ReadmeScreenshotsTest {
                     onEdit = {},
                     onDelete = {},
                     onDateClick = {},
+                    onContinue = {},
                 )
             }
         },
@@ -346,6 +348,7 @@ class ReadmeScreenshotsTest {
                     onEdit = {},
                     onDelete = {},
                     onDateClick = {},
+                    onContinue = {},
                 )
             }
         },
