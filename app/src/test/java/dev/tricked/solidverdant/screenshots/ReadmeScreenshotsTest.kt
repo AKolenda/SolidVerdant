@@ -56,6 +56,8 @@ import dev.tricked.solidverdant.ui.calendar.DayBucket
 import dev.tricked.solidverdant.ui.calendar.MonthCalendarView
 import dev.tricked.solidverdant.ui.calendar.WeekCalendarView
 import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
+import dev.tricked.solidverdant.ui.components.GroupedDivider
+import dev.tricked.solidverdant.ui.components.GroupedSection
 import dev.tricked.solidverdant.ui.navigation.MainMenuHeader
 import dev.tricked.solidverdant.ui.navigation.MainMenuSheet
 import dev.tricked.solidverdant.ui.navigation.MainTopBar
@@ -825,11 +827,10 @@ class ReadmeScreenshotsTest {
                 EntryTemplate("tm2", "org1", null, "p1", null, "Daily standup", emptyList(), false, false, 1, 0L),
                 EntryTemplate("tm3", "org1", "Client call", "p3", null, null, listOf("missing-tag"), true, false, 2, 0L),
             )
-            Column(
-                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
+            // Production draws the rows as one grouped section of lazy items.
+            GroupedSection(modifier = Modifier.padding(top = 16.dp)) {
                 templates.forEachIndexed { index, template ->
+                    if (index > 0) GroupedDivider()
                     val resolution = TemplateResolver.resolve(template, projects, tasks, tags)
                     TemplateRow(
                         template = template,

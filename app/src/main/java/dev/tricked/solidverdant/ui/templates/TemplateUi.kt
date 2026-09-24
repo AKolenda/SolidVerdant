@@ -14,11 +14,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.repository.EntryTemplate
+import dev.tricked.solidverdant.ui.theme.Dimens
 
 /** Human label for a template: its name, else description, else project name, else a fallback. */
 @Composable
@@ -69,7 +69,7 @@ fun templateIssueMessages(resolution: TemplateResolution): List<String> = buildL
 fun TemplateIssueList(resolution: TemplateResolution, modifier: Modifier = Modifier) {
     val messages = templateIssueMessages(resolution)
     if (messages.isEmpty()) return
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Dimens.Space4)) {
         messages.forEach { message ->
             Text(
                 text = message,
