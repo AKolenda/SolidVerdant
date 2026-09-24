@@ -9,107 +9,81 @@ package dev.tricked.solidverdant.ui.statistics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.components.EmptyState
+import dev.tricked.solidverdant.ui.components.LoadingState
+import dev.tricked.solidverdant.ui.components.SheetTitleRow
 import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.theme.Dimens
+import dev.tricked.solidverdant.ui.theme.tabular
 import java.time.format.DateTimeFormatter
 
+internal object StatDrillDownTestTags {
+    const val SHEET = "stats_drilldown_sheet"
+    const val LIST = "stats_drilldown_list"
+    fun row(entryId: String) = "stats_drilldown_row_$entryId"
+}
+
 /**
- * Lists the individual entries behind a tapped chart slice. Uses a [LazyColumn] with a bounded
- * height so a busy slice does not eagerly compose hundreds of rows, and surfaces loading and empty
- * states rather than a blank sheet.
+ * Lists the entries behind a tapped bar or project row in the app's sheet style: the page
+ * background, a bold title, then the entries as one grouped section. The section is a lazy list
+ * that fills the fully expanded sheet, so a busy slice composes only its visible rows.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatDrillDownSheet(state: DrillDownUiState, onDismiss: () -> Unit) {
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
-        val locale = appLocale()
-        val title = when (val t = state.target) {
-            is DrillDownTarget.ProjectSlice -> t.projectName ?: stringResource(R.string.stats2_no_project)
-            is DrillDownTarget.TrendSlice -> t.label
-        }
-        val accentColor = when (val t = state.target) {
-            is DrillDownTarget.ProjectSlice -> hexToColor(t.colorHex, MaterialTheme.colorScheme.outline)
-            is DrillDownTarget.TrendSlice -> MaterialTheme.colorScheme.primary
-        }
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Dimens.Space16)
-                .padding(bottom = Dimens.Space24),
-            verticalArrangement = Arrangement.spacedBy(Dimens.Space8),
+    val locale = appLocale()
+    val dateFormatter = remember(locale) {
+        DateTimeFormatter.ofPattern(android.text.format.DateFormat.getBestDateTimePattern(locale, "EEEdMMM"), locale)
+    }
+    val title = when (val target = state.target) {
+        is DrillDownTarget.ProjectSlice -> target.projectName ?: stringResource(R.string.stats2_no_project)
+        is DrillDownTarget.TrendSlice -> target.label
+    }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag(StatDrillDownTestTags.SHEET),
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.background,
+    ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().navigationBarsPadding().testTag(StatDrillDownTestTags.LIST),
+            contentPadding = PaddingValues(bottom = Dimens.Space24),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
-                ProjectSwatch(accentColor)
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleLarge,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
+            item(key = "title") {
+                Box(Modifier.padding(bottom = Dimens.Space16)) { SheetTitleRow(title = title) }
             }
-
             when {
-                state.isLoading -> {
-                    Box(Modifier.fillMaxWidth().padding(Dimens.Space24), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                }
-                state.rows.isEmpty() -> {
-                    Text(
-                        stringResource(R.string.stats2_drilldown_empty),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(vertical = Dimens.Space16),
-                    )
-                }
+                state.isLoading -> item(key = "loading") { LoadingState() }
+                state.rows.isEmpty() -> item(key = "empty") { EmptyState(text = stringResource(R.string.stats2_drilldown_empty)) }
                 else -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(
-                            pluralStringResource(
-                                R.plurals.stats2_drilldown_entries,
-                                state.rows.size,
-                                state.rows.size,
-                            ),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            stringResource(R.string.stats2_drilldown_total, formatDuration(state.totalSeconds)),
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                    }
-                    HorizontalDivider()
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 460.dp),
-                    ) {
-                        items(state.rows, key = { it.entryId }) { row ->
-                            DrillDownRowItem(row, locale)
-                            HorizontalDivider()
+                    item(key = "summary") { DrillDownSummary(count = state.rows.size, totalSeconds = state.totalSeconds) }
+                    itemsIndexed(state.rows, key = { _, row -> row.entryId }) { index, row ->
+                        LazyGroupedRow(position = GroupedPosition.of(index, state.rows.size), dividerInset = Dimens.SettingsIconInset) {
+                            DrillDownRowItem(row, dateFormatter)
                         }
                     }
                 }
@@ -118,31 +92,58 @@ fun StatDrillDownSheet(state: DrillDownUiState, onDismiss: () -> Unit) {
     }
 }
 
+/** "12 entries" and the total, set like a grouped section's header above the rows. */
 @Composable
-private fun DrillDownRowItem(row: DrillDownRow, locale: java.util.Locale) {
+private fun DrillDownSummary(count: Int, totalSeconds: Long) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = Dimens.Space12),
+            .padding(start = Dimens.Space32, end = Dimens.Space32, bottom = Dimens.Space8),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
+    ) {
+        Text(
+            pluralStringResource(R.plurals.stats2_drilldown_entries, count, count),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            stringResource(R.string.stats2_drilldown_total, formatDuration(totalSeconds)),
+            style = MaterialTheme.typography.labelMedium.tabular(),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun DrillDownRowItem(row: DrillDownRow, dateFormatter: DateTimeFormatter) {
+    val noProject = stringResource(R.string.stats2_no_project)
+    val meta = remember(row, dateFormatter, noProject) {
+        listOfNotNull(row.projectName ?: noProject, row.taskName, row.startDate.format(dateFormatter)).joinToString(" · ")
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = Dimens.MinTouchTarget)
+            .testTag(StatDrillDownTestTags.row(row.entryId))
+            .padding(horizontal = Dimens.Space16, vertical = Dimens.Space12),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Dimens.Space12),
     ) {
-        ProjectSwatch(hexToColor(row.colorHex, MaterialTheme.colorScheme.outline))
+        // The swatch sits in an icon-sized slot so the text and dividers line up with grouped rows.
+        Box(Modifier.size(Dimens.IconSmall), contentAlignment = Alignment.Center) {
+            ProjectSwatch(hexToColor(row.colorHex, MaterialTheme.colorScheme.outline))
+        }
         Column(Modifier.weight(1f)) {
             val description = row.description?.takeIf { it.isNotBlank() }
             Text(
                 text = description ?: stringResource(R.string.stats2_drilldown_no_description),
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 fontStyle = if (description == null) FontStyle.Italic else FontStyle.Normal,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            val noProjectLabel = stringResource(R.string.stats2_no_project)
-            val meta = buildList {
-                add(row.projectName ?: noProjectLabel)
-                row.taskName?.let { add(it) }
-                add(row.startDate.format(DateTimeFormatter.ofPattern("EEE d MMM", locale)))
-            }.joinToString(" · ")
             Text(
                 text = meta,
                 style = MaterialTheme.typography.bodySmall,
@@ -152,7 +153,11 @@ private fun DrillDownRowItem(row: DrillDownRow, locale: java.util.Locale) {
             )
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text(formatDuration(row.seconds), style = MaterialTheme.typography.bodyMedium)
+            Text(
+                formatDuration(row.seconds),
+                style = MaterialTheme.typography.bodyLarge.tabular(),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             if (row.billable) {
                 Text(
                     stringResource(R.string.stats2_billable_billable),
