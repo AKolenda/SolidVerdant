@@ -38,6 +38,8 @@ import dev.tricked.solidverdant.sync.StopPayload
 import dev.tricked.solidverdant.sync.UpdatePayload
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -73,6 +75,9 @@ private const val CACHE_RETENTION_DAYS = 400L
 /** A prune candidate must also not have been written (pulled or edited) for this long. */
 private const val CACHE_UNTOUCHED_DAYS = 30L
 
+/** A foreground refresh within this long of the last catalogue fetch reuses the cached catalogue. */
+private const val CATALOG_TTL_MS = 5 * 60 * 1_000L
+
 // A rate-limited month page waits for the server's Retry-After (clamped) before trying again.
 private const val RATE_LIMIT_ATTEMPTS = 3
 private const val HTTP_TOO_MANY_REQUESTS = 429
@@ -94,6 +99,24 @@ class TimeEntryRepository @Inject constructor(
     private val database: AppDatabase,
 ) : TimeEntryReader {
     private val softDeleteCommitter = SoftDeleteCommitter(timeEntryDao, outboxDao, database, json, clock)
+
+    /** When each organization's catalogue was last fetched in this process (see [refreshAll]). */
+    private val catalogFetchedAtMs = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    private class RefreshFetch(
+        val projects: List<Project>?,
+        val clients: List<Client>?,
+        val tasks: List<Task>?,
+        val tags: List<Tag>?,
+        val entries: List<TimeEntry>,
+        val memberships: List<dev.tricked.solidverdant.data.model.Membership>?,
+    )
+
+    /** Upsert [fetched] only when some row is new or differs from [existing]. */
+    private suspend fun <T> upsertIfChanged(existing: List<T>, fetched: List<T>, upsert: suspend (List<T>) -> Unit) {
+        val known = existing.toHashSet()
+        if (fetched.any { it !in known }) upsert(fetched)
+    }
 
     /** The earliest month-query start loaded in this process; the cache prune never goes past it. */
     private val earliestLoadedStart = java.util.concurrent.atomic.AtomicReference<String?>(null)
@@ -362,8 +385,15 @@ class TimeEntryRepository @Inject constructor(
         }
     }
 
-    /** Pull the full first frame for an org and upsert into Room (last-write-wins). */
-    suspend fun refreshAll(organizationId: String, memberId: String): Result<Unit> = try {
+    /**
+     * Pull the full first frame for an org and upsert into Room (last-write-wins).
+     *
+     * The catalogue (projects, clients, tasks, tags: all pages) is skipped when it was fetched
+     * less than [CATALOG_TTL_MS] ago, unless [forceCatalog] (an explicit user refresh) asks for
+     * it. Independent requests run concurrently, and rows that did not change are not rewritten,
+     * so an unchanged refresh does not wake every Room observer.
+     */
+    suspend fun refreshAll(organizationId: String, memberId: String, forceCatalog: Boolean = false): Result<Unit> = try {
         // A delete whose undo window died with its ViewModel is still hidden locally; commit it
         // before pulling, so the refresh does not keep skipping a row nothing will ever delete.
         runCatching { commitOrphanedSoftDeletes() }.onFailure { error ->
@@ -371,29 +401,57 @@ class TimeEntryRepository @Inject constructor(
             Timber.w(error, "Could not commit orphaned soft deletes")
         }
         val pullStartedAtMs = clock.nowMs()
-        val projects = remote.getProjects(organizationId).getOrThrow()
-        val clients = remote.getClients(organizationId).getOrThrow()
-        val tasks = remote.getTasks(organizationId).getOrThrow()
-        val tags = remote.getTags(organizationId).getOrThrow()
-        val entries = remote.getTimeEntries(
-            TimeEntriesQuery(organizationId, memberId, limit = 250, offset = 0, onlyFullDates = false),
-        )
-            .getOrThrow().data
-
-        catalogDao.upsertProjects(projects.map { it.toEntity(organizationId) })
-        catalogDao.upsertClients(clients.map { it.toEntity(organizationId) })
-        catalogDao.upsertTasks(tasks.map { it.toEntity(organizationId) })
-        catalogDao.upsertTags(tags.map { it.toEntity(organizationId) })
-
-        // Memberships/organizations cache so auth-adjacent screens can read offline.
-        remote.getMyMemberships().getOrElse { error ->
-            if (error is CancellationException) throw error
-            null
-        }?.let { memberships ->
-            catalogDao.upsertMemberships(memberships.map { it.toEntity() })
-            catalogDao.upsertOrganizations(memberships.map { it.organization.toEntity() })
+        // The in-memory TTL only counts while Room still holds that pull: a logout or account
+        // switch wipes sync_meta together with the catalogue.
+        val catalogFresh = catalogFetchedAtMs[organizationId]?.let { pullStartedAtMs - it in 0 until CATALOG_TTL_MS } == true &&
+            syncMetaDao.get(organizationId) != null
+        val refreshCatalog = forceCatalog || !catalogFresh
+        val fetched = coroutineScope {
+            val projects = if (refreshCatalog) async { remote.getProjects(organizationId).getOrThrow() } else null
+            val clients = if (refreshCatalog) async { remote.getClients(organizationId).getOrThrow() } else null
+            val tasks = if (refreshCatalog) async { remote.getTasks(organizationId).getOrThrow() } else null
+            val tags = if (refreshCatalog) async { remote.getTags(organizationId).getOrThrow() } else null
+            val entries = async {
+                remote.getTimeEntries(
+                    TimeEntriesQuery(organizationId, memberId, limit = 250, offset = 0, onlyFullDates = false),
+                ).getOrThrow().data
+            }
+            // Memberships/organizations cache so auth-adjacent screens can read offline. Optional.
+            val memberships = async {
+                remote.getMyMemberships().getOrElse { error ->
+                    if (error is CancellationException) throw error
+                    null
+                }
+            }
+            RefreshFetch(
+                projects = projects?.await(),
+                clients = clients?.await(),
+                tasks = tasks?.await(),
+                tags = tags?.await(),
+                entries = entries.await(),
+                memberships = memberships.await(),
+            )
         }
 
+        fetched.projects?.let {
+            upsertIfChanged(catalogDao.getProjects(organizationId), it.map { p -> p.toEntity(organizationId) }, catalogDao::upsertProjects)
+        }
+        fetched.clients?.let {
+            upsertIfChanged(catalogDao.getClients(organizationId), it.map { c -> c.toEntity(organizationId) }, catalogDao::upsertClients)
+        }
+        fetched.tasks?.let {
+            upsertIfChanged(catalogDao.getTasks(organizationId), it.map { t -> t.toEntity(organizationId) }, catalogDao::upsertTasks)
+        }
+        fetched.tags?.let {
+            upsertIfChanged(catalogDao.getTags(organizationId), it.map { t -> t.toEntity(organizationId) }, catalogDao::upsertTags)
+        }
+        if (refreshCatalog) catalogFetchedAtMs[organizationId] = pullStartedAtMs
+        fetched.memberships?.let { memberships ->
+            upsertIfChanged(catalogDao.getMemberships(), memberships.map { it.toEntity() }, catalogDao::upsertMemberships)
+            upsertIfChanged(catalogDao.getOrganizations(), memberships.map { it.organization.toEntity() }, catalogDao::upsertOrganizations)
+        }
+
+        val entries = fetched.entries
         val now = clock.nowMs()
         // Single transaction; the pending-edit/soft-delete and in-flight-pull guards live in
         // applyServerEntries. The pull-start timestamp prevents a response that was already in

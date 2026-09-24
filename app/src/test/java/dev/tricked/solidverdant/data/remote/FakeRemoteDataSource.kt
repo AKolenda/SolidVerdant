@@ -55,7 +55,10 @@ class FakeRemoteDataSource(
         timeEntriesQueryValidator?.invoke(query)?.let { return Result.failure(it) }
         return Result.success(TimeEntriesResponse(data = entries))
     }
+    var projectRequests = 0
+
     override suspend fun getProjects(organizationId: String): Result<List<Project>> {
+        projectRequests += 1
         projectsGate?.await()
         return Result.success(projects)
     }

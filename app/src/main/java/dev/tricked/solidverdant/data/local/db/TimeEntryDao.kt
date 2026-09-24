@@ -229,6 +229,10 @@ interface TimeEntryDao {
                 upsert(local.copy(syncState = SyncState.CONFLICT, conflictServerJson = serverJson))
                 return@forEach
             }
+            if (local != null && local.copy(updatedAt = entity.updatedAt) == entity && tagIdsFor(entity.id).toSet() == tagIds.toSet()) {
+                // Unchanged: rewriting it would wake every observer of the table for nothing.
+                return@forEach
+            }
             upsert(entity)
             replaceTagRefs(entity.id, tagIds)
         }
