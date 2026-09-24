@@ -162,13 +162,25 @@ class TimeEntryRepositoryReadTest {
         assertTrue(failure is TimeoutCancellationException)
     }
 
-    @Test fun month_load_reaches_a_month_back_for_carry_in_entries_but_not_the_whole_history() = runTest {
+    @Test fun month_load_reaches_back_only_for_entries_crossing_into_the_month() = runTest {
         repo.loadMonth("org1", "member1", YearMonth.of(2026, 7), ZoneId.of("Europe/Amsterdam"))
 
         val query = requireNotNull(remote.lastTimeEntriesQuery)
-        // 31 days before 1 July, local midnight in Amsterdam (UTC+2).
-        assertEquals("2026-05-30T22:00:00Z", query.start)
+        // Two days before 1 July, local midnight in Amsterdam (UTC+2): enough for an entry that
+        // crosses midnight into the month without re-downloading the previous month, which the
+        // calendar prefetches on its own.
+        assertEquals("2026-06-28T22:00:00Z", query.start)
         assertEquals("2026-07-31T22:00:00Z", query.end)
+    }
+
+    @Test fun month_load_keeps_an_entry_that_started_the_evening_before() = runTest {
+        remote.entries = listOf(
+            srv("overnight").copy(start = "2026-06-30T20:00:00Z", end = "2026-07-01T02:00:00Z"),
+        )
+
+        repo.loadMonth("org1", "member1", YearMonth.of(2026, 7), ZoneId.of("Europe/Amsterdam"))
+
+        assertEquals(listOf("overnight"), repo.observeTimeEntries("org1").first().map { it.id })
     }
 
     @Test fun month_load_waits_out_a_rate_limit_and_retries() = runTest {

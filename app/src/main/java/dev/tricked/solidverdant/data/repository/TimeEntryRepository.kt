@@ -61,9 +61,11 @@ private const val MAX_MONTH_ENTRIES = 15_000
 /**
  * How far before a month its query reaches for entries that start earlier and run into it. The
  * server filters both bounds by start time, so an unbounded lower edge re-downloaded the whole
- * history for every month; a month of carry-in covers any realistic multi-day entry.
+ * history for every month. Two days cover entries that cross midnight into the month (and a
+ * weekend-long one). A month of carry-in doubled every calendar download while the calendar
+ * already loads the adjacent months, whose own load brings any longer entry into Room.
  */
-private const val MONTH_CARRY_IN_DAYS = 31L
+private const val MONTH_CARRY_IN_DAYS = 2L
 
 /** Cached history kept offline: a bit over a year, covering the calendar's and statistics' usual reach. */
 private const val CACHE_RETENTION_DAYS = 400L
