@@ -15,20 +15,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.AttachMoney
+import androidx.compose.material.icons.outlined.Business
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,12 +39,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Project
@@ -52,13 +53,16 @@ import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.domain.time.formatTimeEntryInstant
+import dev.tricked.solidverdant.domain.time.isBreakTimeEntry
 import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
+import dev.tricked.solidverdant.domain.time.parseTimeEntryInstant
 import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.ui.tracking.EntryTimeValidator
 import dev.tricked.solidverdant.ui.tracking.EntryTrustRules
 import dev.tricked.solidverdant.ui.tracking.EntryValidationBanner
 import dev.tricked.solidverdant.ui.tracking.formatElapsedTime
 import java.time.Duration
+import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -127,24 +131,28 @@ fun EditTimeEntryDialog(
     val durationIsValid = isRunningEntry || durationMinutes.toLongOrNull()?.let { it > 0 } == true
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    val overlaps = remember(startTime, endTime, existingEntries, isRunningEntry) {
-        if (isBreakEntry || isRunningEntry || existingEntries.isEmpty()) {
-            false
-        } else {
-            val candidate = (
-                entry ?: TimeEntry(
-                    id = "",
-                    userId = "",
-                    start = formatTimeEntryInstant(startTime),
-                    end = formatTimeEntryInstant(endTime),
-                    organizationId = existingEntries.firstOrNull()?.organizationId.orEmpty(),
-                )
-                ).copy(
-                start = formatTimeEntryInstant(startTime),
-                end = formatTimeEntryInstant(endTime),
-            )
-            existingEntries.any { it.id != candidate.id && EntryTrustRules.overlaps(candidate, it) }
-        }
+    // Existing entries are parsed once per list, and narrowed to the edited days only when a date
+    // changes, so each time change compares a handful of instants instead of re-parsing them all.
+    val overlapIntervals = remember(existingEntries, isBreakEntry, isRunningEntry) {
+        if (isBreakEntry || isRunningEntry) emptyList() else entryOverlapIntervals(existingEntries)
+    }
+    val nearbyIntervals = remember(overlapIntervals, startTime.toLocalDate(), endTime.toLocalDate(), zone) {
+        overlapIntervalsNear(
+            intervals = overlapIntervals,
+            from = startTime.toLocalDate().atStartOfDay(zone).toInstant(),
+            until = endTime.toLocalDate().plusDays(1).atStartOfDay(zone).toInstant(),
+            now = Instant.now(),
+        )
+    }
+    val overlaps = remember(startTime, endTime, nearbyIntervals) {
+        entryOverlapsAny(
+            intervals = nearbyIntervals,
+            entryId = entry?.id.orEmpty(),
+            organizationId = entry?.organizationId ?: existingEntries.firstOrNull()?.organizationId.orEmpty(),
+            start = startTime.toInstant(),
+            end = endTime.toInstant(),
+            now = Instant.now(),
+        )
     }
     val validation = remember(startTime, endTime, overlaps, preventOverlap, isRunningEntry) {
         if (isRunningEntry) {
@@ -417,7 +425,7 @@ fun EditTimeEntryDialog(
             },
             title = { Text(stringResource(title)) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(Dimens.Space12)) {
                     OutlinedTextField(
                         value = catalogName,
                         onValueChange = {
@@ -436,9 +444,9 @@ fun EditTimeEntryDialog(
                             enabled = !catalogSaving,
                             onSelected = { catalogClientId = it },
                             onCreateClient = onCreateClient?.let {
-                                {
+                                { suggestedName ->
                                     returnToProjectName = catalogName
-                                    beginCatalogCreation(CatalogCreationKind.CLIENT, "", returnToProject = true)
+                                    beginCatalogCreation(CatalogCreationKind.CLIENT, suggestedName, returnToProject = true)
                                 }
                             },
                         )
@@ -540,55 +548,165 @@ private data class CatalogCreationRequest(
     val returnToProject: Boolean = false,
 )
 
+/**
+ * The new project's client as a grouped row that opens a lazy, searchable picker, like the entry
+ * form's project row, instead of a menu holding every client at once.
+ */
 @Composable
 private fun CatalogClientPicker(
     clients: List<Client>,
     selectedClientId: String?,
     enabled: Boolean,
     onSelected: (String?) -> Unit,
-    onCreateClient: (() -> Unit)?,
+    onCreateClient: ((String) -> Unit)?,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    val selectedName = clients.firstOrNull { it.id == selectedClientId }?.name
+    var open by rememberSaveable { mutableStateOf(false) }
+    val selectedName = remember(clients, selectedClientId) { clients.firstOrNull { it.id == selectedClientId }?.name }
         ?: stringResource(R.string.no_client)
-    Box {
-        OutlinedButton(
-            onClick = { expanded = true },
-            enabled = enabled,
-            modifier = Modifier.fillMaxWidth().testTag(EditTimeEntryTestTags.CLIENT_PICKER),
-        ) {
-            Text("${stringResource(R.string.client)}: $selectedName")
+    FilterRow(
+        label = stringResource(R.string.client),
+        icon = Icons.Outlined.Business,
+        value = selectedName,
+        onClick = { if (enabled) open = true },
+        modifier = Modifier.testTag(EditTimeEntryTestTags.CLIENT_PICKER),
+    )
+    if (open) {
+        CatalogClientPickerDialog(
+            clients = clients,
+            selectedClientId = selectedClientId,
+            onSelect = { clientId ->
+                onSelected(clientId)
+                open = false
+            },
+            onCreateClient = onCreateClient?.let { createClient ->
+                { name ->
+                    open = false
+                    createClient(name)
+                }
+            },
+            onDismiss = { open = false },
+        )
+    }
+}
+
+/**
+ * Searchable, lazily listed client choice: "No client" first, then Create client (named after the
+ * search when there is one) so it is reachable without scrolling, then the active clients.
+ */
+@Composable
+private fun CatalogClientPickerDialog(
+    clients: List<Client>,
+    selectedClientId: String?,
+    onSelect: (String?) -> Unit,
+    onCreateClient: ((String) -> Unit)?,
+    onDismiss: () -> Unit,
+) {
+    var query by rememberSaveable { mutableStateOf("") }
+    val options = remember(clients) { clients.filterNot { it.isArchived }.map { FilterOption(it.id, it.name) } }
+    val filtered = remember(options, query) { filterOptions(options, query) }
+    val title = stringResource(R.string.client)
+    PickerDialog(
+        title = title,
+        searchPlaceholder = stringResource(R.string.search_items, title),
+        searchQuery = query,
+        onSearchQueryChange = { query = it },
+        onClose = onDismiss,
+        listTestTag = CLIENT_PICKER_LIST_TAG,
+        searchTestTag = CLIENT_PICKER_SEARCH_TAG,
+    ) {
+        if (query.isBlank()) {
+            item(key = "no_client") {
+                PickerItem(text = stringResource(R.string.no_client), selected = selectedClientId == null, onClick = { onSelect(null) })
+            }
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.no_client)) },
-                onClick = {
-                    onSelected(null)
-                    expanded = false
-                },
-            )
-            clients.filterNot { it.isArchived }.forEach { client ->
-                DropdownMenuItem(
-                    text = { Text(client.name) },
-                    onClick = {
-                        onSelected(client.id)
-                        expanded = false
-                    },
+        if (onCreateClient != null) {
+            item(key = "create_client") {
+                PickerItem(
+                    text = stringResource(R.string.create_client),
+                    selected = false,
+                    onClick = { onCreateClient(query.trim()) },
+                    leadingContent = { Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                    modifier = Modifier.testTag(EditTimeEntryTestTags.CREATE_CLIENT),
                 )
             }
-            onCreateClient?.let { createClient ->
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.create_client)) },
-                    onClick = {
-                        expanded = false
-                        createClient()
-                    },
-                    modifier = Modifier.testTag(EditTimeEntryTestTags.CREATE_CLIENT),
+        }
+        items(filtered, key = { "client_${it.id}" }) { option ->
+            PickerItem(
+                text = option.name,
+                selected = option.id == selectedClientId,
+                onClick = { onSelect(option.id) },
+                modifier = Modifier.testTag(FilterPickerTestTags.option(option.id)),
+            )
+        }
+        if (filtered.isEmpty() && query.isNotBlank()) {
+            item(key = "empty") {
+                Text(
+                    text = stringResource(R.string.no_results_found),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = Dimens.Space24, vertical = Dimens.Space16),
                 )
             }
         }
     }
 }
+
+/** An existing entry's interval for the editor's overlap warning; a null [end] runs until now. */
+internal data class EntryOverlapInterval(val id: String, val organizationId: String, val start: Instant, val end: Instant?)
+
+/**
+ * [entries] parsed once for overlap checks, resolved like [EntryTrustRules.overlaps]: an explicit
+ * end wins, a positive duration is the fallback, otherwise the entry is running. Breaks and
+ * unparseable entries never overlap.
+ */
+internal fun entryOverlapIntervals(entries: List<TimeEntry>): List<EntryOverlapInterval> = entries.mapNotNull { entry ->
+    if (isBreakTimeEntry(entry)) return@mapNotNull null
+    val start = parseTimeEntryInstant(entry.start) ?: return@mapNotNull null
+    val end = when {
+        entry.end != null -> parseTimeEntryInstant(entry.end) ?: return@mapNotNull null
+        entry.duration != null && entry.duration > 0 -> start.plusSeconds(entry.duration.toLong())
+        else -> null
+    }
+    EntryOverlapInterval(entry.id, entry.organizationId, start, end)
+}
+
+/** The intervals that reach within a day of [from]..[until]; only those can overlap a span inside it. */
+internal fun overlapIntervalsNear(
+    intervals: List<EntryOverlapInterval>,
+    from: Instant,
+    until: Instant,
+    now: Instant,
+): List<EntryOverlapInterval> {
+    val windowStart = from.minus(Duration.ofDays(1))
+    val windowEnd = until.plus(Duration.ofDays(1))
+    return intervals.filter { it.start < windowEnd && (it.end ?: now) > windowStart }
+}
+
+/**
+ * Whether [start]..[end] of entry [entryId] overlaps another entry of the same organization,
+ * with the same half-open rule as [EntryTrustRules.overlaps].
+ */
+internal fun entryOverlapsAny(
+    intervals: List<EntryOverlapInterval>,
+    entryId: String,
+    organizationId: String,
+    start: Instant,
+    end: Instant,
+    now: Instant,
+): Boolean {
+    if (!end.isAfter(start)) return false
+    return intervals.any { other ->
+        val otherEnd = other.end ?: now
+        other.id != entryId &&
+            other.organizationId == organizationId &&
+            otherEnd.isAfter(other.start) &&
+            start < otherEnd &&
+            other.start < end
+    }
+}
+
+private const val CLIENT_PICKER_LIST_TAG = "catalogue_client_list"
+private const val CLIENT_PICKER_SEARCH_TAG = "catalogue_client_search"
 
 @Composable
 private fun EntryTimePickerDialog(title: String, initial: ZonedDateTime, onDismiss: () -> Unit, onConfirm: (Int, Int) -> Unit) {

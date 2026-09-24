@@ -21,6 +21,7 @@ object CalendarTestTags {
     const val ADD_BREAK_MENU = "calendar_add_break_menu"
     const val RUNNING_TIMER = "calendar_running_timer"
     const val RUNNING_TIMER_EDIT = "calendar_running_timer_edit"
+    const val RUNNING_TIMER_STOP = "calendar_running_timer_stop"
     const val OVERLAY = "calendar_overlay"
     const val OVERLAY_TOGGLE = "calendar_overlay_toggle"
     const val OVERLAY_CALENDAR_LOADING = "calendar_overlay_calendar_loading"
@@ -50,6 +51,7 @@ object CalendarTestTags {
     const val LOAD_ERROR = "calendar_load_error"
     const val CONTENT_READY = "calendar_content_ready"
     const val SPLIT_PICKER = "calendar_split_picker"
+    const val SPLIT_DATE = "calendar_split_date"
     const val SPLIT_CONFIRM = "calendar_split_confirm"
     const val SPLIT_CANCEL = "calendar_split_cancel"
 

@@ -7,8 +7,11 @@
 package dev.tricked.solidverdant.ui.calendar
 
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.TimeEntryType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CalendarEntryMetadataTest {
@@ -62,5 +65,22 @@ class CalendarEntryMetadataTest {
 
         assertNull(calendarEntryMetadata(running).durationSeconds)
         assertNull(calendarEntryMetadata(malformed).durationSeconds)
+    }
+
+    @Test
+    fun `continue is offered only for a finished work entry while no timer is running or paused`() {
+        val finished = TimeEntry(
+            id = "done",
+            userId = "user",
+            organizationId = "org",
+            start = "2026-08-11T09:00:00Z",
+            end = "2026-08-11T10:00:00Z",
+        )
+
+        assertTrue(canContinueCalendarEntry(finished, timerActive = false))
+        // A paused timer has no running entry but is still active: Continue cannot start then.
+        assertFalse(canContinueCalendarEntry(finished, timerActive = true))
+        assertFalse(canContinueCalendarEntry(finished.copy(end = null), timerActive = false))
+        assertFalse(canContinueCalendarEntry(finished.copy(type = TimeEntryType.BREAK), timerActive = false))
     }
 }
