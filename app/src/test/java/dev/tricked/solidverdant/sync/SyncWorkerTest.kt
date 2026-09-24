@@ -77,6 +77,9 @@ class SyncWorkerTest {
 
     @After fun teardown() = db.close()
 
+    /** Follow-up runs the worker scheduled for itself (delay in ms), e.g. after a Retry-After. */
+    private val followUps = mutableListOf<Long>()
+
     private fun buildWorker(status: SyncStatusReporter = SyncStatusReporter(), remoteDataSource: RemoteDataSource = remote) =
         TestListenableWorkerBuilder<SyncWorker>(ApplicationProvider.getApplicationContext())
             .setWorkerFactory(object : androidx.work.WorkerFactory() {
@@ -95,6 +98,7 @@ class SyncWorkerTest {
                     json,
                     clock,
                     status,
+                    { delayMs -> followUps += delayMs },
                 )
             }).build()
 
@@ -457,12 +461,115 @@ class SyncWorkerTest {
                 ),
             )
 
-            assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+            // A rate limit schedules its own follow-up from Retry-After instead of WorkManager's
+            // exponential backoff; the other failures retry through WorkManager.
+            val expected = if (code == 429) ListenableWorker.Result.success() else ListenableWorker.Result.retry()
+            assertEquals(expected, buildWorker().doWork())
             val stored = db.outboxDao().peekAll().single { it.timeEntryId == entryId }
             assertEquals(expectedAttempts, stored.attemptCount)
             assertEquals(false, stored.deadLettered)
             db.outboxDao().delete(stored)
         }
+        assertEquals(listOf(SyncWorker.DEFAULT_RATE_LIMIT_WAIT_SECONDS * 1_000L), followUps)
+    }
+
+    @Test fun rate_limit_halts_the_run_and_schedules_the_next_one_from_retry_after() = runTest {
+        listOf("server-a", "server-b").forEachIndexed { index, id ->
+            db.outboxDao().insert(
+                OutboxEntity(
+                    opType = OutboxOpType.DELETE,
+                    organizationId = "org1",
+                    timeEntryId = id,
+                    createdAtMs = index + 1L,
+                    payloadJson = "{}",
+                ),
+            )
+        }
+        var deleteAttempts = 0
+        val syncRemote = mockk<RemoteDataSource>()
+        coEvery { syncRemote.deleteTimeEntry(any(), any()) } coAnswers {
+            deleteAttempts += 1
+            Result.failure(rateLimitedWithRetryAfter("30"))
+        }
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker(remoteDataSource = syncRemote).doWork())
+
+        assertEquals("Every further request would be refused too", 1, deleteAttempts)
+        assertEquals(listOf(30_000L), followUps)
+        assertEquals(listOf(0, 0), db.outboxDao().peekAll().map { it.attemptCount })
+    }
+
+    @Test fun rate_limit_wait_is_clamped() = runTest {
+        remote.writeError = rateLimitedWithRetryAfter("86400")
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.DELETE,
+                organizationId = "org1",
+                timeEntryId = "server-1",
+                createdAtMs = 1L,
+                payloadJson = "{}",
+            ),
+        )
+
+        buildWorker().doWork()
+
+        assertEquals(listOf(SyncWorker.MAX_RATE_LIMIT_WAIT_SECONDS * 1_000L), followUps)
+    }
+
+    @Test fun expired_session_waits_for_sign_in_without_spending_the_retry_budget() = runTest {
+        remote.writeError = httpException(401, """{"message":"Unauthenticated."}""")
+        listOf("server-a", "server-b").forEachIndexed { index, id ->
+            db.outboxDao().insert(
+                OutboxEntity(
+                    opType = OutboxOpType.DELETE,
+                    organizationId = "org1",
+                    timeEntryId = id,
+                    createdAtMs = index + 1L,
+                    payloadJson = "{}",
+                ),
+            )
+        }
+
+        repeat(SyncWorker.MAX_ATTEMPTS + 1) {
+            assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+        }
+
+        val stored = db.outboxDao().peekAll()
+        assertEquals(2, stored.size)
+        assertTrue(stored.none { it.deadLettered })
+        assertTrue(stored.all { it.attemptCount == 0 })
+    }
+
+    @Test fun transient_failures_keep_retrying_within_the_retry_window() = runTest {
+        remote.failNextWrite = true
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.DELETE,
+                organizationId = "org1",
+                timeEntryId = "server-1",
+                createdAtMs = 1L,
+                attemptCount = SyncWorker.MAX_ATTEMPTS + 3,
+                payloadJson = "{}",
+            ),
+        )
+        nowMs = SyncWorker.RETRY_WINDOW_MS - 1
+
+        assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+
+        val stored = db.outboxDao().peekAll().single()
+        assertFalse("An outage shorter than the retry window must not dead-letter work", stored.deadLettered)
+        assertEquals(SyncWorker.MAX_ATTEMPTS + 4, stored.attemptCount)
+    }
+
+    private fun rateLimitedWithRetryAfter(seconds: String): HttpException {
+        val raw = okhttp3.Response.Builder()
+            .code(429)
+            .message("Too Many Requests")
+            .protocol(okhttp3.Protocol.HTTP_1_1)
+            .request(okhttp3.Request.Builder().url("http://localhost/").build())
+            .header("Retry-After", seconds)
+            .build()
+        return HttpException(Response.error<Unit>("""{"message":"Too Many Attempts."}""".toResponseBody(), raw))
     }
 
     @Test fun repeated_rate_limits_never_dead_letter_the_change() = runTest {
@@ -478,12 +585,13 @@ class SyncWorkerTest {
         )
 
         repeat(SyncWorker.MAX_ATTEMPTS + 1) {
-            assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+            assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
         }
 
         val stored = db.outboxDao().peekAll().single()
         assertFalse(stored.deadLettered)
         assertTrue(db.outboxDao().peekPending().contains(stored))
+        assertEquals(SyncWorker.MAX_ATTEMPTS + 1, followUps.size)
     }
 
     @Test fun repeated_rate_limits_during_conflict_preflight_never_dead_letter_the_change() = runTest {
@@ -533,8 +641,9 @@ class SyncWorkerTest {
         }
 
         repeat(SyncWorker.MAX_ATTEMPTS + 1) {
-            assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+            assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
         }
+        assertEquals(SyncWorker.MAX_ATTEMPTS + 1, followUps.size)
 
         val stored = db.outboxDao().peekAll().single()
         assertFalse(stored.deadLettered)
@@ -558,6 +667,8 @@ class SyncWorkerTest {
                 payloadJson = json.encodeToString(StopPayload("u1", "2026-07-07T08:00:00Z")),
             ),
         )
+        // The attempt cap applies only once the change has been retrying for the whole window.
+        nowMs = 1L + SyncWorker.RETRY_WINDOW_MS
 
         val result = buildWorker().doWork()
         // Cap reached: dead-lettered instead of endless retry, worker completes successfully.
@@ -1397,13 +1508,14 @@ class SyncWorkerTest {
         )
         coEvery { syncRemote.stopTimeEntry(any(), any(), any(), any(), any()) } returns Result.success(server.copy(end = end))
 
-        assertEquals(ListenableWorker.Result.retry(), buildWorker(remoteDataSource = syncRemote).doWork())
+        assertEquals(ListenableWorker.Result.success(), buildWorker(remoteDataSource = syncRemote).doWork())
 
         val deferred = db.outboxDao().peekAll()
         assertEquals(listOf(OutboxOpType.START, OutboxOpType.STOP), deferred.map { it.opType })
         assertEquals(listOf(0, 0), deferred.map { it.attemptCount })
         assertTrue(RateLimitMarker.matches(deferred.first().lastError))
         coVerify(exactly = 0) { syncRemote.stopTimeEntry(any(), any(), any(), any(), any()) }
+        assertEquals(1, followUps.size)
 
         assertEquals(ListenableWorker.Result.success(), buildWorker(remoteDataSource = syncRemote).doWork())
 
@@ -1461,6 +1573,7 @@ class SyncWorkerTest {
             syncRemote.startTimeEntry(any(), any(), any(), any(), any(), any(), any())
         } returns Result.failure(java.io.IOException("still offline"))
         coEvery { syncRemote.deleteTimeEntry(any(), any()) } returns Result.success(Unit)
+        nowMs = 1L + SyncWorker.RETRY_WINDOW_MS
 
         assertEquals(ListenableWorker.Result.success(), buildWorker(remoteDataSource = syncRemote).doWork())
 
@@ -1884,7 +1997,7 @@ class SyncWorkerTest {
             ),
         )
 
-        assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
 
         val stored = db.outboxDao().peekAll().single()
         assertEquals(0, stored.attemptCount)
@@ -1892,7 +2005,8 @@ class SyncWorkerTest {
         assertTrue(RateLimitMarker.matches(stored.lastError))
 
         remote.writeError = httpException(429, """{"message":"Too Many Attempts."}""")
-        assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
         assertEquals("rate_limited", db.outboxDao().peekAll().single().lastError)
+        assertEquals(listOf(30_000L, SyncWorker.DEFAULT_RATE_LIMIT_WAIT_SECONDS * 1_000L), followUps)
     }
 }

@@ -53,6 +53,7 @@ class SyncWorker @AssistedInject constructor(
     private val json: Json,
     private val clock: Clock,
     private val syncStatus: SyncStatusReporter,
+    private val followUp: SyncFollowUpScheduler,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result = drainMutex.withLock {
@@ -89,6 +90,15 @@ class SyncWorker @AssistedInject constructor(
         val pushedOrgs = mutableSetOf<String>()
         var retryResult: Result? = null
 
+        /**
+         * Set when continuing would only repeat the same failure for every remaining op: the
+         * per-user rate limit is closed, or the session needs sign-in. The run stops sending.
+         */
+        var halted = false
+
+        /** Seconds the server asked us to wait (Retry-After), when a rate limit halted the run. */
+        var rateLimitedForSeconds: Long? = null
+
         fun defer(op: OutboxEntity) {
             deferredEntryIds += op.timeEntryId
             if (op.opType == OutboxOpType.START || op.opType == OutboxOpType.STOP) timerChainBlocked = true
@@ -121,6 +131,7 @@ class SyncWorker @AssistedInject constructor(
                 continue
             }
             handleOutcome(op, process(op, conflictIndexes), conflictIndexes, drain)
+            if (drain.halted) break
         }
         // Stamp the push moment for every org that had at least one op reach the server, even when
         // another op still needs a retry: the successful ops genuinely flushed. stampPush touches
@@ -130,8 +141,23 @@ class SyncWorker @AssistedInject constructor(
         // A dead-letter raised earlier in this drain must stay visible even when another op
         // still needs a retry; only a clean drain returns the banner to idle.
         if (syncStatus.status.value !is SyncStatus.Error) syncStatus.set(SyncStatus.Idle)
+        drain.rateLimitedForSeconds?.let { seconds ->
+            // WorkManager's own backoff ignores Retry-After (and grows to hours because a rate
+            // limit never spends attempts). Schedule the next run for when the window reopens.
+            val delayMs = seconds.coerceIn(MIN_RATE_LIMIT_WAIT_SECONDS, MAX_RATE_LIMIT_WAIT_SECONDS) * MILLIS_PER_SECOND
+            return runCatching { followUp.scheduleFollowUp(delayMs) }
+                .fold(onSuccess = { Result.success() }, onFailure = { Result.retry() })
+        }
         return drain.retryResult ?: Result.success()
     }
+
+    /**
+     * Whether a transient failure has had a fair chance. A count alone dead-lettered everything
+     * after ~8 minutes of outage (five WorkManager backoffs); an operation now also keeps retrying
+     * until [RETRY_WINDOW_MS] has passed since it was queued.
+     */
+    private fun retryBudgetExhausted(op: OutboxEntity, attempts: Int): Boolean =
+        attempts >= MAX_ATTEMPTS && clock.nowMs() - op.createdAtMs >= RETRY_WINDOW_MS
 
     private suspend fun handleOutcome(op: OutboxEntity, outcome: Outcome, conflictIndexes: Map<String, ConflictIndex>, drain: Drain) {
         when (outcome) {
@@ -145,9 +171,9 @@ class SyncWorker @AssistedInject constructor(
             }
             Outcome.Retry -> {
                 val attempts = op.attemptCount + 1
-                if (attempts >= MAX_ATTEMPTS) {
+                if (retryBudgetExhausted(op, attempts)) {
                     // Transient retries exhausted -> move to dead-letter and keep draining.
-                    deadLetter(op, "Sync failed after $MAX_ATTEMPTS attempts", drain.failedEntryIds)
+                    deadLetter(op, "Sync failed after $attempts attempts", drain.failedEntryIds)
                 } else {
                     outboxDao.update(
                         op.copy(
@@ -166,8 +192,18 @@ class SyncWorker @AssistedInject constructor(
                 // consume the operation's terminal retry budget: a healthy queued change must
                 // not become a permanent sync failure merely because the window stayed closed.
                 outboxDao.update(op.copy(lastError = RateLimitMarker.encode(outcome.retryAfterSeconds)))
-                drain.retryResult = Result.retry()
                 drain.defer(op)
+                // The limit is per user, so every further request in this run would be refused
+                // too (and keep the window closed). Stop and come back when the server says.
+                drain.halted = true
+                drain.rateLimitedForSeconds = outcome.retryAfterSeconds ?: DEFAULT_RATE_LIMIT_WAIT_SECONDS
+            }
+            Outcome.AuthRequired -> {
+                // The session expired or its refresh failed. Nothing is wrong with the change
+                // itself: keep it (and its retry budget) until the account is signed in again.
+                drain.defer(op)
+                drain.retryResult = Result.retry()
+                drain.halted = true
             }
             Outcome.Fail -> {
                 // Server rejected the change: this will never succeed, so dead-letter it now.
@@ -220,6 +256,9 @@ class SyncWorker @AssistedInject constructor(
         data class Success(val server: TimeEntry? = null, val rekeyedTo: String? = null, val pushed: Boolean = server != null) : Outcome()
         data object Retry : Outcome()
         data class RateLimited(val retryAfterSeconds: Long?) : Outcome()
+
+        /** HTTP 401 after the authenticator gave up: wait for sign-in, never a rejection. */
+        data object AuthRequired : Outcome()
         data object Fail : Outcome()
 
         /** Stale or already-applied work; drop without touching the server. */
@@ -253,8 +292,11 @@ class SyncWorker @AssistedInject constructor(
         if (op.opType !in CONFLICT_CHECK_OPS || op.baseSnapshotJson == null) return null
         val baseSnapshotJson = op.baseSnapshotJson
         return when (val index = conflictIndexes[op.organizationId]) {
-            is ConflictIndex.Failed ->
-                if (index.rateLimited) Outcome.RateLimited(index.retryAfterSeconds) else Outcome.Retry
+            is ConflictIndex.Failed -> when {
+                index.rateLimited -> Outcome.RateLimited(index.retryAfterSeconds)
+                index.authRequired -> Outcome.AuthRequired
+                else -> Outcome.Retry
+            }
             null -> Outcome.Retry
             is ConflictIndex.Ready -> {
                 val server = index.entries[op.timeEntryId]
@@ -479,7 +521,11 @@ class SyncWorker @AssistedInject constructor(
         val byOrganization = ops
             .filter { it.opType in CONFLICT_CHECK_OPS && it.baseSnapshotJson != null }
             .groupBy { it.organizationId }
+        var halted: ConflictIndex.Failed? = null
         return byOrganization.mapValues { (organizationId, organizationOps) ->
+            // The rate limit and the session are per user: once one fetch hits either, fetching the
+            // other organizations would only fail the same way (and keep the window closed).
+            halted?.let { return@mapValues it }
             runCatching {
                 val memberId = memberIdFor(organizationId, organizationOps)
                 val bounds = conflictWindow(organizationOps)
@@ -510,8 +556,12 @@ class SyncWorker @AssistedInject constructor(
             }.getOrElse { error ->
                 if (error is CancellationException) throw error
                 Timber.w(error, "Could not fetch conflict comparison data")
-                val rateLimit = (error as? HttpException)?.takeIf { it.code() == HTTP_TOO_MANY_REQUESTS }
-                ConflictIndex.Failed(rateLimited = rateLimit != null, retryAfterSeconds = rateLimit?.retryAfterSeconds())
+                val http = error as? HttpException
+                ConflictIndex.Failed(
+                    rateLimited = http?.code() == HTTP_TOO_MANY_REQUESTS,
+                    retryAfterSeconds = http?.takeIf { it.code() == HTTP_TOO_MANY_REQUESTS }?.retryAfterSeconds(),
+                    authRequired = http?.code() == HTTP_UNAUTHORIZED,
+                ).also { failed -> if (failed.rateLimited || failed.authRequired) halted = failed }
             }
         }
     }
@@ -656,6 +706,9 @@ class SyncWorker @AssistedInject constructor(
 
     private fun classify(e: Exception): Outcome = when {
         e is IOException -> Outcome.Retry
+        // A 401 reaches us only after TokenAuthenticator could not refresh (network trouble or a
+        // revoked session). The change is fine; it needs a working session, not a dead-letter.
+        e is HttpException && e.code() == HTTP_UNAUTHORIZED -> Outcome.AuthRequired
         e is HttpException && e.code() == HTTP_REQUEST_TIMEOUT -> Outcome.Retry
         e is HttpException && e.code() == HTTP_TOO_MANY_REQUESTS -> Outcome.RateLimited(e.retryAfterSeconds())
         e is HttpException && e.code() >= HTTP_SERVER_ERROR_START -> Outcome.Retry
@@ -674,10 +727,17 @@ class SyncWorker @AssistedInject constructor(
     companion object {
         private const val PAGE_SIZE = 250
         private const val MAX_PAGE_SCAN = 15_000
+        private const val HTTP_UNAUTHORIZED = 401
         private const val HTTP_NOT_FOUND = 404
         private const val HTTP_REQUEST_TIMEOUT = 408
         private const val HTTP_TOO_MANY_REQUESTS = 429
         private const val HTTP_SERVER_ERROR_START = 500
+        private const val MILLIS_PER_SECOND = 1_000L
+
+        /** Used when a 429 carries no numeric Retry-After; Solidtime's window is one minute. */
+        const val DEFAULT_RATE_LIMIT_WAIT_SECONDS = 60L
+        const val MIN_RATE_LIMIT_WAIT_SECONDS = 5L
+        const val MAX_RATE_LIMIT_WAIT_SECONDS = 15 * 60L
 
         /** Solidtime stores whole seconds; allow for rounding of our own echoed start. */
         private const val START_MATCH_TOLERANCE_MS = 1_000L
@@ -687,12 +747,18 @@ class SyncWorker @AssistedInject constructor(
         // content conflict checks is temporarily unavailable. It checks the active timer instead.
         private val CONFLICT_CHECK_OPS = setOf(OutboxOpType.UPDATE, OutboxOpType.DELETE)
 
-        /** Cap on transient retries before an op is moved to the dead-letter state. */
-        const val MAX_ATTEMPTS = 5
+        /** Minimum transient retries before an op may move to the dead-letter state... */
+        const val MAX_ATTEMPTS = 8
+
+        /** ...and it must also have been retrying for at least this long since it was queued. */
+        const val RETRY_WINDOW_MS = 24 * 60 * 60 * 1_000L
 
         /** WorkManager normally serializes this unique work, but a restart/cancellation race can
          * still construct two workers in one process. Never POST the same outbox snapshot twice. */
         private val drainMutex = Mutex()
+
+        /** True while a worker in this process is draining the outbox (see [SyncScheduler.requestSync]). */
+        fun isDraining(): Boolean = drainMutex.isLocked
     }
 }
 
@@ -702,7 +768,7 @@ private sealed class ConflictIndex {
             entries[server.id] = server
         }
     }
-    data class Failed(val rateLimited: Boolean, val retryAfterSeconds: Long? = null) : ConflictIndex()
+    data class Failed(val rateLimited: Boolean, val retryAfterSeconds: Long? = null, val authRequired: Boolean = false) : ConflictIndex()
 }
 
 private fun TimeEntry.toConflictSnapshot(): ConflictSnapshot = ConflictSnapshot.of(

@@ -36,4 +36,28 @@ class SyncSchedulerTest {
         assertEquals(1, infos.size)
         assertEquals(WorkInfo.State.ENQUEUED, infos.first().state)
     }
+
+    @Test fun follow_up_waits_for_the_requested_delay() = runTest {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        SyncScheduler(context).scheduleFollowUp(delayMs = 30_000L)
+
+        val info = WorkManager.getInstance(context).getWorkInfosForUniqueWork(SyncScheduler.UNIQUE_NAME).get().single()
+        assertEquals(WorkInfo.State.ENQUEUED, info.state)
+        assertEquals(30_000L, info.initialDelayMillis)
+    }
+
+    @Test fun user_sync_replaces_a_waiting_follow_up_instead_of_queueing_behind_it() = runTest {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val scheduler = SyncScheduler(context)
+        // e.g. parked on a rate limit or a long WorkManager backoff
+        scheduler.scheduleFollowUp(delayMs = 60 * 60 * 1_000L)
+
+        scheduler.requestSync()
+
+        val waiting = WorkManager.getInstance(context).getWorkInfosForUniqueWork(SyncScheduler.UNIQUE_NAME).get()
+            .filterNot { it.state.isFinished }
+        assertEquals("The delayed run is replaced, not waited behind", 1, waiting.size)
+        assertEquals(WorkInfo.State.ENQUEUED, waiting.single().state)
+        assertEquals(0L, waiting.single().initialDelayMillis)
+    }
 }
