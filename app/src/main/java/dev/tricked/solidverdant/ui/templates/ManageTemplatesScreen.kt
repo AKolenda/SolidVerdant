@@ -57,9 +57,9 @@ import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.repository.EntryTemplate
 import dev.tricked.solidverdant.ui.components.EmptyState
 import dev.tricked.solidverdant.ui.components.ErrorState
+import dev.tricked.solidverdant.ui.components.GroupedPosition
+import dev.tricked.solidverdant.ui.components.LazyGroupedRow
 import dev.tricked.solidverdant.ui.components.LoadingState
-import dev.tricked.solidverdant.ui.statistics.GroupedPosition
-import dev.tricked.solidverdant.ui.statistics.LazyGroupedRow
 import dev.tricked.solidverdant.ui.theme.Dimens
 
 internal object ManageTemplatesTestTags {

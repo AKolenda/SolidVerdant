@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-package dev.tricked.solidverdant.ui.statistics
+package dev.tricked.solidverdant.ui.components
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -17,8 +17,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.Dp
-import dev.tricked.solidverdant.ui.components.GroupedDivider
-import dev.tricked.solidverdant.ui.components.GroupedSection
 import dev.tricked.solidverdant.ui.theme.Dimens
 
 /** Where a row sits in a grouped section built from separate lazy items; decides its corners. */
