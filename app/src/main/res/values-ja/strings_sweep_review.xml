@@ -48,4 +48,14 @@
     <plurals name="sweep_privacy_clear_blocked_message">
         <item quantity="other">今キャッシュを消去すると、これらの変更は削除されます。先にサーバーへ送信し、「同期と復旧」に待機中の変更がなくなってからキャッシュを消去してください。</item>
     </plurals>
+
+    <!-- Sync & recovery -->
+    <plurals name="sweep_sync_discard_title">
+        <item quantity="other">失敗した%1$d件の変更を破棄しますか？</item>
+    </plurals>
+    <plurals name="sweep_sync_discard_message">
+        <item quantity="other">この記録に対する失敗した%1$d件の変更（%2$s）はアップロード待ちから削除され、サーバーには届きません。この操作は元に戻せません。</item>
+    </plurals>
+    <string name="sweep_sync_use_server_title">サーバー版を使用しますか？</string>
+    <string name="sweep_sync_use_server_message">この記録に対するこのデバイスの変更は、サーバーのコピーに置き換えられます。この操作は元に戻せません。</string>
 </resources>

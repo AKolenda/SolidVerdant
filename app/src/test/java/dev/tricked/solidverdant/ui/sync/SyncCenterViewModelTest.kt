@@ -292,6 +292,54 @@ class SyncCenterViewModelTest {
         assertTrue(state.pending.isEmpty())
     }
 
+    @Test
+    fun `a failed timer lists its start and stop as one entry`() = runTest(dispatcher.scheduler) {
+        seedOrg()
+        seedOp("local-timer", OutboxOpType.START, deadLettered = true, error = "Server rejected this change", attempts = 1)
+        seedOp("local-timer", OutboxOpType.STOP, deadLettered = true, error = "Server rejected this change")
+        seedOp("e-pending", OutboxOpType.UPDATE, deadLettered = false)
+
+        val vm = viewModel()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        val state = vm.uiState.first { it.organizationId == ORG && it.failedEntries.isNotEmpty() }
+        val timer = state.failedEntries.single()
+        assertEquals("local-timer", timer.entryId)
+        assertEquals(listOf(OutboxOpType.START, OutboxOpType.STOP), timer.operations.map { it.type })
+        assertEquals("both ops go when the entry is discarded", 2, timer.failedOperations.size)
+        assertEquals(listOf("e-pending"), state.pendingEntries.map { it.entryId })
+        assertEquals("the headline still counts changes", 2, state.failedCount)
+    }
+
+    @Test
+    fun `an entry with a failed and a waiting change is listed once, as failed`() {
+        val groups = groupByEntry(
+            listOf(
+                TimeEntryRepository.SyncOperation("e1", OutboxOpType.UPDATE, TimeEntryRepository.EntrySyncStatus.FAILED, 5, "boom"),
+                TimeEntryRepository.SyncOperation("e1", OutboxOpType.UPDATE, TimeEntryRepository.EntrySyncStatus.PENDING, 0, null),
+            ),
+        )
+        assertEquals(1, groups.size)
+        assertEquals(TimeEntryRepository.EntrySyncStatus.FAILED, groups.single().status)
+        assertEquals("boom", groups.single().error)
+    }
+
+    @Test
+    fun `discard removes every failed op of the entry`() = runTest(dispatcher.scheduler) {
+        seedOrg()
+        seedOp("local-timer", OutboxOpType.START, deadLettered = true, error = "boom")
+        seedOp("local-timer", OutboxOpType.STOP, deadLettered = true, error = "boom")
+        val vm = viewModel()
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.uiState.first { it.failedEntries.isNotEmpty() }
+
+        vm.discard("local-timer").join()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+        assertTrue(vm.uiState.first { it.failedEntries.isEmpty() }.activeRecoveryEntryIds.isEmpty())
+    }
+
     private companion object {
         const val ORG = "org1"
         const val MEMBER = "m1"

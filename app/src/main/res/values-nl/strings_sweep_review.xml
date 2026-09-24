@@ -52,4 +52,16 @@
         <item quantity="one">Als je de cache nu wist, gaat deze wijziging verloren. Stuur die eerst naar de server en wis de cache zodra Synchronisatie en herstel niets meer laat wachten.</item>
         <item quantity="other">Als je de cache nu wist, gaan deze wijzigingen verloren. Stuur ze eerst naar de server en wis de cache zodra Synchronisatie en herstel niets meer laat wachten.</item>
     </plurals>
+
+    <!-- Sync & recovery -->
+    <plurals name="sweep_sync_discard_title">
+        <item quantity="one">%1$d mislukte wijziging verwijderen?</item>
+        <item quantity="other">%1$d mislukte wijzigingen verwijderen?</item>
+    </plurals>
+    <plurals name="sweep_sync_discard_message">
+        <item quantity="one">De mislukte wijziging aan deze registratie (%2$s) wordt uit de uploadwachtrij verwijderd en bereikt de server nooit. Dit kan niet ongedaan worden gemaakt.</item>
+        <item quantity="other">Alle %1$d mislukte wijzigingen aan deze registratie (%2$s) worden uit de uploadwachtrij verwijderd en bereiken de server nooit. Dit kan niet ongedaan worden gemaakt.</item>
+    </plurals>
+    <string name="sweep_sync_use_server_title">Serverversie gebruiken?</string>
+    <string name="sweep_sync_use_server_message">De wijzigingen van dit apparaat aan deze registratie worden vervangen door de versie van de server. Dit kan niet ongedaan worden gemaakt.</string>
 </resources>
