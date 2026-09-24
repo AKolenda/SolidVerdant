@@ -31,6 +31,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -101,6 +102,7 @@ class InboxViewModelTest {
         conflicts: List<TimeEntryRepository.SyncConflict> = emptyList(),
         dismissalDao: InboxDismissalDao = FakeDismissalDao(),
         nowMs: Long = NOW_MS,
+        entriesFlow: kotlinx.coroutines.flow.Flow<List<TimeEntry>> = flowOf(entries),
     ): InboxViewModel {
         val org = Organization(id = "org1", name = "Org", currency = "USD")
         val membership = Membership(id = "m1", role = "member", organization = org)
@@ -115,7 +117,7 @@ class InboxViewModelTest {
         every { settings.longTimerHours } returns flowOf(8)
 
         val repo = mockk<TimeEntryRepository>(relaxed = true)
-        every { repo.observeTimeEntries(any()) } returns flowOf(entries)
+        every { repo.observeTimeEntries(any()) } returns entriesFlow
         every { repo.observeConflicts(any()) } returns flowOf(conflicts)
         every { repo.observeProjects(any()) } returns flowOf(emptyList())
         every { repo.observeTasks(any()) } returns flowOf(emptyList())
@@ -151,6 +153,30 @@ class InboxViewModelTest {
 
         val state = vm.awaitState { !it.isLoading }
         assertFalse("fresh install has not chosen a horizon yet", state.horizonChosen)
+    }
+
+    @Test
+    fun observesRoomOnlyWhileThePaneCollects() = runTest {
+        val store = newStore()
+        val entries = MutableStateFlow<List<TimeEntry>>(emptyList())
+        val vm = buildViewModel(store, entriesFlow = entries)
+        assertEquals("nothing is observed before the pane shows", 0, entries.subscriptionCount.value)
+
+        val pane = backgroundScope.launch { vm.uiState.collect {} }
+        vm.awaitState { !it.isLoading }
+        assertEquals(1, entries.subscriptionCount.value)
+
+        // Leaving the tab stops observation after the grace period, even though the ViewModel lives on.
+        pane.cancel()
+        testScheduler.advanceTimeBy(STOP_GRACE_MS)
+        testScheduler.runCurrent()
+        assertEquals(0, entries.subscriptionCount.value)
+
+        // Coming back resumes from the last state and observes again.
+        val back = backgroundScope.launch { vm.uiState.collect {} }
+        vm.awaitState { !it.isLoading }
+        assertEquals(1, entries.subscriptionCount.value)
+        back.cancel()
     }
 
     @Test
@@ -320,6 +346,7 @@ class InboxViewModelTest {
         const val NOW_MS = 1_752_300_000_000L // 2025-07-12T06:00Z
         const val FAR_FUTURE_NOW_MS = NOW_MS + 60L * 24 * 3600 * 1000 // +60 days (> 45-day retention)
         const val NINE_HOURS_SECONDS = 9L * 3600
+        const val STOP_GRACE_MS = 6_000L
         const val DAY_A_START = 1_752_138_000_000L // 2025-07-10T09:00Z
         const val DAY_B_START = 1_752_224_400_000L // 2025-07-11T09:00Z
         const val DAY_B_START_OF_DAY = 1_752_192_000_000L // 2025-07-11T00:00Z
