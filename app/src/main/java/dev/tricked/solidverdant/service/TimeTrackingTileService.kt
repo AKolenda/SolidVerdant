@@ -30,6 +30,7 @@ import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
+import dev.tricked.solidverdant.data.repository.TimerCommands
 import dev.tricked.solidverdant.ui.tile.ProjectSelectionActivity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -69,6 +70,10 @@ class TimeTrackingTileService : TileService() {
     @Inject
     lateinit var settingsDataStore: SettingsDataStore
 
+    /** Starts and stops go through Room + the outbox, like Track (see [TimerCommands]). */
+    @Inject
+    lateinit var timerCommands: TimerCommands
+
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val isProcessing = AtomicBoolean(false)
     private val isUpdating = AtomicBoolean(false)
@@ -81,7 +86,10 @@ class TimeTrackingTileService : TileService() {
 
     companion object {
         private const val NOTIFICATION_CHANNEL_ID = "time_tracking_errors"
-        private const val NOTIFICATION_ID = 1001
+
+        // Must differ from the tracking notification (1001) and its error (1002): posting a tile
+        // error under 1001 replaced the running-timer notification and its Stop action.
+        internal const val NOTIFICATION_ID = 1003
 
         // Actions
         const val ACTION_START_TRACKING = "dev.tricked.solidverdant.ACTION_START_TRACKING"
@@ -109,7 +117,6 @@ class TimeTrackingTileService : TileService() {
         private const val PREF_LAST_START_TIME = "last_start_time"
 
         private const val OPTIMISTIC_TIMEOUT_MS = 30_000L
-        private const val NETWORK_TIMEOUT_MS = 3_000L
         private const val TILE_UPDATE_DEBOUNCE_MS = 500L
         private const val NETWORK_FETCH_TIMEOUT_MS = 5_000L
     }
@@ -195,42 +202,20 @@ class TimeTrackingTileService : TileService() {
                     return@launch
                 }
 
-                // Try to get active entry from network
-                val activeEntry = try {
-                    withTimeoutOrNull(NETWORK_TIMEOUT_MS) {
-                        authRepository.getActiveTimeEntry().getOrNull()
+                // Stop whatever timer is running (Room first, so a timer whose START has not
+                // synced stops offline; otherwise the server's timer). Nothing running -> start.
+                val stop = timerCommands.stop(organizationId = null, expectedStart = null)
+                when (stop.getOrNull()) {
+                    is TimerCommands.StopResult.Stopped -> onStopped()
+                    null -> {
+                        // Offline and Room knows no timer: nothing can be stopped from here.
+                        Timber.w(stop.exceptionOrNull(), "Could not determine the running timer")
+                        showProjectSelection()
                     }
-                } catch (e: Exception) {
-                    Timber.w(e, "Network failed, checking cache")
-                    null
-                }
-
-                when {
-                    activeEntry != null -> {
-                        // Network success - stop using real entry
-                        stopTracking(activeEntry)
-                    }
-
                     else -> {
-                        // Network failed or no active entry. The cache is written only by this
-                        // tile, so a stop made in the app leaves a stale id behind; Room already
-                        // knows that entry ended, and stopping it again would only fail.
-                        val cachedEntry = getCachedEntryForStop()?.takeIf { cached ->
-                            timeEntryRepository.isEntryRunning(cached.entryId).also { running ->
-                                if (!running) {
-                                    Timber.d("Dropping cached entry that is no longer running")
-                                    clearCachedEntry()
-                                }
-                            }
-                        }
-                        if (cachedEntry != null) {
-                            // We have cached entry data - try to stop using it
-                            Timber.d("Using cached entry for stop")
-                            stopTrackingWithCache(cachedEntry)
-                        } else {
-                            // No active entry and no cache - show project selection
-                            showProjectSelection()
-                        }
+                        // The tile's display cache may still name a timer that ended elsewhere.
+                        clearCachedEntry()
+                        showProjectSelection()
                     }
                 }
             } catch (e: Exception) {
@@ -245,53 +230,49 @@ class TimeTrackingTileService : TileService() {
         Timber.d("Starting time entry from tile")
         serviceScope.launch {
             try {
-                Timber.d("Fetching memberships and user info...")
                 val membership = authRepository.getCurrentMembership()
                 val user = authRepository.getCurrentUser().getOrNull()
+                val account = if (membership != null && user != null) {
+                    TimerCommands.Account(membership.organizationId, membership.id, user.id)
+                } else {
+                    // Offline: the cached account is enough to start locally.
+                    timerCommands.currentAccount()
+                }
 
-                if (membership == null || user == null) {
-                    Timber.e("Missing membership or user - membership=$membership, user=$user")
+                if (account == null) {
+                    Timber.e("Missing membership or user")
                     clearOptimisticState()
                     showNotification("Failed to start tracking", "Missing user data")
                     refreshTile()
                     return@launch
                 }
 
-                Timber.d("Starting time entry with orgId=${membership.organizationId}, memberId=${membership.id}, userId=${user.id}")
+                // Room + queued START (or an already running timer), so Track shows it at once
+                // and it survives being offline.
+                val result = timerCommands.start(account, projectId, taskId, description)
+                val entry = result.entry
+                Timber.d("Tracking started from tile")
+                clearOptimisticState()
+                val startedHere = result is TimerCommands.StartResult.Started
+                val shownProject = projectName.takeIf { startedHere || entry.projectId == projectId }
+                val shownTask = taskName.takeIf { startedHere || entry.taskId == taskId }
+                cacheActiveEntry(entry, shownProject, shownTask)
 
-                val result = authRepository.startTimeEntry(
-                    organizationId = membership.organizationId,
-                    memberId = membership.id,
-                    userId = user.id,
-                    projectId = projectId,
-                    taskId = taskId,
-                    description = description,
+                // Start persistent notification
+                TimeTrackingNotificationService.startTracking(
+                    context = this@TimeTrackingTileService,
+                    startTime = Instant.parse(entry.start),
+                    projectName = shownProject,
+                    taskName = shownTask,
+                    description = entry.description?.takeIf { it.isNotBlank() },
+                    projectId = entry.projectId,
+                    taskId = entry.taskId,
+                    organizationId = entry.organizationId,
                 )
 
-                result.onSuccess { entry ->
-                    Timber.d("Tracking started: ${entry.id}")
-                    clearOptimisticState()
-                    cacheActiveEntry(entry, projectName, taskName)
-
-                    // Start persistent notification
-                    TimeTrackingNotificationService.startTracking(
-                        context = this@TimeTrackingTileService,
-                        startTime = Instant.parse(entry.start),
-                        projectName = projectName,
-                        taskName = taskName,
-                        description = description.takeIf { it.isNotBlank() },
-                        projectId = entry.projectId,
-                        taskId = entry.taskId,
-                        organizationId = entry.organizationId,
-                    )
-
-                    refreshTile()
-                }.onFailure { error ->
-                    Timber.e(error, "Failed to start tracking")
-                    clearOptimisticState()
-                    showNotification("Failed to start tracking", error.message ?: "Unknown error")
-                    refreshTile()
-                }
+                refreshTile()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Timber.e(e, "Error starting tracking")
                 clearOptimisticState()
@@ -301,94 +282,21 @@ class TimeTrackingTileService : TileService() {
         }
     }
 
-    private suspend fun stopTracking(activeEntry: TimeEntry) {
-        // Optimistic update
-        setOptimisticStopping()
-        updateTileImmediate()
+    /** The timer was stopped locally with a queued STOP; reconcile the tile and notification. */
+    private suspend fun onStopped() {
+        Timber.d("Tracking stopped")
+        clearOptimisticState()
+        clearCachedEntry()
 
-        try {
-            val result = authRepository.stopTimeEntry(
-                organizationId = activeEntry.organizationId,
-                timeEntryId = activeEntry.id,
-                userId = activeEntry.userId,
-                startTime = activeEntry.start,
-            )
-
-            result.onSuccess {
-                Timber.d("Tracking stopped")
-                clearOptimisticState()
-                clearCachedEntry()
-
-                // Update notification state based on settings
-                val alwaysShow = settingsDataStore.alwaysShowNotification.first()
-                if (alwaysShow) {
-                    TimeTrackingNotificationService.showIdle(this@TimeTrackingTileService)
-                } else {
-                    TimeTrackingNotificationService.hide(this@TimeTrackingTileService)
-                }
-
-                refreshTile()
-            }.onFailure { error ->
-                Timber.e(error, "Failed to stop tracking")
-                clearOptimisticState()
-                showNotification("Failed to stop tracking", error.message ?: "Unknown error")
-                refreshTile()
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Timber.e(e, "Error stopping tracking")
-            clearOptimisticState()
-            showNotification("Failed to stop tracking", e.message ?: "Unknown error")
-            refreshTile()
+        // Update notification state based on settings
+        val alwaysShow = settingsDataStore.alwaysShowNotification.first()
+        if (alwaysShow) {
+            TimeTrackingNotificationService.showIdle(this@TimeTrackingTileService)
+        } else {
+            TimeTrackingNotificationService.hide(this@TimeTrackingTileService)
         }
-    }
 
-    /**
-     * Stop tracking using cached entry data (for when network check failed but we have cache)
-     */
-    private suspend fun stopTrackingWithCache(cached: CachedEntry) {
-        // Optimistic update
-        setOptimisticStopping()
-        updateTileImmediate()
-
-        try {
-            val result = authRepository.stopTimeEntry(
-                organizationId = cached.organizationId,
-                timeEntryId = cached.entryId,
-                userId = cached.userId,
-                startTime = cached.startTime,
-            )
-
-            result.onSuccess {
-                Timber.d("Tracking stopped (from cache)")
-                clearOptimisticState()
-                clearCachedEntry()
-
-                // Update notification state based on settings
-                val alwaysShow = settingsDataStore.alwaysShowNotification.first()
-                if (alwaysShow) {
-                    TimeTrackingNotificationService.showIdle(this@TimeTrackingTileService)
-                } else {
-                    TimeTrackingNotificationService.hide(this@TimeTrackingTileService)
-                }
-
-                refreshTile()
-            }.onFailure { error ->
-                Timber.e(error, "Failed to stop tracking (from cache)")
-                clearOptimisticState()
-                // Don't clear cache on failure - entry might still be active
-                showNotification("Failed to stop tracking", error.message ?: "Unknown error")
-                refreshTile()
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Timber.e(e, "Error stopping tracking (from cache)")
-            clearOptimisticState()
-            showNotification("Failed to stop tracking", e.message ?: "Unknown error")
-            refreshTile()
-        }
+        refreshTile()
     }
 
     @VisibleForTesting
@@ -455,7 +363,11 @@ class TimeTrackingTileService : TileService() {
                     }
 
                     result.isSuccess -> {
-                        val activeEntry = result.getOrNull()
+                        // Room's queued work wins over what the server has not seen yet: a timer
+                        // stopped here stays stopped until its STOP syncs, and one started here
+                        // (START still queued) stays active although the server knows nothing.
+                        val activeEntry = result.getOrNull()?.takeUnless { timeEntryRepository.isStoppingLocally(it.id) }
+                            ?: timerCommands.queuedLocalTimer()
                         if (activeEntry != null) {
                             val entryChanged = activeEntry.id != cachedId ||
                                 activeEntry.projectId != prefs.getString(
@@ -710,19 +622,6 @@ class TimeTrackingTileService : TileService() {
             remove(PREF_LAST_START_TIME)
         }
     }
-
-    /**
-     * Get cached entry for offline stop. Returns null if cache is incomplete.
-     */
-    private fun getCachedEntryForStop(): CachedEntry? {
-        val entryId = prefs.getString(PREF_LAST_ENTRY_ID, null) ?: return null
-        val orgId = prefs.getString(PREF_LAST_ORG_ID, null) ?: return null
-        val userId = prefs.getString(PREF_LAST_USER_ID, null) ?: return null
-        val startTime = prefs.getString(PREF_LAST_START_TIME, null) ?: return null
-        return CachedEntry(entryId, orgId, userId, startTime)
-    }
-
-    private data class CachedEntry(val entryId: String, val organizationId: String, val userId: String, val startTime: String)
 
     private suspend fun loadNames(entry: TimeEntry): Pair<String?, String?> {
         val cachedProject = prefs.getString(PREF_LAST_PROJECT_NAME, null)

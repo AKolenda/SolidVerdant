@@ -17,6 +17,7 @@ import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.local.db.RateLimitMarker
 import dev.tricked.solidverdant.data.local.db.SyncState
 import dev.tricked.solidverdant.data.local.db.toEntity
+import dev.tricked.solidverdant.data.local.db.toModel
 import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.Organization
 import dev.tricked.solidverdant.data.model.TimeEntry
@@ -76,6 +77,9 @@ class SyncWorkerTest {
 
     @After fun teardown() = db.close()
 
+    /** Follow-up runs the worker scheduled for itself (delay in ms), e.g. after a Retry-After. */
+    private val followUps = mutableListOf<Long>()
+
     private fun buildWorker(status: SyncStatusReporter = SyncStatusReporter(), remoteDataSource: RemoteDataSource = remote) =
         TestListenableWorkerBuilder<SyncWorker>(ApplicationProvider.getApplicationContext())
             .setWorkerFactory(object : androidx.work.WorkerFactory() {
@@ -94,6 +98,7 @@ class SyncWorkerTest {
                     json,
                     clock,
                     status,
+                    { delayMs -> followUps += delayMs },
                 )
             }).build()
 
@@ -456,12 +461,115 @@ class SyncWorkerTest {
                 ),
             )
 
-            assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+            // A rate limit schedules its own follow-up from Retry-After instead of WorkManager's
+            // exponential backoff; the other failures retry through WorkManager.
+            val expected = if (code == 429) ListenableWorker.Result.success() else ListenableWorker.Result.retry()
+            assertEquals(expected, buildWorker().doWork())
             val stored = db.outboxDao().peekAll().single { it.timeEntryId == entryId }
             assertEquals(expectedAttempts, stored.attemptCount)
             assertEquals(false, stored.deadLettered)
             db.outboxDao().delete(stored)
         }
+        assertEquals(listOf(SyncWorker.DEFAULT_RATE_LIMIT_WAIT_SECONDS * 1_000L), followUps)
+    }
+
+    @Test fun rate_limit_halts_the_run_and_schedules_the_next_one_from_retry_after() = runTest {
+        listOf("server-a", "server-b").forEachIndexed { index, id ->
+            db.outboxDao().insert(
+                OutboxEntity(
+                    opType = OutboxOpType.DELETE,
+                    organizationId = "org1",
+                    timeEntryId = id,
+                    createdAtMs = index + 1L,
+                    payloadJson = "{}",
+                ),
+            )
+        }
+        var deleteAttempts = 0
+        val syncRemote = mockk<RemoteDataSource>()
+        coEvery { syncRemote.deleteTimeEntry(any(), any()) } coAnswers {
+            deleteAttempts += 1
+            Result.failure(rateLimitedWithRetryAfter("30"))
+        }
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker(remoteDataSource = syncRemote).doWork())
+
+        assertEquals("Every further request would be refused too", 1, deleteAttempts)
+        assertEquals(listOf(30_000L), followUps)
+        assertEquals(listOf(0, 0), db.outboxDao().peekAll().map { it.attemptCount })
+    }
+
+    @Test fun rate_limit_wait_is_clamped() = runTest {
+        remote.writeError = rateLimitedWithRetryAfter("86400")
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.DELETE,
+                organizationId = "org1",
+                timeEntryId = "server-1",
+                createdAtMs = 1L,
+                payloadJson = "{}",
+            ),
+        )
+
+        buildWorker().doWork()
+
+        assertEquals(listOf(SyncWorker.MAX_RATE_LIMIT_WAIT_SECONDS * 1_000L), followUps)
+    }
+
+    @Test fun expired_session_waits_for_sign_in_without_spending_the_retry_budget() = runTest {
+        remote.writeError = httpException(401, """{"message":"Unauthenticated."}""")
+        listOf("server-a", "server-b").forEachIndexed { index, id ->
+            db.outboxDao().insert(
+                OutboxEntity(
+                    opType = OutboxOpType.DELETE,
+                    organizationId = "org1",
+                    timeEntryId = id,
+                    createdAtMs = index + 1L,
+                    payloadJson = "{}",
+                ),
+            )
+        }
+
+        repeat(SyncWorker.MAX_ATTEMPTS + 1) {
+            assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+        }
+
+        val stored = db.outboxDao().peekAll()
+        assertEquals(2, stored.size)
+        assertTrue(stored.none { it.deadLettered })
+        assertTrue(stored.all { it.attemptCount == 0 })
+    }
+
+    @Test fun transient_failures_keep_retrying_within_the_retry_window() = runTest {
+        remote.failNextWrite = true
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.DELETE,
+                organizationId = "org1",
+                timeEntryId = "server-1",
+                createdAtMs = 1L,
+                attemptCount = SyncWorker.MAX_ATTEMPTS + 3,
+                payloadJson = "{}",
+            ),
+        )
+        nowMs = SyncWorker.RETRY_WINDOW_MS - 1
+
+        assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+
+        val stored = db.outboxDao().peekAll().single()
+        assertFalse("An outage shorter than the retry window must not dead-letter work", stored.deadLettered)
+        assertEquals(SyncWorker.MAX_ATTEMPTS + 4, stored.attemptCount)
+    }
+
+    private fun rateLimitedWithRetryAfter(seconds: String): HttpException {
+        val raw = okhttp3.Response.Builder()
+            .code(429)
+            .message("Too Many Requests")
+            .protocol(okhttp3.Protocol.HTTP_1_1)
+            .request(okhttp3.Request.Builder().url("http://localhost/").build())
+            .header("Retry-After", seconds)
+            .build()
+        return HttpException(Response.error<Unit>("""{"message":"Too Many Attempts."}""".toResponseBody(), raw))
     }
 
     @Test fun repeated_rate_limits_never_dead_letter_the_change() = runTest {
@@ -477,12 +585,13 @@ class SyncWorkerTest {
         )
 
         repeat(SyncWorker.MAX_ATTEMPTS + 1) {
-            assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+            assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
         }
 
         val stored = db.outboxDao().peekAll().single()
         assertFalse(stored.deadLettered)
         assertTrue(db.outboxDao().peekPending().contains(stored))
+        assertEquals(SyncWorker.MAX_ATTEMPTS + 1, followUps.size)
     }
 
     @Test fun repeated_rate_limits_during_conflict_preflight_never_dead_letter_the_change() = runTest {
@@ -532,8 +641,9 @@ class SyncWorkerTest {
         }
 
         repeat(SyncWorker.MAX_ATTEMPTS + 1) {
-            assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+            assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
         }
+        assertEquals(SyncWorker.MAX_ATTEMPTS + 1, followUps.size)
 
         val stored = db.outboxDao().peekAll().single()
         assertFalse(stored.deadLettered)
@@ -546,6 +656,7 @@ class SyncWorkerTest {
 
     @Test fun transient_failures_are_dead_lettered_after_attempt_cap() = runTest {
         remote.failNextWrite = true // IOException -> RETRY
+        remote.active = TimeEntry(id = "server-1", userId = "u1", organizationId = "org1", start = "2026-07-07T08:00:00Z")
         db.outboxDao().insert(
             OutboxEntity(
                 opType = OutboxOpType.STOP,
@@ -556,6 +667,8 @@ class SyncWorkerTest {
                 payloadJson = json.encodeToString(StopPayload("u1", "2026-07-07T08:00:00Z")),
             ),
         )
+        // The attempt cap applies only once the change has been retrying for the whole window.
+        nowMs = 1L + SyncWorker.RETRY_WINDOW_MS
 
         val result = buildWorker().doWork()
         // Cap reached: dead-lettered instead of endless retry, worker completes successfully.
@@ -612,7 +725,9 @@ class SyncWorkerTest {
                 timeEntryId = "local-1",
                 createdAtMs = 1L,
                 attemptCount = 1,
-                payloadJson = json.encodeToString(StartPayload("m1", "u1", null, null, "work", emptyList())),
+                payloadJson = json.encodeToString(
+                    StartPayload("m1", "u1", null, null, "work", emptyList(), start = "2026-07-07T08:00:00Z"),
+                ),
             ),
         )
 
@@ -642,6 +757,7 @@ class SyncWorkerTest {
                 payloadJson = json.encodeToString(StopPayload("u1", local.start)),
             ),
         )
+        remote.active = local.copy(end = null)
         remote.stopResult = { local.copy(duration = 3600) }
 
         assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
@@ -681,6 +797,7 @@ class SyncWorkerTest {
             ),
         )
         remote.timeEntriesQueryValidator = { java.io.IOException("history endpoint unavailable") }
+        remote.active = serverBase
         remote.stopResult = { stopped }
 
         assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
@@ -712,6 +829,7 @@ class SyncWorkerTest {
                 payloadJson = json.encodeToString(StopPayload("u1", localConflict.start, localConflict.end!!)),
             ),
         )
+        remote.active = localConflict.copy(description = "theirs", end = null)
         remote.stopResult = {
             localConflict.copy(description = "theirs", end = localConflict.end, duration = 86_400)
         }
@@ -789,6 +907,7 @@ class SyncWorkerTest {
             ),
         )
         remote.entries = listOf(serverActive)
+        remote.active = serverActive
         remote.memberships = listOf(Membership("m1", "member", Organization("org1", "Org", "USD")))
         remote.updateError = IllegalStateException("metadata rejected")
         remote.stopResult = { request -> serverActive.copy(end = request.end, duration = 3_600) }
@@ -1074,6 +1193,7 @@ class SyncWorkerTest {
                 ),
             ),
         )
+        remote.active = local.copy(end = null)
 
         assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
         assertEquals("2020-01-01T10:00:00Z", remote.lastEndTime)
@@ -1306,7 +1426,12 @@ class SyncWorkerTest {
         )
         val server = local.copy(id = "server-42", end = null, description = "initial")
         val syncRemote = mockk<RemoteDataSource>()
-        coEvery { syncRemote.getActiveTimeEntry() } returns Result.success(null)
+        // Idle for both START attempts; the second START's timer is running when STOP checks.
+        coEvery { syncRemote.getActiveTimeEntry() } returnsMany listOf(
+            Result.success(null),
+            Result.success(null),
+            Result.success(server),
+        )
         coEvery {
             syncRemote.startTimeEntry(any(), any(), any(), any(), any(), any(), any())
         } returnsMany listOf(Result.failure(java.io.IOException("offline")), Result.success(server))
@@ -1370,7 +1495,11 @@ class SyncWorkerTest {
             end = null,
         )
         val syncRemote = mockk<RemoteDataSource>()
-        coEvery { syncRemote.getActiveTimeEntry() } returns Result.success(null)
+        coEvery { syncRemote.getActiveTimeEntry() } returnsMany listOf(
+            Result.success(null),
+            Result.success(null),
+            Result.success(server),
+        )
         coEvery {
             syncRemote.startTimeEntry(any(), any(), any(), any(), any(), any(), any())
         } returnsMany listOf(
@@ -1379,13 +1508,14 @@ class SyncWorkerTest {
         )
         coEvery { syncRemote.stopTimeEntry(any(), any(), any(), any(), any()) } returns Result.success(server.copy(end = end))
 
-        assertEquals(ListenableWorker.Result.retry(), buildWorker(remoteDataSource = syncRemote).doWork())
+        assertEquals(ListenableWorker.Result.success(), buildWorker(remoteDataSource = syncRemote).doWork())
 
         val deferred = db.outboxDao().peekAll()
         assertEquals(listOf(OutboxOpType.START, OutboxOpType.STOP), deferred.map { it.opType })
         assertEquals(listOf(0, 0), deferred.map { it.attemptCount })
         assertTrue(RateLimitMarker.matches(deferred.first().lastError))
         coVerify(exactly = 0) { syncRemote.stopTimeEntry(any(), any(), any(), any(), any()) }
+        assertEquals(1, followUps.size)
 
         assertEquals(ListenableWorker.Result.success(), buildWorker(remoteDataSource = syncRemote).doWork())
 
@@ -1443,6 +1573,7 @@ class SyncWorkerTest {
             syncRemote.startTimeEntry(any(), any(), any(), any(), any(), any(), any())
         } returns Result.failure(java.io.IOException("still offline"))
         coEvery { syncRemote.deleteTimeEntry(any(), any()) } returns Result.success(Unit)
+        nowMs = 1L + SyncWorker.RETRY_WINDOW_MS
 
         assertEquals(ListenableWorker.Result.success(), buildWorker(remoteDataSource = syncRemote).doWork())
 
@@ -1528,11 +1659,11 @@ class SyncWorkerTest {
         assertTrue(db.outboxDao().peekAll().isEmpty())
     }
 
-    // SV-025: a dead-lettered UPDATE that is revived (deadLettered reset for retry) but has since
-    // been superseded by a newer synced state for the same entry must be dropped as Outcome.Superseded
-    // rather than replayed over the newer data.
-    @Test fun superseded_revived_update_is_dropped_without_server_call() = runTest {
-        val newer = TimeEntry(
+    // SV-025: a parked (dead-lettered) UPDATE must never be replayed over a newer edit. The newer
+    // full-content UPDATE retires it when it applies, so a later "Retry all" has nothing stale to
+    // revive (this replaced the updatedAt heuristic that also dropped legitimate queued edits).
+    @Test fun applied_update_retires_older_parked_writes_so_retry_cannot_revert_it() = runTest {
+        val entry = TimeEntry(
             id = "server-1",
             userId = "u1",
             organizationId = "org1",
@@ -1540,32 +1671,266 @@ class SyncWorkerTest {
             end = "2026-07-07T09:00:00Z",
             description = "newer",
         )
-        // The entry already reflects newer, already-synced state (updatedAt is after the stale
-        // op's createdAtMs below), so countNewerPending/newerSynced must classify the revived
-        // UPDATE as superseded.
-        db.timeEntryDao().upsert(newer.toEntity(updatedAt = 100L, syncState = SyncState.SYNCED))
+        db.timeEntryDao().upsert(entry.toEntity(updatedAt = 3L, syncState = SyncState.PENDING))
         db.outboxDao().insert(
             OutboxEntity(
                 opType = OutboxOpType.UPDATE,
                 organizationId = "org1",
-                timeEntryId = "server-1",
-                createdAtMs = 1L, // older than the entry's updatedAt = 100L above
-                // Already revived: deadLettered reset to false by resetForRetry, so it re-enters
-                // peekPending() and must be re-evaluated for staleness.
-                deadLettered = false,
+                timeEntryId = entry.id,
+                createdAtMs = 1L,
+                deadLettered = true,
                 payloadJson = json.encodeToString(
-                    UpdatePayload("u1", "2026-07-07T08:00:00Z", "2026-07-07T09:00:00Z", "stale", null, null, true, emptyList()),
+                    UpdatePayload("u1", entry.start, entry.end, "stale", null, null, true, emptyList()),
+                ),
+            ),
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = entry.id,
+                createdAtMs = 2L,
+                payloadJson = json.encodeToString(
+                    UpdatePayload("u1", entry.start, entry.end, "newer", null, null, false, emptyList()),
                 ),
             ),
         )
 
-        val result = buildWorker().doWork()
-        assertEquals(ListenableWorker.Result.success(), result)
-        // Dropped outright: no server call was made to overwrite the newer state.
-        assertTrue(db.outboxDao().peekAll().isEmpty())
-        val stored = db.timeEntryDao().getById("server-1")
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        assertTrue("The parked stale UPDATE is obsolete once the newer one applied", db.outboxDao().peekAll().isEmpty())
+        assertFalse(repository().prepareRetryAll("org1"))
+        assertEquals(listOf("newer"), remote.updated.map { it.description })
+        val stored = db.timeEntryDao().getById(entry.id)
         assertEquals("newer", stored?.description)
         assertEquals(SyncState.SYNCED, stored?.syncState)
+    }
+
+    @Test fun start_success_keeps_a_queued_edit_visible_and_a_later_retry_still_applies_it() = runTest {
+        val repository = repository()
+        val local = repository.startEntry("org1", "m1", "u1", null, null, "initial", emptyList())
+        repository.updateEntry(local.copy(description = "edited offline"), emptyList())
+        val syncRemote = mockk<RemoteDataSource>()
+        val server = local.copy(id = "server-1", description = "initial")
+        coEvery { syncRemote.getActiveTimeEntry() } returns Result.success(null)
+        coEvery { syncRemote.startTimeEntry(any(), any(), any(), any(), any(), any(), any()) } returns Result.success(server)
+        coEvery { syncRemote.updateTimeEntry(any(), any(), any()) } returnsMany listOf(
+            Result.failure(IOException("dropped")),
+            Result.success(server.copy(description = "edited offline")),
+        )
+        nowMs = 100L
+
+        assertEquals(ListenableWorker.Result.retry(), buildWorker(remoteDataSource = syncRemote).doWork())
+
+        val afterStart = requireNotNull(db.timeEntryDao().getById(server.id))
+        assertEquals("The queued edit must stay visible while it waits", "edited offline", afterStart.description)
+        assertEquals(SyncState.PENDING, afterStart.syncState)
+        assertEquals(listOf(OutboxOpType.UPDATE), db.outboxDao().peekAll().map { it.opType })
+
+        nowMs = 200L
+        assertEquals(ListenableWorker.Result.success(), buildWorker(remoteDataSource = syncRemote).doWork())
+
+        coVerify(exactly = 2) { syncRemote.updateTimeEntry("org1", match { it.description == "edited offline" }, any()) }
+        val synced = requireNotNull(db.timeEntryDao().getById(server.id))
+        assertEquals("edited offline", synced.description)
+        assertEquals(SyncState.SYNCED, synced.syncState)
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+    }
+
+    @Test fun worker_commits_and_sends_a_delete_whose_undo_window_was_lost() = runTest {
+        val entry =
+            TimeEntry(id = "server-1", userId = "u1", organizationId = "org1", start = "2026-07-07T08:00:00Z", end = "2026-07-07T09:00:00Z")
+        db.timeEntryDao().upsert(entry.toEntity(updatedAt = 1L, syncState = SyncState.SYNCED))
+        repository().softDeleteLocal(entry)
+        remote.entries = listOf(entry)
+        remote.memberships = listOf(Membership("m1", "member", Organization("org1", "Org", "USD")))
+        nowMs = 1L + dev.tricked.solidverdant.data.repository.SoftDeleteCommitter.ORPHANED_SOFT_DELETE_AGE_MS + 1
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        assertEquals(listOf(entry.id), remote.deleted)
+        assertNull(db.timeEntryDao().getById(entry.id))
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+    }
+
+    @Test fun start_sends_the_tags_and_billable_flag_chosen_on_start() = runTest {
+        repository().startEntry("org1", "m1", "u1", null, null, "tagged", listOf("tag-1"), billable = true)
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        assertEquals(listOf("tag-1"), remote.lastStartTagIds)
+        assertEquals(true, remote.lastStartBillable)
+        assertEquals(listOf("tag-1"), db.timeEntryDao().tagIdsFor("server-1"))
+    }
+
+    @Test fun start_does_not_adopt_an_unrelated_running_timer() = runTest {
+        val repository = repository()
+        val local = repository.startEntry("org1", "m1", "u1", null, null, "offline timer", emptyList())
+        remote.active = TimeEntry(
+            id = "web-timer",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2020-01-01T09:30:00Z",
+            description = "started on the web",
+        )
+        remote.startResult = { it.copy(id = "server-own") }
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        assertEquals("A queued START must POST instead of taking over another timer", 1, remote.started.size)
+        assertEquals(local.start, remote.lastStartTime)
+        assertNull(db.timeEntryDao().getById("web-timer"))
+        assertEquals("offline timer", db.timeEntryDao().getById("server-own")?.description)
+    }
+
+    @Test fun stop_for_an_entry_already_stopped_elsewhere_keeps_the_server_end() = runTest {
+        val staleRunning = TimeEntry(
+            id = "server-1",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = null,
+        )
+        db.timeEntryDao().upsert(staleRunning.toEntity(updatedAt = 1L, syncState = SyncState.SYNCED))
+        repository().stopEntry(staleRunning, "u1")
+        // The timer was stopped on the web long ago; the account has no running timer now.
+        remote.active = null
+        val webStopped = staleRunning.copy(end = "2026-07-07T08:30:00Z", duration = 1_800)
+        remote.entries = listOf(webStopped)
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        assertTrue("The stale stop must not overwrite the real end", remote.stopped.isEmpty())
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+        assertEquals(SyncState.SYNCED, db.timeEntryDao().getById(staleRunning.id)?.syncState)
+
+        nowMs += 10
+        assertTrue(repository().refreshAll("org1", "m1").isSuccess)
+        assertEquals(webStopped.end, db.timeEntryDao().getById(staleRunning.id)?.end)
+    }
+
+    @Test fun conflict_capture_keeps_a_queued_stop_so_the_server_timer_still_ends() = runTest {
+        val serverRunning = TimeEntry(
+            id = "server-1",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = null,
+            description = "before",
+        )
+        val repository = repository()
+        db.timeEntryDao().upsert(serverRunning.toEntity(updatedAt = 1L, syncState = SyncState.SYNCED))
+        repository.stopEntryWithEdits(serverRunning, "u1", serverRunning.copy(description = "mine"), emptyList())
+        remote.entries = listOf(serverRunning.copy(description = "web edit"))
+        remote.active = serverRunning.copy(description = "web edit")
+        remote.memberships = listOf(Membership("m1", "member", Organization("org1", "Org", "USD")))
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        assertEquals(SyncState.CONFLICT, db.timeEntryDao().getById(serverRunning.id)?.syncState)
+        assertEquals("The STOP must survive the metadata conflict", listOf(serverRunning.id), remote.stopped)
+        assertTrue(remote.updated.isEmpty())
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+    }
+
+    @Test fun transient_stop_failure_holds_back_the_later_edit_so_the_corrected_end_wins() = runTest {
+        val entry = TimeEntry(
+            id = "server-1",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T10:00:00Z",
+        )
+        db.timeEntryDao().upsert(entry.toEntity(updatedAt = 1L, syncState = SyncState.PENDING))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.STOP,
+                organizationId = "org1",
+                timeEntryId = entry.id,
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(StopPayload("u1", entry.start, "2026-07-07T10:00:00Z")),
+            ),
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = entry.id,
+                createdAtMs = 2L,
+                payloadJson = json.encodeToString(
+                    UpdatePayload("u1", entry.start, "2026-07-07T09:15:00Z", "corrected", null, null, false, emptyList()),
+                ),
+            ),
+        )
+        val syncRemote = mockk<RemoteDataSource>()
+        coEvery { syncRemote.getActiveTimeEntry() } returns Result.success(entry.copy(end = null))
+        coEvery { syncRemote.stopTimeEntry(any(), any(), any(), any(), any()) } returnsMany listOf(
+            Result.failure(IOException("flaky")),
+            Result.success(entry),
+        )
+        coEvery { syncRemote.updateTimeEntry(any(), any(), any()) } coAnswers { Result.success(secondArg()) }
+
+        assertEquals(ListenableWorker.Result.retry(), buildWorker(remoteDataSource = syncRemote).doWork())
+        coVerify(exactly = 0) { syncRemote.updateTimeEntry(any(), any(), any()) }
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker(remoteDataSource = syncRemote).doWork())
+
+        io.mockk.coVerifyOrder {
+            syncRemote.stopTimeEntry(any(), entry.id, any(), any(), any())
+            syncRemote.updateTimeEntry(any(), match { it.end == "2026-07-07T09:15:00Z" }, any())
+        }
+        assertEquals("2026-07-07T09:15:00Z", db.timeEntryDao().getById(entry.id)?.end)
+    }
+
+    @Test fun deferred_stop_holds_back_a_later_start_of_another_entry() = runTest {
+        val running = TimeEntry(id = "server-1", userId = "u1", organizationId = "org1", start = "2026-07-07T08:00:00Z")
+        db.timeEntryDao().upsert(running.toEntity(updatedAt = 1L, syncState = SyncState.SYNCED))
+        val repository = repository()
+        repository.stopEntry(running, "u1")
+        repository.startEntry("org1", "m1", "u1", null, null, "next", emptyList())
+        val syncRemote = mockk<RemoteDataSource>()
+        coEvery { syncRemote.getActiveTimeEntry() } returns Result.success(running)
+        coEvery { syncRemote.stopTimeEntry(any(), any(), any(), any(), any()) } returns Result.failure(IOException("flaky"))
+
+        assertEquals(ListenableWorker.Result.retry(), buildWorker(remoteDataSource = syncRemote).doWork())
+
+        coVerify(exactly = 0) { syncRemote.startTimeEntry(any(), any(), any(), any(), any(), any(), any()) }
+        assertEquals(listOf(OutboxOpType.STOP, OutboxOpType.START), db.outboxDao().peekAll().map { it.opType })
+        assertEquals(listOf(1, 0), db.outboxDao().peekAll().map { it.attemptCount })
+    }
+
+    @Test fun own_stop_does_not_turn_a_retried_edit_into_a_false_conflict() = runTest {
+        val serverRunning = TimeEntry(
+            id = "server-1",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = null,
+            description = "before",
+        )
+        val repository = repository()
+        db.timeEntryDao().upsert(serverRunning.toEntity(updatedAt = 1L, syncState = SyncState.SYNCED))
+        repository.stopEntry(serverRunning, "u1")
+        val stopped = requireNotNull(db.timeEntryDao().getById(serverRunning.id))
+        repository.updateEntry(stopped.toModel(emptyList()).copy(description = "after stop"), emptyList())
+        remote.entries = listOf(serverRunning)
+        remote.active = serverRunning
+        remote.memberships = listOf(Membership("m1", "member", Organization("org1", "Org", "USD")))
+        remote.stopResult = { it.copy(description = "before") }
+        remote.updateError = IOException("dropped")
+
+        assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+        assertEquals(listOf(serverRunning.id), remote.stopped)
+
+        // The server now holds our own stop; the retried UPDATE must still apply.
+        remote.entries = listOf(serverRunning.copy(end = stopped.end))
+        remote.updateError = null
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        val stored = requireNotNull(db.timeEntryDao().getById(serverRunning.id))
+        assertEquals(SyncState.SYNCED, stored.syncState)
+        assertEquals("after stop", stored.description)
+        assertTrue(db.outboxDao().peekAll().isEmpty())
     }
 
     // SV-023: START duplicate-adoption runs unconditionally, not only when a prior attempt already
@@ -1586,7 +1951,9 @@ class SyncWorkerTest {
                 timeEntryId = "local-1",
                 createdAtMs = 1L,
                 attemptCount = 0, // first attempt, not a retry - adoption must still run
-                payloadJson = json.encodeToString(StartPayload("m1", "u1", null, null, "work", emptyList())),
+                payloadJson = json.encodeToString(
+                    StartPayload("m1", "u1", null, null, "work", emptyList(), start = "2026-07-07T08:00:00Z"),
+                ),
             ),
         )
 
@@ -1636,6 +2003,73 @@ class SyncWorkerTest {
         )
     }
 
+    private suspend fun queueEditWithBase(id: String, start: String, end: String) {
+        val entry = TimeEntry(id = id, userId = "u1", organizationId = "org1", start = start, end = end, description = "before")
+        db.timeEntryDao().upsert(entry.copy(description = "mine").toEntity(updatedAt = 1L, syncState = SyncState.PENDING))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = id,
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(UpdatePayload("u1", start, end, "mine", null, null, false, emptyList())),
+                baseSnapshotJson = json.encodeToString(ConflictSnapshot.of(start, end, "before", null, null, false, emptyList())),
+            ),
+        )
+    }
+
+    @Test fun conflict_check_fetches_narrow_windows_around_queued_entries_not_up_to_now() = runTest {
+        nowMs = java.time.Instant.parse("2026-09-01T10:00:00Z").toEpochMilli()
+        queueEditWithBase("server-a", "2026-07-01T08:00:00Z", "2026-07-01T09:00:00Z")
+        queueEditWithBase("server-b", "2026-07-01T12:00:00Z", "2026-07-01T13:00:00Z")
+        queueEditWithBase("server-c", "2026-07-20T08:00:00Z", "2026-07-20T09:00:00Z")
+        remote.memberships = listOf(Membership("m1", "member", Organization("org1", "Org", "USD")))
+        remote.entries = listOf(
+            TimeEntry("server-a", "before", "u1", "2026-07-01T08:00:00Z", "2026-07-01T09:00:00Z", organizationId = "org1"),
+            TimeEntry("server-b", "before", "u1", "2026-07-01T12:00:00Z", "2026-07-01T13:00:00Z", organizationId = "org1"),
+            TimeEntry("server-c", "before", "u1", "2026-07-20T08:00:00Z", "2026-07-20T09:00:00Z", organizationId = "org1"),
+        )
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        assertEquals(
+            listOf(
+                "2026-06-30T08:00:00Z" to "2026-07-02T12:00:00Z",
+                "2026-07-19T08:00:00Z" to "2026-07-21T08:00:00Z",
+            ),
+            remote.timeEntriesQueries.map { it.start to it.end },
+        )
+        assertEquals(3, remote.updated.size)
+    }
+
+    @Test fun truncated_conflict_scan_retries_instead_of_calling_entries_deleted() = runTest {
+        queueEditWithBase("server-old", "2026-07-01T08:00:00Z", "2026-07-01T09:00:00Z")
+        remote.memberships = listOf(Membership("m1", "member", Organization("org1", "Org", "USD")))
+        // A window that never ends (every page full, no total): the scan hits its safety cap.
+        remote.entries = List(250) { index ->
+            TimeEntry("other-$index", "x", "u1", "2026-07-01T08:00:00Z", "2026-07-01T09:00:00Z", organizationId = "org1")
+        }
+
+        assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+
+        val row = db.timeEntryDao().getById("server-old")
+        assertEquals("An incomplete scan is not evidence of a server deletion", SyncState.PENDING, row?.syncState)
+        assertEquals(1, db.outboxDao().peekAll().single().attemptCount)
+        assertTrue(remote.updated.isEmpty())
+    }
+
+    @Test fun member_id_is_resolved_once_and_cached_for_later_runs() = runTest {
+        queueEditWithBase("server-a", "2026-07-01T08:00:00Z", "2026-07-01T09:00:00Z")
+        remote.memberships = listOf(Membership("m1", "member", Organization("org1", "Org", "USD")))
+        remote.failNextWrite = true
+
+        buildWorker().doWork()
+        buildWorker().doWork()
+
+        assertEquals(1, remote.membershipRequests)
+        assertTrue(remote.timeEntriesQueries.all { it.memberId == "m1" })
+    }
+
     @Test fun rate_limit_records_marker_and_retry_after_without_spending_an_attempt() = runTest {
         val body = """{"message":"Too Many Attempts."}""".toResponseBody()
         val raw = okhttp3.Response.Builder()
@@ -1656,7 +2090,7 @@ class SyncWorkerTest {
             ),
         )
 
-        assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
 
         val stored = db.outboxDao().peekAll().single()
         assertEquals(0, stored.attemptCount)
@@ -1664,7 +2098,8 @@ class SyncWorkerTest {
         assertTrue(RateLimitMarker.matches(stored.lastError))
 
         remote.writeError = httpException(429, """{"message":"Too Many Attempts."}""")
-        assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
         assertEquals("rate_limited", db.outboxDao().peekAll().single().lastError)
+        assertEquals(listOf(30_000L, SyncWorker.DEFAULT_RATE_LIMIT_WAIT_SECONDS * 1_000L), followUps)
     }
 }

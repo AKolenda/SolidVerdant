@@ -6,6 +6,7 @@
 
 package dev.tricked.solidverdant.data.repository
 
+import dev.tricked.solidverdant.data.local.AccountDataOwnerGuard
 import dev.tricked.solidverdant.data.local.AuthDataStore
 import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Membership
@@ -34,7 +35,12 @@ import javax.inject.Singleton
  * Handles OAuth2 flow, token management, and API calls
  */
 @Singleton
-class AuthRepository @Inject constructor(private val authDataStore: AuthDataStore, private val apiClientFactory: ApiClientFactory) {
+class AuthRepository @Inject constructor(
+    private val authDataStore: AuthDataStore,
+    private val apiClientFactory: ApiClientFactory,
+    // Optional so API-contract tests can build the repository without the cache stack.
+    private val accountDataOwnerGuard: AccountDataOwnerGuard? = null,
+) {
     companion object {
         private const val REDIRECT_URI = "solidtime://oauth/callback"
         private const val HTTP_NOT_FOUND = 404
@@ -125,6 +131,19 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
                 code = code,
             )
 
+            // Identify the account before the tokens become the active session. Saving them flips
+            // the app to signed-in and lets queued sync run, so a different account's cached data
+            // and outbox must be cleared first. Best effort: a failed lookup here is repeated by
+            // the next successful profile fetch (getCurrentUser) instead of blocking sign-in.
+            runCatching {
+                api.getCurrentUserWithToken("Bearer ${tokenResponse.accessToken}").data
+            }.onSuccess { user ->
+                accountDataOwnerGuard?.claim(currentEndpoint, user.id)
+            }.onFailure { error ->
+                if (error is CancellationException) throw error
+                Timber.w("Could not identify the signed-in account before saving tokens")
+            }
+
             // Save tokens
             authDataStore.saveTokens(
                 accessToken = tokenResponse.accessToken,
@@ -152,6 +171,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         val endpoint = authDataStore.getEndpoint()
         val api = apiClientFactory.createApi(endpoint)
         val response = api.getCurrentUser()
+        // Second line of defence for account isolation (see handleOAuthCallback).
+        accountDataOwnerGuard?.claim(endpoint, response.data.id)
         Result.success(response.data)
     } catch (e: CancellationException) {
         throw e
@@ -246,6 +267,9 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         // really began so an offline-captured start is not stamped with the reconnect/sync time.
         // Null/blank falls back to now() for callers that do not thread a captured value.
         startIso: String? = null,
+        // Chosen when the timer started; omitting them made the tags vanish on the next pull.
+        tags: List<String> = emptyList(),
+        billable: Boolean = false,
     ): Result<TimeEntry> = try {
         val endpoint = authDataStore.getEndpoint()
         val api = apiClientFactory.createApi(endpoint)
@@ -261,7 +285,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
             description = description,
             projectId = projectId,
             taskId = taskId,
-            billable = false,
+            billable = billable,
+            tags = tags,
         )
 
         val response = api.startTimeEntry(organizationId, request)

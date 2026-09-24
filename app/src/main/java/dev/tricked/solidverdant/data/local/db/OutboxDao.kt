@@ -129,6 +129,49 @@ interface OutboxDao {
     suspend fun deleteByTimeEntryId(entryId: String)
 
     /**
+     * Discard an entry's queued content writes when a conflict takes ownership of the row, but keep
+     * any STOP: stopping must never be lost to a metadata conflict, or the server timer keeps running.
+     */
+    @Query("DELETE FROM outbox WHERE timeEntryId = :entryId AND opType != 'STOP'")
+    suspend fun deleteNonStopByTimeEntryId(entryId: String)
+
+    /** Whether any operation (queued, retrying or parked as dead-lettered) still targets the entry. */
+    @Query("SELECT EXISTS(SELECT 1 FROM outbox WHERE timeEntryId = :entryId)")
+    suspend fun hasAnyForEntry(entryId: String): Boolean
+
+    @Query("SELECT EXISTS(SELECT 1 FROM outbox WHERE timeEntryId = :entryId AND opType = 'STOP')")
+    suspend fun hasStopForEntry(entryId: String): Boolean
+
+    /**
+     * Operations other than [exceptId] that still target the entry, including dead-lettered ones.
+     * While any remain, the local row still describes changes the server has not accepted yet.
+     */
+    @Query("SELECT COUNT(*) FROM outbox WHERE timeEntryId = :entryId AND id != :exceptId")
+    suspend fun countOthersForEntry(entryId: String, exceptId: Long): Int
+
+    /**
+     * After this device's own write succeeded, the server state later operations were based on is
+     * the write's response. Advancing their base keeps the next conflict check from mistaking our
+     * own change for someone else's.
+     */
+    @Query(
+        "UPDATE outbox SET baseSnapshotJson = :baseSnapshotJson WHERE timeEntryId = :entryId " +
+            "AND id != :exceptId AND baseSnapshotJson IS NOT NULL",
+    )
+    suspend fun rebaseOthersForEntry(entryId: String, exceptId: Long, baseSnapshotJson: String)
+
+    /**
+     * Parked (dead-lettered) writes older than a successfully applied full-content UPDATE. The
+     * UPDATE already carries the entry's complete state, so reviving one of them later would revert
+     * it; a STOP is only obsolete when the UPDATE set an explicit end ([includeStops]).
+     */
+    @Query(
+        "DELETE FROM outbox WHERE timeEntryId = :entryId AND id < :beforeId AND deadLettered = 1 " +
+            "AND (opType = 'UPDATE' OR (:includeStops AND opType = 'STOP'))",
+    )
+    suspend fun deleteParkedWritesBefore(entryId: String, beforeId: Long, includeStops: Boolean): Int
+
+    /**
      * Discard a dead-lettered (permanently failed) operation for an entry. Used when the user
      * acknowledges a failed-sync review item as intentional (SV-029, "keep as is"): the op would
      * otherwise keep surfacing in Track's Sync center forever with only a re-failing Retry.

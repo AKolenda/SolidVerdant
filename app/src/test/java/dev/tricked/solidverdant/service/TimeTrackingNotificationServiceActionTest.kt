@@ -20,6 +20,8 @@ import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.repository.AuthRepository
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository
+import dev.tricked.solidverdant.data.repository.TimerCommands
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -89,11 +91,34 @@ class TimeTrackingNotificationServiceActionTest {
         organizationId = organization.id,
     )
 
+    /**
+     * Room + outbox seam behind [TimerCommands]. Room knows no timer unless a test says so, so
+     * the server lookups each test stubs on [AuthRepository] still decide what gets stopped.
+     */
+    private lateinit var timeEntryRepository: TimeEntryRepository
+
     @Before
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         notificationManager.cancelAll()
         context.getSharedPreferences(STATE_PREFERENCES, Context.MODE_PRIVATE).edit().clear().commit()
+        timeEntryRepository = mockk(relaxed = true) {
+            coEvery { localActiveEntry(any(), any()) } returns null
+            coEvery { hasPendingSync(any()) } returns false
+            coEvery { isStoppingLocally(any()) } returns false
+            coEvery { adoptServerEntry(any()) } answers { firstArg() }
+            coEvery { startEntry(any(), any(), any(), any(), any(), any(), any(), any()) } answers {
+                TimeEntry(
+                    id = "local-started",
+                    userId = arg(2),
+                    start = LOCAL_START,
+                    organizationId = arg(0),
+                    projectId = arg(3),
+                    taskId = arg(4),
+                    description = arg(5),
+                )
+            }
+        }
     }
 
     @After
@@ -112,10 +137,7 @@ class TimeTrackingNotificationServiceActionTest {
             Result.failure(RuntimeException("test cancellation"))
         }
 
-        val service = Robolectric.buildService(TimeTrackingNotificationService::class.java)
-            .create()
-            .get()
-            .also { it.authRepository = authRepository }
+        val service = createService(authRepository)
 
         service.onStartCommand(actionIntent(TimeTrackingNotificationService.ACTION_PAUSE_TRACKING), 0, 1)
         assertTrue("The first pause action should reach the repository", lookupStarted.isCompleted)
@@ -191,6 +213,7 @@ class TimeTrackingNotificationServiceActionTest {
         coVerify(exactly = 1) { authRepository.getCurrentMembership() }
         coVerify(exactly = 1) { authRepository.getCurrentUser() }
         coVerify(exactly = 0) { authRepository.startTimeEntry(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { timeEntryRepository.startEntry(any(), any(), any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -210,19 +233,18 @@ class TimeTrackingNotificationServiceActionTest {
 
         coVerify(exactly = 1) { authRepository.getActiveTimeEntry() }
         coVerify(exactly = 0) { authRepository.startTimeEntry(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { timeEntryRepository.startEntry(any(), any(), any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
     fun failed_quick_start_releases_the_guard_and_allows_a_retry() {
-        val resumedEntry = activeEntry.copy(start = "2026-08-10T10:00:00Z")
         val authRepository = mockk<AuthRepository>(relaxed = true) {
             coEvery { getCurrentMembership() } returns membership
-            coEvery { getCurrentUser() } returns Result.success(user)
-            coEvery { getActiveTimeEntry() } returns Result.success(null)
-            coEvery { startTimeEntry(any(), any(), any(), any(), any(), any()) } returnsMany listOf(
+            coEvery { getCurrentUser() } returnsMany listOf(
                 Result.failure(RuntimeException("network failure")),
-                Result.success(resumedEntry),
+                Result.success(user),
             )
+            coEvery { getActiveTimeEntry() } returns Result.success(null)
         }
         val service = createService(authRepository)
         val quickStart = quickStartIntent()
@@ -230,9 +252,33 @@ class TimeTrackingNotificationServiceActionTest {
         service.onStartCommand(quickStart, 0, 1)
         service.onStartCommand(quickStart, 0, 2)
 
-        coVerify(exactly = 2) { authRepository.startTimeEntry(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 2) { authRepository.getCurrentUser() }
+        coVerify(exactly = 1) {
+            timeEntryRepository.startEntry(organization.id, membership.id, user.id, project.id, task.id, any(), any(), any())
+        }
         val notification = checkNotNull(shadowOf(service).lastForegroundNotification)
         assertEquals(context.getString(R.string.time_tracking_notification_title), notificationTitle(notification))
+        val nextPause = notificationActionIntent(notification, R.string.pause)
+        assertEquals(
+            Instant.parse(LOCAL_START).toEpochMilli(),
+            nextPause.getLongExtra(TimeTrackingNotificationService.EXTRA_START_TIME, -1L),
+        )
+    }
+
+    @Test
+    fun quick_start_works_offline_through_room_and_the_outbox() {
+        val authRepository = mockk<AuthRepository>(relaxed = true) {
+            coEvery { getCurrentMembership() } returns membership
+            coEvery { getCurrentUser() } returns Result.success(user)
+            coEvery { getActiveTimeEntry() } returns Result.failure(java.io.IOException("offline"))
+        }
+        val service = createService(authRepository)
+
+        service.onStartCommand(quickStartIntent(), 0, 1)
+
+        coVerify(exactly = 1) { timeEntryRepository.startEntry(any(), any(), any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { authRepository.startTimeEntry(any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        val notification = checkNotNull(shadowOf(service).lastForegroundNotification)
         notificationActionIntent(notification, R.string.pause)
     }
 
@@ -263,6 +309,7 @@ class TimeTrackingNotificationServiceActionTest {
         shadowOf(android.os.Looper.getMainLooper()).idle()
 
         coVerify(exactly = 0) { authRepository.startTimeEntry(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { timeEntryRepository.startEntry(any(), any(), any(), any(), any(), any(), any(), any()) }
         val notification = checkNotNull(shadowOf(service).lastForegroundNotification)
         val nextStop = notificationActionIntent(notification, R.string.stop_tracking)
         assertEquals(
@@ -312,16 +359,15 @@ class TimeTrackingNotificationServiceActionTest {
         val authRepository = mockk<AuthRepository>(relaxed = true) {
             coEvery { getActiveTimeEntry() } returns Result.success(activeEntry)
             coEvery { getCurrentUser() } returns Result.success(user)
-            coEvery { stopTimeEntry(any(), any(), any(), any()) } coAnswers {
-                stopStarted.complete(Unit)
-                releaseStop.await()
-                Result.success(activeEntry.copy(end = "2026-08-10T09:00:00Z"))
-            }
+        }
+        coEvery { timeEntryRepository.stopEntry(any(), any()) } coAnswers {
+            stopStarted.complete(Unit)
+            releaseStop.await()
         }
         val service = createService(authRepository)
         service.onStartCommand(startTrackingIntent(), 0, 1)
         service.onStartCommand(trackingActionIntent(R.string.pause), 0, 2)
-        assertTrue("Pause must reach the server mutation", stopStarted.isCompleted)
+        assertTrue("Pause must reach the local stop", stopStarted.isCompleted)
         val externalStart = Instant.parse(activeEntry.start).plusSeconds(300)
 
         service.onStartCommand(
@@ -348,16 +394,15 @@ class TimeTrackingNotificationServiceActionTest {
         val authRepository = mockk<AuthRepository>(relaxed = true) {
             coEvery { getActiveTimeEntry() } returns Result.success(activeEntry)
             coEvery { getCurrentUser() } returns Result.success(user)
-            coEvery { stopTimeEntry(any(), any(), any(), any()) } coAnswers {
-                stopStarted.complete(Unit)
-                releaseStop.await()
-                Result.success(activeEntry.copy(end = "2026-08-10T09:00:00Z"))
-            }
+        }
+        coEvery { timeEntryRepository.stopEntry(any(), any()) } coAnswers {
+            stopStarted.complete(Unit)
+            releaseStop.await()
         }
         val service = createService(authRepository)
         service.onStartCommand(startTrackingIntent(), 0, 1)
         service.onStartCommand(trackingActionIntent(R.string.stop_tracking), 0, 2)
-        assertTrue("Stop must reach the server mutation", stopStarted.isCompleted)
+        assertTrue("Stop must reach the local stop", stopStarted.isCompleted)
         val externalStart = Instant.parse(activeEntry.start).plusSeconds(600)
 
         service.onStartCommand(
@@ -410,6 +455,7 @@ class TimeTrackingNotificationServiceActionTest {
         shadowOf(android.os.Looper.getMainLooper()).idle()
 
         coVerify(exactly = 0) { authRepository.stopTimeEntry(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { timeEntryRepository.stopEntry(any(), any()) }
         val notification = checkNotNull(shadowOf(service).lastForegroundNotification)
         val nextStop = notificationActionIntent(notification, R.string.stop_tracking)
         assertEquals(
@@ -459,17 +505,17 @@ class TimeTrackingNotificationServiceActionTest {
             coEvery { getActiveTimeEntry() } returns Result.success(null)
             coEvery { getProjects(organization.id) } returns Result.success(listOf(project))
             coEvery { getTasks(organization.id) } returns Result.success(listOf(task))
-            coEvery { startTimeEntry(any(), any(), any(), any(), any(), any()) } coAnswers {
-                resumeStarted.complete(Unit)
-                releaseResume.await()
-                Result.success(resumedEntry)
-            }
+        }
+        coEvery { timeEntryRepository.startEntry(any(), any(), any(), any(), any(), any(), any(), any()) } coAnswers {
+            resumeStarted.complete(Unit)
+            releaseResume.await()
+            resumedEntry
         }
         val service = createService(authRepository)
         service.onStartCommand(startTrackingIntent(), 0, 1)
         service.onStartCommand(actionIntent(TimeTrackingNotificationService.ACTION_SHOW_PAUSED), 0, 2)
         service.onStartCommand(pausedActionIntent(R.string.resume), 0, 3)
-        assertTrue("Resume must reach the server mutation", resumeStarted.isCompleted)
+        assertTrue("Resume must reach the local start", resumeStarted.isCompleted)
         val externalStart = Instant.parse(activeEntry.start).plusSeconds(900)
 
         service.onStartCommand(
@@ -511,6 +557,8 @@ class TimeTrackingNotificationServiceActionTest {
 
         coVerify(exactly = 1) { authRepository.getActiveTimeEntry() }
         coVerify(exactly = 0) { authRepository.startTimeEntry(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { timeEntryRepository.startEntry(any(), any(), any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 1) { timeEntryRepository.adoptServerEntry(replacement) }
         val notification = checkNotNull(shadowOf(service).lastForegroundNotification)
         val nextStop = notificationActionIntent(notification, R.string.stop_tracking)
         assertEquals(
@@ -548,10 +596,7 @@ class TimeTrackingNotificationServiceActionTest {
             RuntimeException("test network failure"),
         )
 
-        val service = Robolectric.buildService(TimeTrackingNotificationService::class.java)
-            .create()
-            .get()
-            .also { it.authRepository = authRepository }
+        val service = createService(authRepository)
 
         service.onStartCommand(actionIntent(TimeTrackingNotificationService.ACTION_PAUSE_TRACKING), 0, 1)
         service.onStartCommand(actionIntent(TimeTrackingNotificationService.ACTION_PAUSE_TRACKING), 0, 2)
@@ -566,10 +611,7 @@ class TimeTrackingNotificationServiceActionTest {
             RuntimeException("test network failure"),
         )
 
-        val service = Robolectric.buildService(TimeTrackingNotificationService::class.java)
-            .create()
-            .get()
-            .also { it.authRepository = authRepository }
+        val service = createService(authRepository)
         val resumeIntent = actionIntent(TimeTrackingNotificationService.ACTION_RESUME_TRACKING)
 
         service.onStartCommand(resumeIntent, 0, 1)
@@ -579,43 +621,35 @@ class TimeTrackingNotificationServiceActionTest {
     }
 
     @Test
-    fun pause_treats_a_failed_stop_response_as_success_when_the_server_confirms_no_active_entry() {
+    fun pause_of_a_timer_room_did_not_know_caches_it_and_queues_the_stop() {
         val pauseIntent = trackingActionIntent(R.string.pause)
         val authRepository = mockk<AuthRepository>(relaxed = true) {
-            coEvery { getActiveTimeEntry() } returnsMany listOf(
-                Result.success(activeEntry),
-                Result.success(null),
-            )
-            coEvery { getCurrentUser() } returns Result.success(user)
-            coEvery { stopTimeEntry(any(), any(), any(), any()) } returns Result.failure(
-                RuntimeException("response could not be decoded"),
-            )
+            coEvery { getActiveTimeEntry() } returns Result.success(activeEntry)
         }
         val service = createService(authRepository)
 
         service.onStartCommand(pauseIntent, 0, 1)
 
-        coVerify(exactly = 2) { authRepository.getActiveTimeEntry() }
+        coVerify(exactly = 1) { timeEntryRepository.adoptServerEntry(activeEntry) }
+        coVerify(exactly = 1) { timeEntryRepository.stopEntry(activeEntry, user.id) }
+        coVerify(exactly = 0) { authRepository.stopTimeEntry(any(), any(), any(), any(), any()) }
         val notification = checkNotNull(shadowOf(notificationManager).getNotification(NOTIFICATION_ID))
         assertEquals(context.getString(R.string.notification_paused_title), notificationTitle(notification))
         notificationActionIntent(notification, R.string.resume)
     }
 
     @Test
-    fun pause_keeps_tracking_controls_and_shows_an_error_when_stop_and_confirmation_both_fail() {
+    fun pause_keeps_tracking_controls_and_shows_an_error_when_the_timer_cannot_be_determined() {
         val pauseIntent = trackingActionIntent(R.string.pause)
         val authRepository = mockk<AuthRepository>(relaxed = true) {
-            coEvery { getActiveTimeEntry() } returns Result.success(activeEntry)
-            coEvery { getCurrentUser() } returns Result.success(user)
-            coEvery { stopTimeEntry(any(), any(), any(), any()) } returns Result.failure(
-                RuntimeException("network failure"),
-            )
+            coEvery { getActiveTimeEntry() } returns Result.failure(RuntimeException("network failure"))
         }
         val service = createService(authRepository)
 
         service.onStartCommand(pauseIntent, 0, 1)
 
-        coVerify(exactly = 2) { authRepository.getActiveTimeEntry() }
+        coVerify(exactly = 1) { authRepository.getActiveTimeEntry() }
+        coVerify(exactly = 0) { timeEntryRepository.stopEntry(any(), any()) }
         val notification = checkNotNull(shadowOf(service).lastForegroundNotification)
         notificationActionIntent(notification, R.string.pause)
         val errorNotification = checkNotNull(shadowOf(notificationManager).getNotification(NOTIFICATION_ID_ERROR))
@@ -623,23 +657,23 @@ class TimeTrackingNotificationServiceActionTest {
     }
 
     @Test
-    fun stop_treats_a_failed_response_as_success_when_server_confirms_timer_is_already_inactive() {
-        val stopIntent = trackingActionIntent(R.string.stop_tracking)
+    fun stop_while_the_start_is_still_queued_stops_the_local_timer_instead_of_going_idle() {
+        // The server has not received the START yet, so it reports no active timer. Stopping must
+        // still stop Room's timer; going idle would let the queued START create a running timer
+        // on the server that nothing stops.
+        val localTimer = activeEntry.copy(id = "local-queued")
+        coEvery { timeEntryRepository.localActiveEntry(organization.id, user.id) } returns localTimer
+        coEvery { timeEntryRepository.hasPendingSync(localTimer.id) } returns true
         val authRepository = mockk<AuthRepository>(relaxed = true) {
-            coEvery { getActiveTimeEntry() } returnsMany listOf(
-                Result.success(activeEntry),
-                Result.success(null),
-            )
-            coEvery { getCurrentUser() } returns Result.success(user)
-            coEvery { stopTimeEntry(any(), any(), any(), any()) } returns Result.failure(
-                RuntimeException("response lost after commit"),
-            )
+            coEvery { getActiveTimeEntry() } returns Result.success(null)
         }
         val service = createService(authRepository)
+        service.onStartCommand(startTrackingIntent(), 0, 1)
 
-        service.onStartCommand(stopIntent, 0, 1)
+        service.onStartCommand(trackingActionIntent(R.string.stop_tracking), 0, 2)
 
-        coVerify(exactly = 2) { authRepository.getActiveTimeEntry() }
+        coVerify(exactly = 1) { timeEntryRepository.stopEntry(localTimer, user.id) }
+        coVerify(exactly = 0) { authRepository.getActiveTimeEntry() }
         assertNull(shadowOf(notificationManager).getNotification(NOTIFICATION_ID_ERROR))
     }
 
@@ -648,28 +682,12 @@ class TimeTrackingNotificationServiceActionTest {
         val pauseIntent = trackingActionIntent(R.string.pause)
         val authRepository = mockk<AuthRepository>(relaxed = true) {
             coEvery { getActiveTimeEntry() } returns Result.success(activeEntry)
-            coEvery { getCurrentUser() } returns Result.success(user)
-            coEvery {
-                stopTimeEntry(
-                    organizationId = organization.id,
-                    timeEntryId = activeEntry.id,
-                    userId = user.id,
-                    startTime = activeEntry.start,
-                )
-            } returns Result.success(activeEntry.copy(end = "2026-08-10T09:00:00Z"))
         }
         val service = createService(authRepository)
 
         service.onStartCommand(pauseIntent, 0, 1)
 
-        coVerify(exactly = 1) {
-            authRepository.stopTimeEntry(
-                organizationId = organization.id,
-                timeEntryId = activeEntry.id,
-                userId = user.id,
-                startTime = activeEntry.start,
-            )
-        }
+        coVerify(exactly = 1) { timeEntryRepository.stopEntry(activeEntry, user.id) }
         val pausedNotification = checkNotNull(shadowOf(notificationManager).getNotification(NOTIFICATION_ID))
         assertEquals(context.getString(R.string.notification_paused_title), notificationTitle(pausedNotification))
         val resumeIntent = notificationActionIntent(pausedNotification, R.string.resume)
@@ -683,10 +701,6 @@ class TimeTrackingNotificationServiceActionTest {
         val preciseEntry = activeEntry.copy(start = "2026-08-10T08:00:00.123456Z")
         val authRepository = mockk<AuthRepository>(relaxed = true) {
             coEvery { getActiveTimeEntry() } returns Result.success(preciseEntry)
-            coEvery { getCurrentUser() } returns Result.success(user)
-            coEvery { stopTimeEntry(any(), any(), any(), any()) } returns Result.success(
-                preciseEntry.copy(end = "2026-08-10T09:00:00Z"),
-            )
         }
         val service = createService(authRepository)
         val startIntent = startTrackingIntent().apply {
@@ -703,14 +717,7 @@ class TimeTrackingNotificationServiceActionTest {
 
         service.onStartCommand(pauseIntent, 0, 2)
 
-        coVerify(exactly = 1) {
-            authRepository.stopTimeEntry(
-                organizationId = organization.id,
-                timeEntryId = preciseEntry.id,
-                userId = user.id,
-                startTime = preciseEntry.start,
-            )
-        }
+        coVerify(exactly = 1) { timeEntryRepository.stopEntry(preciseEntry, user.id) }
     }
 
     @Test
@@ -822,13 +829,15 @@ class TimeTrackingNotificationServiceActionTest {
         service.onStartCommand(resumeIntent, 0, 1)
 
         coVerify(exactly = 1) {
-            authRepository.startTimeEntry(
+            timeEntryRepository.startEntry(
                 organizationId = organization.id,
                 memberId = membership.id,
                 userId = user.id,
                 projectId = project.id,
                 taskId = task.id,
                 description = activeEntry.description.orEmpty(),
+                tagIds = any(),
+                billable = any(),
             )
         }
         val trackingNotification = checkNotNull(shadowOf(service).lastForegroundNotification)
@@ -864,13 +873,15 @@ class TimeTrackingNotificationServiceActionTest {
         service.onStartCommand(notificationActionIntent(paused, R.string.resume), 0, 3)
 
         coVerify(exactly = 1) {
-            authRepository.startTimeEntry(
+            timeEntryRepository.startEntry(
                 organizationId = organization.id,
                 memberId = membership.id,
                 userId = user.id,
                 projectId = project.id,
                 taskId = task.id,
                 description = activeEntry.description.orEmpty(),
+                tagIds = any(),
+                billable = any(),
             )
         }
     }
@@ -899,13 +910,15 @@ class TimeTrackingNotificationServiceActionTest {
         service.onStartCommand(notificationActionIntent(paused, R.string.resume), 0, 3)
 
         coVerify(exactly = 1) {
-            authRepository.startTimeEntry(
+            timeEntryRepository.startEntry(
                 organizationId = organization.id,
                 memberId = membership.id,
                 userId = user.id,
                 projectId = project.id,
                 taskId = task.id,
                 description = activeEntry.description.orEmpty(),
+                tagIds = any(),
+                billable = any(),
             )
         }
     }
@@ -927,6 +940,7 @@ class TimeTrackingNotificationServiceActionTest {
         service.onStartCommand(notificationActionIntent(paused, R.string.resume), 0, 3)
 
         coVerify(exactly = 0) { authRepository.startTimeEntry(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { timeEntryRepository.startEntry(any(), any(), any(), any(), any(), any(), any(), any()) }
         val error = checkNotNull(shadowOf(notificationManager).getNotification(NOTIFICATION_ID_ERROR))
         assertEquals(context.getString(R.string.notification_tracking_action_failed), notificationTitle(error))
     }
@@ -945,14 +959,7 @@ class TimeTrackingNotificationServiceActionTest {
 
         service.onStartCommand(stopIntent, 0, 1)
 
-        coVerify(exactly = 1) {
-            authRepository.stopTimeEntry(
-                organizationId = organization.id,
-                timeEntryId = activeEntry.id,
-                userId = user.id,
-                startTime = activeEntry.start,
-            )
-        }
+        coVerify(exactly = 1) { timeEntryRepository.stopEntry(activeEntry, user.id) }
     }
 
     @Test
@@ -965,6 +972,7 @@ class TimeTrackingNotificationServiceActionTest {
 
         coVerify(exactly = 0) { authRepository.getActiveTimeEntry() }
         coVerify(exactly = 0) { authRepository.stopTimeEntry(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { timeEntryRepository.stopEntry(any(), any()) }
     }
 
     private fun actionIntent(action: String) = Intent(
@@ -983,6 +991,10 @@ class TimeTrackingNotificationServiceActionTest {
                 every { alwaysShowNotification } returns flowOf(false)
                 every { longTimerHours } returns flowOf(8)
             }
+            val cachedAccount = mockk<SettingsDataStore> {
+                every { getCachedAuth() } returns SettingsDataStore.CachedAuth(user, listOf(membership), membership.id)
+            }
+            it.timerCommands = TimerCommands(authRepository, timeEntryRepository, cachedAccount) { }
         }
 
     private fun trackingActionIntent(actionLabel: Int): Intent {
@@ -1038,6 +1050,7 @@ class TimeTrackingNotificationServiceActionTest {
     private fun notificationTitle(notification: Notification) = notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
 
     private companion object {
+        const val LOCAL_START = "2026-08-10T10:00:00Z"
         const val NOTIFICATION_ID = 1001
         const val NOTIFICATION_ID_ERROR = 1002
         const val STATE_PREFERENCES = "time_tracking_notification_state"

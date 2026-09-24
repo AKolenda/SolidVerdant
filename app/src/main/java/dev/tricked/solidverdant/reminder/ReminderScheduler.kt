@@ -49,11 +49,20 @@ class ReminderScheduler @Inject constructor(
         schedule(settings.reminderMinuteOfDay.first())
     }
 
-    /** Enqueue the unique periodic nudge anchored to the next occurrence of [minuteOfDay]. */
+    /**
+     * Enqueue the unique periodic nudge anchored to the next occurrence of [minuteOfDay].
+     *
+     * An initial delay only applies to a periodic request's first period: once it has run, an
+     * UPDATE keeps WorkManager's schedule (last run + 24 h) and ignores the new delay, so a
+     * changed reminder time or the worker's own DST/time-zone re-anchoring never took effect.
+     * The explicit next-run override applies to the next run whether or not it ran before.
+     */
     fun schedule(minuteOfDay: Int, zone: ZoneId = ZoneId.systemDefault()) {
-        val initialDelay = ReminderSchedule.initialDelayMillis(clock.nowMs(), zone, minuteOfDay)
+        val now = clock.nowMs()
+        val initialDelay = ReminderSchedule.initialDelayMillis(now, zone, minuteOfDay)
         val request = PeriodicWorkRequestBuilder<ReminderWorker>(PERIODIC_INTERVAL_HOURS, TimeUnit.HOURS)
             .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
+            .setNextScheduleTimeOverride(now + initialDelay)
             .addTag(TAG)
             .build()
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(

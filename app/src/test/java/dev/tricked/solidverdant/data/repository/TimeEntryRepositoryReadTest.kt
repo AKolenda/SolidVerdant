@@ -16,6 +16,7 @@ import dev.tricked.solidverdant.data.remote.FakeRemoteDataSource
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
@@ -70,6 +71,64 @@ class TimeEntryRepositoryReadTest {
         end = "2026-01-01T10:00:00Z",
         organizationId = "org1",
     )
+
+    @Test fun refresh_reuses_a_recent_catalogue_unless_forced_or_stale() = runTest {
+        remote.projects = listOf(dev.tricked.solidverdant.data.model.Project("p1", "Project", "#123456"))
+
+        assertTrue(repo.refreshAll("org1", "member1").isSuccess)
+        clock.t += 60_000
+        assertTrue(repo.refreshAll("org1", "member1").isSuccess)
+        assertEquals("A foreground refresh within the TTL reuses the catalogue", 1, remote.projectRequests)
+
+        assertTrue(repo.refreshAll("org1", "member1", forceCatalog = true).isSuccess)
+        assertEquals(2, remote.projectRequests)
+
+        clock.t += 6 * 60_000
+        assertTrue(repo.refreshAll("org1", "member1").isSuccess)
+        assertEquals(3, remote.projectRequests)
+    }
+
+    @Test fun refresh_refetches_the_catalogue_after_the_cache_was_wiped() = runTest {
+        assertTrue(repo.refreshAll("org1", "member1").isSuccess)
+        // Logout / account switch clears every table, sync_meta included.
+        db.clearAllTables()
+
+        assertTrue(repo.refreshAll("org1", "member1").isSuccess)
+
+        assertEquals(2, remote.projectRequests)
+    }
+
+    @Test fun refresh_fetches_entries_while_the_catalogue_is_still_loading() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        remote.projectsGate = gate
+        remote.entries = listOf(srv("a"))
+
+        val refresh = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).async { repo.refreshAll("org1", "member1") }
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            withTimeout(5_000) { while (remote.lastTimeEntriesQuery == null) kotlinx.coroutines.delay(10) }
+        }
+        gate.complete(Unit)
+
+        assertTrue(refresh.await().isSuccess)
+        assertEquals(listOf("a"), repo.observeTimeEntries("org1").first().map { it.id })
+    }
+
+    @Test fun unchanged_refresh_does_not_rewrite_rows() = runTest {
+        remote.entries = listOf(srv("a"))
+        remote.projects = listOf(dev.tricked.solidverdant.data.model.Project("p1", "Project", "#123456"))
+        assertTrue(repo.refreshAll("org1", "member1").isSuccess)
+        assertEquals(1000L, db.timeEntryDao().getById("a")?.updatedAt)
+
+        clock.t = 9_000_000L
+        assertTrue(repo.refreshAll("org1", "member1", forceCatalog = true).isSuccess)
+
+        assertEquals("An unchanged row keeps its last write", 1000L, db.timeEntryDao().getById("a")?.updatedAt)
+
+        remote.entries = listOf(srv("a").copy(description = "edited on the web"))
+        assertTrue(repo.refreshAll("org1", "member1").isSuccess)
+        assertEquals("edited on the web", db.timeEntryDao().getById("a")?.description)
+        assertEquals(9_000_000L, db.timeEntryDao().getById("a")?.updatedAt)
+    }
 
     @Test fun refresh_upserts_remote_entries_into_room() = runTest {
         remote.entries = listOf(srv("a"), srv("b"))
@@ -162,13 +221,25 @@ class TimeEntryRepositoryReadTest {
         assertTrue(failure is TimeoutCancellationException)
     }
 
-    @Test fun month_load_reaches_a_month_back_for_carry_in_entries_but_not_the_whole_history() = runTest {
+    @Test fun month_load_reaches_back_only_for_entries_crossing_into_the_month() = runTest {
         repo.loadMonth("org1", "member1", YearMonth.of(2026, 7), ZoneId.of("Europe/Amsterdam"))
 
         val query = requireNotNull(remote.lastTimeEntriesQuery)
-        // 31 days before 1 July, local midnight in Amsterdam (UTC+2).
-        assertEquals("2026-05-30T22:00:00Z", query.start)
+        // Two days before 1 July, local midnight in Amsterdam (UTC+2): enough for an entry that
+        // crosses midnight into the month without re-downloading the previous month, which the
+        // calendar prefetches on its own.
+        assertEquals("2026-06-28T22:00:00Z", query.start)
         assertEquals("2026-07-31T22:00:00Z", query.end)
+    }
+
+    @Test fun month_load_keeps_an_entry_that_started_the_evening_before() = runTest {
+        remote.entries = listOf(
+            srv("overnight").copy(start = "2026-06-30T20:00:00Z", end = "2026-07-01T02:00:00Z"),
+        )
+
+        repo.loadMonth("org1", "member1", YearMonth.of(2026, 7), ZoneId.of("Europe/Amsterdam"))
+
+        assertEquals(listOf("overnight"), repo.observeTimeEntries("org1").first().map { it.id })
     }
 
     @Test fun month_load_waits_out_a_rate_limit_and_retries() = runTest {

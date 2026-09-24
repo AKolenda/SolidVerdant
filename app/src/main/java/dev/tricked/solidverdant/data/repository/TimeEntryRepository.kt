@@ -29,6 +29,7 @@ import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.data.model.isLocalTimeEntryId
 import dev.tricked.solidverdant.data.remote.RemoteDataSource
 import dev.tricked.solidverdant.data.remote.TimeEntriesQuery
+import dev.tricked.solidverdant.domain.time.formatTimeEntryInstant
 import dev.tricked.solidverdant.domain.time.parseTimeEntryInstant
 import dev.tricked.solidverdant.sync.ConflictSnapshot
 import dev.tricked.solidverdant.sync.CreatePayload
@@ -37,9 +38,12 @@ import dev.tricked.solidverdant.sync.StopPayload
 import dev.tricked.solidverdant.sync.UpdatePayload
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 import retrofit2.HttpException
@@ -47,6 +51,7 @@ import timber.log.Timber
 import java.time.Duration
 import java.time.YearMonth
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -58,9 +63,20 @@ private const val MAX_MONTH_ENTRIES = 15_000
 /**
  * How far before a month its query reaches for entries that start earlier and run into it. The
  * server filters both bounds by start time, so an unbounded lower edge re-downloaded the whole
- * history for every month; a month of carry-in covers any realistic multi-day entry.
+ * history for every month. Two days cover entries that cross midnight into the month (and a
+ * weekend-long one). A month of carry-in doubled every calendar download while the calendar
+ * already loads the adjacent months, whose own load brings any longer entry into Room.
  */
-private const val MONTH_CARRY_IN_DAYS = 31L
+private const val MONTH_CARRY_IN_DAYS = 2L
+
+/** Cached history kept offline: a bit over a year, covering the calendar's and statistics' usual reach. */
+private const val CACHE_RETENTION_DAYS = 400L
+
+/** A prune candidate must also not have been written (pulled or edited) for this long. */
+private const val CACHE_UNTOUCHED_DAYS = 30L
+
+/** A foreground refresh within this long of the last catalogue fetch reuses the cached catalogue. */
+private const val CATALOG_TTL_MS = 5 * 60 * 1_000L
 
 // A rate-limited month page waits for the server's Retry-After (clamped) before trying again.
 private const val RATE_LIMIT_ATTEMPTS = 3
@@ -82,6 +98,51 @@ class TimeEntryRepository @Inject constructor(
     private val json: Json,
     private val database: AppDatabase,
 ) : TimeEntryReader {
+    private val softDeleteCommitter = SoftDeleteCommitter(timeEntryDao, outboxDao, database, json, clock)
+
+    /** When each organization's catalogue was last fetched in this process (see [refreshAll]). */
+    private val catalogFetchedAtMs = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    private class RefreshFetch(
+        val projects: List<Project>?,
+        val clients: List<Client>?,
+        val tasks: List<Task>?,
+        val tags: List<Tag>?,
+        val entries: List<TimeEntry>,
+        val memberships: List<dev.tricked.solidverdant.data.model.Membership>?,
+    )
+
+    /** Upsert [fetched] only when some row is new or differs from [existing]. */
+    private suspend fun <T> upsertIfChanged(existing: List<T>, fetched: List<T>, upsert: suspend (List<T>) -> Unit) {
+        val known = existing.toHashSet()
+        if (fetched.any { it !in known }) upsert(fetched)
+    }
+
+    /** The earliest month-query start loaded in this process; the cache prune never goes past it. */
+    private val earliestLoadedStart = java.util.concurrent.atomic.AtomicReference<String?>(null)
+    private val cachePrunedThisProcess = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * Drop cached server copies far older than anything the app shows by default, so the
+     * unbounded per-organization history query stays small. Conservative: only SYNCED rows with
+     * nothing queued, started more than [CACHE_RETENTION_DAYS] ago, not written for
+     * [CACHE_UNTOUCHED_DAYS], and never inside a month the calendar loaded in this process.
+     * Pruned entries come back with the next month load or pull that covers them.
+     */
+    suspend fun pruneOldCache(): Int {
+        val now = clock.nowMs()
+        val retentionFloor = formatTimeEntryInstant(
+            java.time.Instant.ofEpochMilli(now).minus(Duration.ofDays(CACHE_RETENTION_DAYS)).atZone(ZoneOffset.UTC),
+        )
+        val floor = earliestLoadedStart.get()?.let { minOf(it, retentionFloor) } ?: retentionFloor
+        val pruned = timeEntryDao.pruneSyncedEntries(
+            startBefore = floor,
+            untouchedSinceMs = now - Duration.ofDays(CACHE_UNTOUCHED_DAYS).toMillis(),
+        )
+        if (pruned > 0) Timber.i("Pruned %d old cached entries", pruned)
+        return pruned
+    }
+
     enum class EntrySyncStatus { SYNCED, PENDING, RETRYING, FAILED, CONFLICT }
 
     data class SyncConflict(val local: TimeEntry, val server: TimeEntry?, val serverDeleted: Boolean, val localDeleted: Boolean)
@@ -113,18 +174,26 @@ class TimeEntryRepository @Inject constructor(
     suspend fun createTag(organizationId: String, name: String): Result<Tag> =
         remote.createTag(organizationId, name).onSuccess { catalogDao.upsertTags(listOf(it.toEntity(organizationId))) }
 
-    override fun observeTimeEntries(organizationId: String): Flow<List<TimeEntry>> = combine(
-        timeEntryDao.observeVisibleEntries(organizationId),
-        catalogDao.observeTags(organizationId),
-        timeEntryDao.observeTagRefs(organizationId),
-    ) { entities, tagEntities, tagRefs ->
-        val tagsById = tagEntities.associate { it.id to it.toModel() }
-        val tagIdsByEntry = tagRefs.groupBy({ it.timeEntryId }, { it.tagId })
-        entities.map { entity ->
-            val tags = tagIdsByEntry[entity.id].orEmpty().mapNotNull { tagsById[it] }
-            entity.toModel(tags)
-        }
-    }
+    /**
+     * The organization's visible entries (newest start first) with their catalogue tags. One
+     * joined query instead of three combined flows, so a write produces one emission, and an
+     * emission equal to the previous one (a write that changed nothing visible, e.g. another
+     * organization's rows) is not re-delivered to every screen.
+     */
+    override fun observeTimeEntries(organizationId: String): Flow<List<TimeEntry>> =
+        timeEntryDao.observeVisibleEntriesWithTags(organizationId)
+            .map { rows ->
+                val entities = LinkedHashMap<String, TimeEntryEntity>()
+                val tagsByEntry = HashMap<String, MutableList<Tag>>()
+                rows.forEach { row ->
+                    entities.putIfAbsent(row.entry.id, row.entry)
+                    if (row.tagId != null) {
+                        tagsByEntry.getOrPut(row.entry.id, ::mutableListOf) += Tag(row.tagId, row.tagName.orEmpty())
+                    }
+                }
+                entities.values.map { entity -> entity.toModel(tagsByEntry[entity.id].orEmpty()) }
+            }
+            .distinctUntilChanged()
 
     fun observeConflicts(organizationId: String): Flow<List<SyncConflict>> = combine(
         timeEntryDao.observeConflicts(organizationId),
@@ -158,6 +227,9 @@ class TimeEntryRepository @Inject constructor(
         var offset = 0
         val queryStart = month.atDay(1).minusDays(MONTH_CARRY_IN_DAYS).atStartOfDay(zone).toInstant().toString()
         val queryEnd = month.plusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toString()
+        earliestLoadedStart.accumulateAndGet(canonicalTimestamp(queryStart)) { current, loaded ->
+            if (current == null || (loaded != null && loaded < current)) loaded else current
+        }
         // Tombstoning (SV-020) must be scoped to exactly what was fetched: the union of every
         // returned id, bounded by the tightest [minStart, maxStart] actually observed across all
         // pages of this call. Widening either bound risks deleting a local row the fetch never
@@ -232,9 +304,40 @@ class TimeEntryRepository @Inject constructor(
         entity?.toModel(timeEntryDao.tagIdsFor(entity.id).map { Tag(it) })
     }
 
+    /**
+     * This user's running timer in Room for [orgId], or null. Surfaces outside the app use it to
+     * act on the same timer Track shows, including one whose START has not synced yet.
+     */
+    suspend fun localActiveEntry(orgId: String, userId: String): TimeEntry? =
+        timeEntryDao.getActive(orgId)?.takeIf { it.userId == userId }?.let { it.toModel(timeEntryDao.tagIdsFor(it.id).map(::Tag)) }
+
+    /** Whether any operation for [entryId] is still queued or parked in the outbox. */
+    suspend fun hasPendingSync(entryId: String): Boolean = outboxDao.hasAnyForEntry(entryId)
+
+    /** Stopped or deleted on this device while the server has not received it yet. */
+    suspend fun isStoppingLocally(entryId: String): Boolean {
+        val row = timeEntryDao.getById(entryId) ?: return false
+        return (row.end != null || row.pendingDelete) && outboxDao.hasAnyForEntry(entryId)
+    }
+
+    /**
+     * Cache one authoritative server entry (e.g. the account's active timer found by a system
+     * surface) with the same guards as a pull: a pending edit or conflict keeps the local row.
+     * Returns the Room row afterwards.
+     */
+    suspend fun adoptServerEntry(entry: TimeEntry): TimeEntry? {
+        val now = clock.nowMs()
+        applyServerEntries(
+            listOf(entry.toEntity(updatedAt = now, syncState = SyncState.SYNCED)),
+            mapOf(entry.id to entry.tags.map { it.id }),
+            pullStartedAtMs = now,
+        )
+        return timeEntryDao.getById(entry.id)?.let { it.toModel(timeEntryDao.tagIdsFor(it.id).map(::Tag)) }
+    }
+
     /** Room's view of whether [entryId] is still running: false when it was stopped, deleted, or never cached. */
     suspend fun isEntryRunning(entryId: String): Boolean =
-        timeEntryDao.getById(entryId)?.let { it.end == null && !it.pendingDelete } ?: false
+        timeEntryDao.getById(entryId)?.let { it.end == null && (it.duration ?: 0) <= 0 && !it.pendingDelete } ?: false
 
     fun observeOutboxCount(): Flow<Int> = outboxDao.observeCount()
 
@@ -282,32 +385,73 @@ class TimeEntryRepository @Inject constructor(
         }
     }
 
-    /** Pull the full first frame for an org and upsert into Room (last-write-wins). */
-    suspend fun refreshAll(organizationId: String, memberId: String): Result<Unit> = try {
-        val pullStartedAtMs = clock.nowMs()
-        val projects = remote.getProjects(organizationId).getOrThrow()
-        val clients = remote.getClients(organizationId).getOrThrow()
-        val tasks = remote.getTasks(organizationId).getOrThrow()
-        val tags = remote.getTags(organizationId).getOrThrow()
-        val entries = remote.getTimeEntries(
-            TimeEntriesQuery(organizationId, memberId, limit = 250, offset = 0, onlyFullDates = false),
-        )
-            .getOrThrow().data
-
-        catalogDao.upsertProjects(projects.map { it.toEntity(organizationId) })
-        catalogDao.upsertClients(clients.map { it.toEntity(organizationId) })
-        catalogDao.upsertTasks(tasks.map { it.toEntity(organizationId) })
-        catalogDao.upsertTags(tags.map { it.toEntity(organizationId) })
-
-        // Memberships/organizations cache so auth-adjacent screens can read offline.
-        remote.getMyMemberships().getOrElse { error ->
+    /**
+     * Pull the full first frame for an org and upsert into Room (last-write-wins).
+     *
+     * The catalogue (projects, clients, tasks, tags: all pages) is skipped when it was fetched
+     * less than [CATALOG_TTL_MS] ago, unless [forceCatalog] (an explicit user refresh) asks for
+     * it. Independent requests run concurrently, and rows that did not change are not rewritten,
+     * so an unchanged refresh does not wake every Room observer.
+     */
+    suspend fun refreshAll(organizationId: String, memberId: String, forceCatalog: Boolean = false): Result<Unit> = try {
+        // A delete whose undo window died with its ViewModel is still hidden locally; commit it
+        // before pulling, so the refresh does not keep skipping a row nothing will ever delete.
+        runCatching { commitOrphanedSoftDeletes() }.onFailure { error ->
             if (error is CancellationException) throw error
-            null
-        }?.let { memberships ->
-            catalogDao.upsertMemberships(memberships.map { it.toEntity() })
-            catalogDao.upsertOrganizations(memberships.map { it.organization.toEntity() })
+            Timber.w(error, "Could not commit orphaned soft deletes")
+        }
+        val pullStartedAtMs = clock.nowMs()
+        // The in-memory TTL only counts while Room still holds that pull: a logout or account
+        // switch wipes sync_meta together with the catalogue.
+        val catalogFresh = catalogFetchedAtMs[organizationId]?.let { pullStartedAtMs - it in 0 until CATALOG_TTL_MS } == true &&
+            syncMetaDao.get(organizationId) != null
+        val refreshCatalog = forceCatalog || !catalogFresh
+        val fetched = coroutineScope {
+            val projects = if (refreshCatalog) async { remote.getProjects(organizationId).getOrThrow() } else null
+            val clients = if (refreshCatalog) async { remote.getClients(organizationId).getOrThrow() } else null
+            val tasks = if (refreshCatalog) async { remote.getTasks(organizationId).getOrThrow() } else null
+            val tags = if (refreshCatalog) async { remote.getTags(organizationId).getOrThrow() } else null
+            val entries = async {
+                remote.getTimeEntries(
+                    TimeEntriesQuery(organizationId, memberId, limit = 250, offset = 0, onlyFullDates = false),
+                ).getOrThrow().data
+            }
+            // Memberships/organizations cache so auth-adjacent screens can read offline. Optional.
+            val memberships = async {
+                remote.getMyMemberships().getOrElse { error ->
+                    if (error is CancellationException) throw error
+                    null
+                }
+            }
+            RefreshFetch(
+                projects = projects?.await(),
+                clients = clients?.await(),
+                tasks = tasks?.await(),
+                tags = tags?.await(),
+                entries = entries.await(),
+                memberships = memberships.await(),
+            )
         }
 
+        fetched.projects?.let {
+            upsertIfChanged(catalogDao.getProjects(organizationId), it.map { p -> p.toEntity(organizationId) }, catalogDao::upsertProjects)
+        }
+        fetched.clients?.let {
+            upsertIfChanged(catalogDao.getClients(organizationId), it.map { c -> c.toEntity(organizationId) }, catalogDao::upsertClients)
+        }
+        fetched.tasks?.let {
+            upsertIfChanged(catalogDao.getTasks(organizationId), it.map { t -> t.toEntity(organizationId) }, catalogDao::upsertTasks)
+        }
+        fetched.tags?.let {
+            upsertIfChanged(catalogDao.getTags(organizationId), it.map { t -> t.toEntity(organizationId) }, catalogDao::upsertTags)
+        }
+        if (refreshCatalog) catalogFetchedAtMs[organizationId] = pullStartedAtMs
+        fetched.memberships?.let { memberships ->
+            upsertIfChanged(catalogDao.getMemberships(), memberships.map { it.toEntity() }, catalogDao::upsertMemberships)
+            upsertIfChanged(catalogDao.getOrganizations(), memberships.map { it.organization.toEntity() }, catalogDao::upsertOrganizations)
+        }
+
+        val entries = fetched.entries
         val now = clock.nowMs()
         // Single transaction; the pending-edit/soft-delete and in-flight-pull guards live in
         // applyServerEntries. The pull-start timestamp prevents a response that was already in
@@ -335,6 +479,12 @@ class TimeEntryRepository @Inject constructor(
         // Stamp the pull-refresh moment without clobbering the push timestamp (a concurrent
         // SyncWorker flush may have written lastPushAtMs); stampFullSync updates that column alone.
         syncMetaDao.stampFullSync(organizationId, now)
+        if (cachePrunedThisProcess.compareAndSet(false, true)) {
+            runCatching { pruneOldCache() }.onFailure { error ->
+                if (error is CancellationException) throw error
+                Timber.w(error, "Could not prune the entry cache")
+            }
+        }
         Result.success(Unit)
     } catch (e: CancellationException) {
         throw e
@@ -353,6 +503,7 @@ class TimeEntryRepository @Inject constructor(
         taskId: String?,
         description: String,
         tagIds: List<String>,
+        billable: Boolean = false,
     ): TimeEntry {
         val now = clock.nowMs()
         val localId = "local-" + java.util.UUID.randomUUID().toString()
@@ -360,7 +511,7 @@ class TimeEntryRepository @Inject constructor(
         val entry = TimeEntry(
             id = localId, description = description, userId = userId, start = start,
             end = null, duration = null, taskId = taskId, projectId = projectId,
-            billable = false, organizationId = organizationId,
+            tags = tagIds.map(::Tag), billable = billable, organizationId = organizationId,
         )
         // SV-026: the optimistic Room write and its outbox enqueue must commit atomically, or a
         // crash between them yields an entry Room shows but the outbox never learns to sync (or
@@ -387,7 +538,7 @@ class TimeEntryRepository @Inject constructor(
                     createdAtMs = now,
                     clientId = newClientId(),
                     payloadJson = json.encodeToString(
-                        StartPayload(memberId, userId, projectId, taskId, description, tagIds, start = start),
+                        StartPayload(memberId, userId, projectId, taskId, description, tagIds, start = start, billable = billable),
                     ),
                 ),
             )
@@ -426,7 +577,7 @@ class TimeEntryRepository @Inject constructor(
             // row while leaving the server-owned row running.
             val current = timeEntryDao.getById(entry.id)
                 ?: timeEntryDao.getActive(entry.organizationId)?.takeIf {
-                    it.userId == entry.userId && it.start == entry.start
+                    it.userId == entry.userId && sameInstant(it.start, entry.start)
                 }
             val targetId = current?.id ?: entry.id
             val targetOrganizationId = current?.organizationId ?: entry.organizationId
@@ -535,8 +686,18 @@ class TimeEntryRepository @Inject constructor(
      * outbox op that can only 404.
      */
     private suspend fun resolveCurrentId(entry: TimeEntry): String? = timeEntryDao.getById(entry.id)?.id
-        ?: entry.id.takeIf(::isLocalTimeEntryId)
-            ?.let { timeEntryDao.findByIdentity(entry.organizationId, entry.userId, entry.start)?.id }
+        ?: entry.id.takeIf(::isLocalTimeEntryId)?.let { findByIdentity(entry)?.id }
+
+    /**
+     * Identity lookups compare strings in SQL, but callers hand in the same instant in different
+     * shapes (`+02:00` from the calendar, `Z` from the server). Look up the canonical form Room
+     * stores for every write, then the caller's raw form for rows written before normalisation.
+     */
+    private suspend fun findByIdentity(entry: TimeEntry): TimeEntryEntity? {
+        val canonical = canonicalTimestamp(entry.start)
+        return timeEntryDao.findByIdentity(entry.organizationId, entry.userId, canonical)
+            ?: entry.start.takeIf { it != canonical }?.let { timeEntryDao.findByIdentity(entry.organizationId, entry.userId, it) }
+    }
 
     suspend fun updateEntry(entry: TimeEntry, tagIds: List<String>) {
         val now = clock.nowMs()
@@ -544,7 +705,11 @@ class TimeEntryRepository @Inject constructor(
             val targetId = checkNotNull(resolveCurrentId(entry)) {
                 "This entry no longer exists locally; refresh before editing it"
             }
-            val normalizedEntry = entry.copy(id = targetId).withDerivedCompletedDuration()
+            val normalizedEntry = entry.copy(
+                id = targetId,
+                start = canonicalTimestamp(entry.start),
+                end = entry.end?.let(::canonicalTimestamp),
+            ).withDerivedCompletedDuration()
             check(timeEntryDao.getById(targetId)?.syncState != SyncState.CONFLICT) {
                 "Resolve the sync conflict in Review before editing this entry"
             }
@@ -592,13 +757,15 @@ class TimeEntryRepository @Inject constructor(
     ): TimeEntry {
         val now = clock.nowMs()
         val localId = "local-create-${java.util.UUID.randomUUID()}"
+        val startAt = canonicalTimestamp(start)
+        val endAt = canonicalTimestamp(end)
         val entry = TimeEntry(
             id = localId,
             description = description,
             userId = userId,
-            start = start,
-            end = end,
-            duration = completedDurationSeconds(start, end),
+            start = startAt,
+            end = endAt,
+            duration = completedDurationSeconds(startAt, endAt),
             taskId = taskId,
             projectId = projectId,
             tags = tagIds.map { Tag(it) },
@@ -620,8 +787,8 @@ class TimeEntryRepository @Inject constructor(
                         CreatePayload(
                             memberId,
                             userId,
-                            start,
-                            end,
+                            startAt,
+                            endAt,
                             description,
                             projectId,
                             taskId,
@@ -684,6 +851,7 @@ class TimeEntryRepository @Inject constructor(
      * Returns the new second-half entry id so the caller can open it for immediate editing.
      */
     suspend fun splitEntry(entryId: String, atIso: String, memberId: String): Result<String> = try {
+        val splitAt = canonicalTimestamp(atIso)
         val secondHalfId = "local-create-${java.util.UUID.randomUUID()}"
         database.withTransaction {
             val source = timeEntryDao.getById(entryId)
@@ -695,7 +863,7 @@ class TimeEntryRepository @Inject constructor(
             // Parse as OffsetDateTime->Instant so mixed "Z"/"+02:00" offsets compare correctly.
             val startInstant = java.time.OffsetDateTime.parse(source.start).toInstant()
             val endInstant = java.time.OffsetDateTime.parse(end).toInstant()
-            val atInstant = java.time.OffsetDateTime.parse(atIso).toInstant()
+            val atInstant = java.time.OffsetDateTime.parse(splitAt).toInstant()
             require(atInstant.isAfter(startInstant) && atInstant.isBefore(endInstant)) {
                 "Split time must be strictly between the entry's start and end"
             }
@@ -703,15 +871,15 @@ class TimeEntryRepository @Inject constructor(
             val now = clock.nowMs()
             val base = captureBaseSnapshot(entryId)
             val firstHalf = source.toModel(tagIds.map { Tag(it) })
-                .copy(end = atIso)
+                .copy(end = splitAt)
                 .withDerivedCompletedDuration()
             val secondHalf = TimeEntry(
                 id = secondHalfId,
                 description = source.description,
                 userId = source.userId,
-                start = atIso,
+                start = splitAt,
                 end = end,
-                duration = completedDurationSeconds(atIso, end),
+                duration = completedDurationSeconds(splitAt, end),
                 taskId = source.taskId,
                 projectId = source.projectId,
                 tags = tagIds.map { Tag(it) },
@@ -761,7 +929,7 @@ class TimeEntryRepository @Inject constructor(
                         CreatePayload(
                             memberId,
                             source.userId,
-                            atIso,
+                            splitAt,
                             end,
                             source.description.orEmpty(),
                             source.projectId,
@@ -810,35 +978,15 @@ class TimeEntryRepository @Inject constructor(
      * [softDeleteLocal]) and a DELETE op is enqueued for the sync worker to apply.
      */
     suspend fun commitDelete(entry: TimeEntry) {
-        val now = clock.nowMs()
-        database.withTransaction {
-            // The undo window is long enough for a START/CREATE to reconcile, so the snapshot's
-            // local id may now belong to a server-owned row that needs a real DELETE.
-            val targetId = resolveCurrentId(entry) ?: entry.id
-            if (timeEntryDao.getById(targetId)?.syncState == SyncState.CONFLICT) return@withTransaction
-            if (isLocalTimeEntryId(targetId)) {
-                timeEntryDao.deleteById(targetId)
-                outboxDao.deleteByTimeEntryId(targetId)
-            } else {
-                // softDeleteLocal has already flipped this row to PENDING by the time we get here,
-                // but the content fields are still the last server-acked ones - captureBaseSnapshot
-                // reads them from the entity, not from `entry`, so the PENDING flag flip is
-                // irrelevant to what gets snapshotted (SV-027 rule 3).
-                val base = captureBaseSnapshot(targetId)
-                outboxDao.insert(
-                    OutboxEntity(
-                        opType = OutboxOpType.DELETE,
-                        organizationId = entry.organizationId,
-                        timeEntryId = targetId,
-                        createdAtMs = now,
-                        clientId = newClientId(),
-                        payloadJson = "{}",
-                        baseSnapshotJson = base,
-                    ),
-                )
-            }
-        }
+        softDeleteCommitter.commit(entry) { resolveCurrentId(it) }
     }
+
+    /**
+     * Commit soft deletes whose undo window was lost (the ViewModel job died with the process or
+     * the screen before [commitDelete] ran). Runs before every full refresh; the sync worker runs
+     * the same sweep before draining. Returns how many deletes were committed.
+     */
+    suspend fun commitOrphanedSoftDeletes(): Int = softDeleteCommitter.commitOrphans()
 
     /**
      * Convenience wrapper combining [softDeleteLocal] and an immediate [commitDelete], for
@@ -862,8 +1010,7 @@ class TimeEntryRepository @Inject constructor(
                 // SV-024: restore to the entry's real sync state, not the PENDING the soft-delete
                 // stamped it with - a synced (server-id) row must go back to SYNCED so it isn't
                 // silently skipped by applyServerEntries forever with no outbox op to fix it.
-                val state = if (isLocalTimeEntryId(targetId)) SyncState.PENDING else SyncState.SYNCED
-                timeEntryDao.restoreDeleted(targetId, state)
+                timeEntryDao.restoreDeleted(targetId, restoredSyncState(targetId))
             }
             return true
         }
@@ -893,11 +1040,11 @@ class TimeEntryRepository @Inject constructor(
             }
             return true
         }
-        // SV-024: restore to the entry's real sync state - SYNCED for a server-id row (mirroring
-        // the window-still-open branch above), regardless of what a stale local snapshot's
-        // syncState column says - never leave a synced entry stuck PENDING with no outbox op.
-        val state = if (isLocalTimeEntryId(targetId)) SyncState.PENDING else SyncState.SYNCED
+        // SV-024: restore to the entry's real sync state (mirroring the window-still-open branch
+        // above), regardless of what a stale local snapshot's syncState column says - never leave
+        // a synced entry stuck PENDING with no outbox op.
         database.withTransaction {
+            val state = restoredSyncState(targetId)
             if (current == null) {
                 timeEntryDao.upsert(entry.copy(id = targetId).toEntity(updatedAt = clock.nowMs(), syncState = state))
                 timeEntryDao.replaceTagRefs(targetId, entry.tags.map { it.id })
@@ -908,6 +1055,14 @@ class TimeEntryRepository @Inject constructor(
         return true
     }
 
+    /**
+     * The state a restored row returns to. SYNCED only when nothing is queued for it: an UPDATE
+     * made before the delete must keep the row PENDING, or the next pull overwrites the edit and
+     * the worker later drops the operation against a row that looks up to date.
+     */
+    private suspend fun restoredSyncState(entryId: String): SyncState =
+        if (isLocalTimeEntryId(entryId) || outboxDao.hasAnyForEntry(entryId)) SyncState.PENDING else SyncState.SYNCED
+
     suspend fun prepareRetry(entryId: String): Boolean = outboxDao.resetForRetry(entryId) > 0
 
     suspend fun prepareRetryAll(organizationId: String): Boolean = outboxDao.resetFailedForRetry(organizationId) > 0
@@ -917,7 +1072,23 @@ class TimeEntryRepository @Inject constructor(
      * Used when the user acknowledges a failed-sync review item as intentional ("keep as is") -
      * otherwise the op keeps surfacing in Track's Sync center forever with only a re-failing Retry.
      */
-    suspend fun discardFailedSync(entryId: String): Boolean = outboxDao.deleteDeadLetteredByEntryId(entryId) > 0
+    suspend fun discardFailedSync(entryId: String): Boolean = database.withTransaction {
+        val discarded = outboxDao.deleteDeadLetteredByEntryId(entryId) > 0
+        val row = timeEntryDao.getById(entryId)
+        if (discarded && row != null && row.syncState == SyncState.PENDING && !outboxDao.hasAnyForEntry(entryId)) {
+            if (isLocalTimeEntryId(entryId)) {
+                // The discarded START/CREATE was the only way this entry could exist anywhere.
+                timeEntryDao.clearTagRefs(entryId)
+                timeEntryDao.deleteById(entryId)
+            } else {
+                // The server kept its version. Hand the row back to pulls (the next refresh
+                // replaces the rejected local content) instead of leaving it PENDING forever,
+                // which every pull skips.
+                timeEntryDao.upsert(row.copy(syncState = SyncState.SYNCED, pendingDelete = false, updatedAt = clock.nowMs()))
+            }
+        }
+        discarded
+    }
 
     suspend fun resolveKeepMine(conflict: SyncConflict, memberId: String?): Boolean {
         val current = timeEntryDao.getById(conflict.local.id)
@@ -1045,15 +1216,26 @@ class TimeEntryRepository @Inject constructor(
         if (!canResolve) return false
         val server = conflict.server
         return if (server == null) {
-            timeEntryDao.clearTagRefs(current.id)
-            timeEntryDao.deleteById(current.id)
+            database.withTransaction {
+                timeEntryDao.clearTagRefs(current.id)
+                timeEntryDao.deleteById(current.id)
+                outboxDao.deleteByTimeEntryId(current.id)
+            }
             true
         } else {
             val now = clock.nowMs()
             database.withTransaction {
-                timeEntryDao.upsert(server.toEntity(updatedAt = now, syncState = SyncState.SYNCED))
+                // Choosing the server's metadata never cancels a stop the user already made: a
+                // still-queued STOP keeps the local end and stays queued so the timer really ends.
+                val stopQueued = server.end == null && current.end != null && outboxDao.hasStopForEntry(current.id)
+                val adopted = if (stopQueued) {
+                    server.toEntity(updatedAt = now, syncState = SyncState.PENDING).copy(end = current.end, duration = current.duration)
+                } else {
+                    server.toEntity(updatedAt = now, syncState = SyncState.SYNCED)
+                }
+                timeEntryDao.upsert(adopted)
                 timeEntryDao.replaceTagRefs(server.id, server.tags.map { it.id })
-                outboxDao.deleteByTimeEntryId(current.id)
+                if (stopQueued) outboxDao.deleteNonStopByTimeEntryId(current.id) else outboxDao.deleteByTimeEntryId(current.id)
             }
             true
         }
@@ -1125,44 +1307,19 @@ class TimeEntryRepository @Inject constructor(
                 serverJsonByEntry = serverJsonByEntry,
                 pullStartedAtMs = pullStartedAtMs,
             )
-            // Pull-side conflicts no longer have a meaningful queued write. Clear them in the
-            // same transaction so Review immediately becomes the sole recovery surface.
+            // Pull-side conflicts no longer have a meaningful queued content write. Clear them in
+            // the same transaction so Review immediately becomes the sole recovery surface. A
+            // queued STOP survives: dropping it would leave the server timer running.
             entries.forEach { entity ->
                 if (timeEntryDao.getById(entity.id)?.syncState == SyncState.CONFLICT) {
-                    outboxDao.deleteByTimeEntryId(entity.id)
+                    outboxDao.deleteNonStopByTimeEntryId(entity.id)
                 }
             }
         }
     }
 
-    /**
-     * SV-027 base-snapshot capture for a STOP/UPDATE/DELETE enqueue, applied inside the same
-     * transaction that enqueues the op, before the local mutation is written. Rules, in order:
-     * 1. a queued op for this entry already carries a base -> reuse the oldest such base (an
-     *    offline STOP->UPDATE chain shares the pre-stop base);
-     * 2. else a queued START/CREATE exists for the entry -> null (born locally, nothing on the
-     *    server to diverge from);
-     * 3. else -> snapshot the entity's pre-mutation content (the last server-acked content).
-     */
-    private suspend fun captureBaseSnapshot(entryId: String): String? = outboxDao.oldestBaseSnapshot(entryId)
-        ?: if (outboxDao.hasPendingCreateOrStart(entryId)) {
-            null
-        } else {
-            timeEntryDao.getById(entryId)?.let { current ->
-                json.encodeToString(
-                    ConflictSnapshot.of(
-                        start = current.start,
-                        end = current.end,
-                        description = current.description,
-                        projectId = current.projectId,
-                        taskId = current.taskId,
-                        billable = current.billable,
-                        tagIds = timeEntryDao.tagIdsFor(entryId),
-                        type = current.type,
-                    ),
-                )
-            }
-        }
+    /** See the shared [captureBaseSnapshot] rules (SV-027). */
+    private suspend fun captureBaseSnapshot(entryId: String): String? = captureBaseSnapshot(timeEntryDao, outboxDao, json, entryId)
 
     private fun TimeEntry.withDerivedCompletedDuration(): TimeEntry = if (end == null) {
         this
@@ -1189,3 +1346,17 @@ class TimeEntryRepository @Inject constructor(
 
 /** Stable idempotency key for a new outbox operation; persisted on the row (see OutboxEntity). */
 private fun newClientId(): String = java.util.UUID.randomUUID().toString()
+
+/**
+ * The Solidtime shape (UTC, whole seconds, `Z`) for every timestamp this repository writes, so
+ * Room's lexicographic `start` ordering, range queries and identity lookups agree with server
+ * echoes. Unparseable input is kept verbatim.
+ */
+internal fun canonicalTimestamp(value: String): String =
+    parseTimeEntryInstant(value)?.let { formatTimeEntryInstant(it.atZone(ZoneOffset.UTC)) } ?: value
+
+private fun sameInstant(a: String, b: String): Boolean {
+    val first = parseTimeEntryInstant(a) ?: return a == b
+    val second = parseTimeEntryInstant(b) ?: return false
+    return first.epochSecond == second.epochSecond
+}

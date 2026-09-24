@@ -31,8 +31,27 @@ interface TimeEntryDao {
     @Query("SELECT * FROM time_entries WHERE organizationId = :orgId AND pendingDelete = 0 ORDER BY start DESC")
     fun observeVisibleEntries(orgId: String): Flow<List<TimeEntryEntity>>
 
+    /**
+     * Visible entries joined with their catalogue tags in one query, so one Room write produces
+     * one emission (three separately observed flows produced two or three). Tags missing from the
+     * organization's catalogue are left out, as before; `r.rowid` keeps each entry's tag order.
+     */
     @Query(
-        "SELECT * FROM time_entries WHERE organizationId = :orgId AND type = 'work' AND end IS NULL AND pendingDelete = 0 ORDER BY start DESC LIMIT 1",
+        "SELECT e.*, t.id AS tagId, t.name AS tagName FROM time_entries e " +
+            "LEFT JOIN time_entry_tag_cross_ref r ON r.timeEntryId = e.id " +
+            "LEFT JOIN tags t ON t.id = r.tagId AND t.organizationId = e.organizationId " +
+            "WHERE e.organizationId = :orgId AND e.pendingDelete = 0 ORDER BY e.start DESC, r.rowid",
+    )
+    fun observeVisibleEntriesWithTags(orgId: String): Flow<List<TimeEntryWithTagRow>>
+
+    /**
+     * The running work timer, by the domain rule ([dev.tricked.solidverdant.domain.time.isRunningTimeEntry]):
+     * no end and no positive duration. A cached completed entry can come back with `end = null`
+     * and a positive duration; that one is finished, not running.
+     */
+    @Query(
+        "SELECT * FROM time_entries WHERE organizationId = :orgId AND type = 'work' AND end IS NULL " +
+            "AND (duration IS NULL OR duration <= 0) AND pendingDelete = 0 ORDER BY start DESC LIMIT 1",
     )
     fun observeActive(orgId: String): Flow<TimeEntryEntity?>
 
@@ -50,9 +69,21 @@ interface TimeEntryDao {
     suspend fun findByIdentity(orgId: String, userId: String, start: String): TimeEntryEntity?
 
     @Query(
-        "SELECT * FROM time_entries WHERE organizationId = :orgId AND type = 'work' AND end IS NULL AND pendingDelete = 0 ORDER BY start DESC LIMIT 1",
+        "SELECT * FROM time_entries WHERE organizationId = :orgId AND type = 'work' AND end IS NULL " +
+            "AND (duration IS NULL OR duration <= 0) AND pendingDelete = 0 ORDER BY start DESC LIMIT 1",
     )
     suspend fun getActive(orgId: String): TimeEntryEntity?
+
+    /**
+     * Rows hidden by a soft delete whose commit never happened: the undo window's job lives in a
+     * ViewModel and dies with the process or the screen. No DELETE was queued, and pulls skip
+     * pending deletes, so without a sweep the entry stays hidden locally and alive on the server.
+     */
+    @Query(
+        "SELECT * FROM time_entries WHERE pendingDelete = 1 AND syncState != 'CONFLICT' AND updatedAt < :cutoffMs " +
+            "AND id NOT IN (SELECT timeEntryId FROM outbox WHERE opType = 'DELETE')",
+    )
+    suspend fun findUncommittedSoftDeletes(cutoffMs: Long): List<TimeEntryEntity>
 
     @Query("SELECT * FROM time_entries WHERE organizationId = :orgId AND syncState = 'CONFLICT' ORDER BY start DESC")
     fun observeConflicts(orgId: String): Flow<List<TimeEntryEntity>>
@@ -198,6 +229,10 @@ interface TimeEntryDao {
                 upsert(local.copy(syncState = SyncState.CONFLICT, conflictServerJson = serverJson))
                 return@forEach
             }
+            if (local != null && local.copy(updatedAt = entity.updatedAt) == entity && tagIdsFor(entity.id).toSet() == tagIds.toSet()) {
+                // Unchanged: rewriting it would wake every observer of the table for nothing.
+                return@forEach
+            }
             upsert(entity)
             replaceTagRefs(entity.id, tagIds)
         }
@@ -290,6 +325,34 @@ interface TimeEntryDao {
             .filterNot(serverIdSet::contains)
             .chunked(SQLITE_SAFE_ID_CHUNK)
             .forEach { deleteByIds(it) }
+    }
+
+    /**
+     * Cached server copies that are safe to drop: SYNCED, not hidden by a pending delete, nothing
+     * queued or parked for them, completed, started before [startBefore] and not written since
+     * [untouchedSinceMs]. Pending edits, conflicts and anything the outbox references are never
+     * candidates; a later pull or month load re-downloads a pruned entry.
+     */
+    @Query(
+        "SELECT id FROM time_entries WHERE syncState = 'SYNCED' AND pendingDelete = 0 " +
+            "AND start < :startBefore AND updatedAt < :untouchedSinceMs " +
+            "AND (end IS NOT NULL OR duration > 0) " +
+            "AND id NOT IN (SELECT timeEntryId FROM outbox)",
+    )
+    suspend fun findPrunableSyncedEntries(startBefore: String, untouchedSinceMs: Long): List<String>
+
+    @Query("DELETE FROM time_entry_tag_cross_ref WHERE timeEntryId IN (:ids)")
+    suspend fun clearTagRefsFor(ids: List<String>)
+
+    /** Drop old cached server copies (see [findPrunableSyncedEntries]). Returns how many. */
+    @Transaction
+    suspend fun pruneSyncedEntries(startBefore: String, untouchedSinceMs: Long): Int {
+        val ids = findPrunableSyncedEntries(startBefore, untouchedSinceMs)
+        ids.chunked(SQLITE_SAFE_ID_CHUNK).forEach { chunk ->
+            clearTagRefsFor(chunk)
+            deleteByIds(chunk)
+        }
+        return ids.size
     }
 
     private companion object {
