@@ -22,6 +22,7 @@ import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.domain.time.isWorkTimeEntry
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -108,6 +109,10 @@ class CalendarViewModel @Inject constructor(
     private var memberId: String? = null
     private var visibleLoadJob: Job? = null
 
+    /** Where day buckets are built; JVM tests run it on their test dispatcher to stay deterministic. */
+    @VisibleForTesting
+    internal var bucketDispatcher: CoroutineDispatcher = Dispatchers.Default
+
     // The organization whose Room entries and sync state the calendar shows. The Room streams are
     // only collected while the screen observes [uiState] (see there), not for the ViewModel's life.
     private val organizationInput = MutableStateFlow<String?>(null)
@@ -158,7 +163,9 @@ class CalendarViewModel @Inject constructor(
                     flowOf(EntrySnapshot(organizationId = null))
                 } else {
                     combine(
-                        reader.observeTimeEntries(org).map { entries -> buildDayBuckets(entries, bucketZone, nowInstant()) },
+                        reader.observeTimeEntries(org).map { entries ->
+                            buildDayBuckets(entries, bucketZone, nowInstant(), bucketDispatcher)
+                        },
                         reader.observeSyncOperations(org),
                     ) { buckets, operations -> EntrySnapshot(org, buckets, operations) }
                 }
@@ -633,21 +640,25 @@ private const val MIN_VISIBLE_DAYS = 1
  * covers with only that day's seconds counted. Runs off the main thread: a large month can hold
  * thousands of entries and grouping them on the UI thread would jank or ANR.
  */
-internal suspend fun buildDayBuckets(entries: List<TimeEntry>, zone: ZoneId, now: Instant): Map<LocalDate, DayBucket> =
-    withContext(Dispatchers.Default) {
-        entries
-            .flatMap { entry -> entryDaySlices(entry, zone, now).map { slice -> slice to entry } }
-            .groupBy({ it.first.date }, { it })
-            .mapValues { (date, daySlices) ->
-                DayBucket(
-                    date = date,
-                    entries = daySlices.map { it.second }.sortedByDescending { it.start },
-                    totalSeconds = daySlices
-                        .filter { (_, entry) -> isWorkTimeEntry(entry) }
-                        .sumOf { it.first.seconds },
-                )
-            }
-    }
+internal suspend fun buildDayBuckets(
+    entries: List<TimeEntry>,
+    zone: ZoneId,
+    now: Instant,
+    dispatcher: CoroutineDispatcher = Dispatchers.Default,
+): Map<LocalDate, DayBucket> = withContext(dispatcher) {
+    entries
+        .flatMap { entry -> entryDaySlices(entry, zone, now).map { slice -> slice to entry } }
+        .groupBy({ it.first.date }, { it })
+        .mapValues { (date, daySlices) ->
+            DayBucket(
+                date = date,
+                entries = daySlices.map { it.second }.sortedByDescending { it.start },
+                totalSeconds = daySlices
+                    .filter { (_, entry) -> isWorkTimeEntry(entry) }
+                    .sumOf { it.first.seconds },
+            )
+        }
+}
 
 internal fun monthsWithAdjacentPeriods(visibleMonths: List<YearMonth>): List<YearMonth> {
     if (visibleMonths.isEmpty()) return emptyList()

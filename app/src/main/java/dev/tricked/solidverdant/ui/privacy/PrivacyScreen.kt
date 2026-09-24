@@ -55,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -95,15 +96,16 @@ fun PrivacyScreen(onBack: () -> Unit = {}, onLogout: () -> Unit = {}) {
     val viewModel: PrivacyViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val resources = LocalResources.current
     val snackbarHostState = remember { SnackbarHostState() }
     var dialog by rememberSaveable { mutableStateOf<PrivacyDialog?>(null) }
 
     LaunchedEffect(state.clearOutcome) {
         when (state.clearOutcome) {
             PrivacyViewModel.ClearOutcome.CLEARED ->
-                snackbarHostState.showSnackbar(context.getString(R.string.sweep_privacy_cleared))
+                snackbarHostState.showSnackbar(resources.getString(R.string.sweep_privacy_cleared))
             PrivacyViewModel.ClearOutcome.FAILED ->
-                snackbarHostState.showSnackbar(context.getString(R.string.sweep_privacy_clear_failed))
+                snackbarHostState.showSnackbar(resources.getString(R.string.sweep_privacy_clear_failed))
             // Changes arrived while the confirmation was open: explain instead of clearing.
             PrivacyViewModel.ClearOutcome.BLOCKED -> dialog = PrivacyDialog.SYNC_FIRST
             null -> return@LaunchedEffect

@@ -192,6 +192,9 @@ class CalendarViewModelTest {
         observed: Boolean = true,
         clock: Clock = SystemClock(),
     ) = CalendarViewModel(reader, source, settings, temporalPolicyProvider, clock).also { model ->
+        // Build buckets on the test dispatcher: on Dispatchers.Default the first state could still
+        // be in flight when a heavily loaded test run asserts on it.
+        model.bucketDispatcher = Dispatchers.Main
         viewModels += model
         if (observed) screenObservers += observe(model)
     }

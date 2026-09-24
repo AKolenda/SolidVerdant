@@ -43,7 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -79,7 +79,7 @@ fun ReviewDayPane() {
     val viewModel: ReviewDayViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
-    val context = LocalContext.current
+    val resources = LocalResources.current
     val snackbarHostState = remember { SnackbarHostState() }
 
     var showAdjustDialog by remember { mutableStateOf(false) }
@@ -88,7 +88,7 @@ fun ReviewDayPane() {
 
     LaunchedEffect(message) {
         val messageRes = message ?: return@LaunchedEffect
-        snackbarHostState.showSnackbar(context.getString(messageRes))
+        snackbarHostState.showSnackbar(resources.getString(messageRes))
         viewModel.consumeMessage()
     }
 
