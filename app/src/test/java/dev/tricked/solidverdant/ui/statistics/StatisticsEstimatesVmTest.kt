@@ -99,6 +99,9 @@ class StatisticsEstimatesVmTest {
         authDataStore = authDataStore,
         catalogDao = db.catalogDao(),
         temporalPolicyProvider = temporalPolicyProvider,
+        clock = object : Clock {
+            override fun nowMs() = 1L
+        },
     ).also { viewModels += it }
 
     private suspend fun seed(orgId: String, memberId: String) {

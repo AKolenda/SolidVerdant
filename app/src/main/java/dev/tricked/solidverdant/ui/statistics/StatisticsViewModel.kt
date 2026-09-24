@@ -15,11 +15,13 @@ import dev.tricked.solidverdant.data.export.CsvExporter
 import dev.tricked.solidverdant.data.local.AuthDataStore
 import dev.tricked.solidverdant.data.local.db.CatalogDao
 import dev.tricked.solidverdant.data.local.db.MembershipEntity
+import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.time.TemporalPolicy
 import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
+import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -29,13 +31,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -99,10 +101,12 @@ data class DrillDownUiState(
 /**
  * ViewModel for the Statistics screen.
  *
- * Room supplies an immediate offline result while a bounded, server-filtered request refreshes the
- * selected range. Filters are applied locally to the fetched/cached entries and drive every chart,
- * KPI, the previous-period comparison and the CSV export. A failed refresh never turns cached data
- * into a false empty state.
+ * Room supplies an immediate offline result while one bounded server request (the selected and
+ * comparison periods plus a short carry-in, see [statisticsFetchWindow]) fills in history Room has
+ * not cached. The server result is reused for [STATISTICS_CACHE_TTL_MS] per window, and Room rows
+ * are overlaid on it by id so local creates, edits and deletions show immediately. Filters are
+ * applied locally to the merged entries and drive every chart, KPI, the previous-period comparison
+ * and the CSV export. A failed refresh never turns cached data into a false empty state.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -113,6 +117,7 @@ class StatisticsViewModel @Inject constructor(
     private val authDataStore: AuthDataStore,
     private val catalogDao: CatalogDao,
     private val temporalPolicyProvider: TemporalPolicyProvider,
+    private val clock: Clock,
 ) : ViewModel() {
 
     // Latest account temporal policy (zone + first-day-of-week), kept for the non-reactive callers
@@ -175,6 +180,9 @@ class StatisticsViewModel @Inject constructor(
 
     private data class RemoteEntries(val entries: List<TimeEntry>? = null, val isLoading: Boolean = false, val failed: Boolean = false)
 
+    /** Room's rows for the organization plus the ids of entries queued for deletion. */
+    private data class LocalEntries(val entries: List<TimeEntry>, val pendingDeleteIds: Set<String>)
+
     /** Off-main-thread result bundle for one uiState emission. */
     private data class EstimateComputation(
         val summary: StatisticsSummary,
@@ -183,35 +191,62 @@ class StatisticsViewModel @Inject constructor(
         val estimates: List<EstimateProgress>,
     )
 
-    private fun loadRemoteEntries(
-        organizationId: String,
-        memberId: String,
-        range: ClosedRange<LocalDate>,
-        zone: ZoneId,
-    ): Flow<RemoteEntries> = flow {
-        emit(RemoteEntries(isLoading = true))
+    private val remoteCache = StatisticsRemoteCache()
+
+    /**
+     * The server's entries for [key]'s bounded window. A window fetched within the cache TTL is
+     * reused without a request; otherwise any older copy is shown while it refreshes, and is kept
+     * (flagged failed) when the refresh fails, so a flaky network never blanks the Dashboard.
+     */
+    private fun loadRemoteEntries(key: StatisticsCacheKey): Flow<RemoteEntries> = flow {
+        remoteCache.fresh(key, clock.nowMs())?.let { cached ->
+            emit(RemoteEntries(entries = cached))
+            return@flow
+        }
+        val stale = remoteCache.stale(key)
+        emit(RemoteEntries(entries = stale, isLoading = true))
+        val fetched = try {
+            fetchWindow(key)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.w("Statistics refresh failed: %s", e.javaClass.simpleName)
+            null
+        }
+        if (fetched == null) {
+            emit(RemoteEntries(entries = stale, failed = true))
+        } else {
+            remoteCache.put(key, fetched, clock.nowMs())
+            emit(RemoteEntries(entries = fetched))
+        }
+    }.flowOn(Dispatchers.IO)
+
+    private suspend fun fetchWindow(key: StatisticsCacheKey): List<TimeEntry> {
         val entries = mutableListOf<TimeEntry>()
-        val start = statisticsFetchStart
-        val end = range.endInclusive.plusDays(1).atStartOfDay(zone).toInstant().toString()
         val pageSize = REMOTE_PAGE_SIZE
         var offset = 0
         while (true) {
             val page = authRepository.getTimeEntries(
-                organizationId,
-                memberId,
+                key.organizationId,
+                key.memberId,
                 limit = pageSize,
                 offset = offset,
-                start = start,
-                end = end,
+                start = key.window.start,
+                end = key.window.end,
             ).getOrThrow()
             entries += page.data
             offset += page.data.size
             if (!shouldFetchNextPage(pageSize, page.data.size, offset, page.meta?.total)) break
         }
-        emit(RemoteEntries(entries = entries))
-    }.catch {
-        emit(RemoteEntries(failed = true))
-    }.flowOn(Dispatchers.IO)
+        return entries
+    }
+
+    private fun observeLocalEntries(organizationId: String): Flow<LocalEntries> = combine(
+        timeEntryRepository.observeTimeEntries(organizationId),
+        timeEntryRepository.observeSyncOperations(organizationId)
+            .map { operations -> operations.filter { it.type == OutboxOpType.DELETE }.mapTo(HashSet()) { it.entryId } }
+            .distinctUntilChanged(),
+    ) { entries, pendingDeleteIds -> LocalEntries(entries, pendingDeleteIds) }
 
     /**
      * Best-effort display name for the current organization, used only to label the CSV export.
@@ -278,16 +313,19 @@ class StatisticsViewModel @Inject constructor(
                         val zone = policy.zone
                         val resolved = range.resolve(LocalDate.now(zone), policy.firstDayOfWeek)
                         val previous = previousPeriod(resolved)
-                        val fetchRange = previous.start..resolved.endInclusive
+                        val key = StatisticsCacheKey(orgId, memberId, statisticsFetchWindow(resolved, previous, zone))
+                        val knownLocalIds = remoteCache.locallyKnownIds(orgId)
                         combine(
-                            timeEntryRepository.observeTimeEntries(orgId),
+                            observeLocalEntries(orgId),
                             catalogFlow,
-                            loadRemoteEntries(orgId, memberId, fetchRange, zone),
+                            loadRemoteEntries(key),
                             filtersFlow,
-                        ) { cachedEntries, catalog, remote, filters ->
-                            val entries = remote.entries ?: cachedEntries
+                        ) { local, catalog, remote, filters ->
                             val orgName = resolveOrgName(orgId)
                             val computed = withContext(Dispatchers.Default) {
+                                // Room rows override the server snapshot by id and locally deleted
+                                // rows drop out, so offline edits show before the next fetch.
+                                val entries = overlayLocalEntries(remote.entries, local.entries, local.pendingDeleteIds, knownLocalIds)
                                 val filtered = StatisticsAggregator.applyFilters(entries, catalog.projects, filters)
                                 val current = StatisticsAggregator.compute(
                                     entries = filtered,
@@ -365,8 +403,12 @@ class StatisticsViewModel @Inject constructor(
         filtersFlow.value = StatFilters()
     }
 
-    /** Re-fetches the selected range while keeping cached results visible. */
+    /**
+     * Re-fetches the selected range (pull to refresh or Retry), bypassing the cache TTL while the
+     * previous result stays visible until the new one arrives.
+     */
     fun refresh() {
+        remoteCache.expireAll()
         refreshTrigger.value += 1
     }
 
@@ -487,12 +529,6 @@ class StatisticsViewModel @Inject constructor(
         return "solidverdant-timeentries-${start.format(fmt)}-${end.format(fmt)}"
     }
 }
-
-/**
- * Solidtime's `start` query parameter filters by the entry's start timestamp, not interval
- * intersection. This seam is kept explicit so a range fetch cannot silently drop carry-in entries.
- */
-internal val statisticsFetchStart: String? = null
 
 /**
  * Whether another page must be fetched after receiving one of [lastPageSize] entries.

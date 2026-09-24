@@ -126,6 +126,9 @@ class StatisticsMembershipTest {
         authDataStore = authDataStore,
         catalogDao = db.catalogDao(),
         temporalPolicyProvider = temporalPolicyProvider,
+        clock = object : Clock {
+            override fun nowMs() = 1L
+        },
     ).also { viewModels += it }
 
     /** Seeds a cached membership plus one cached, already-synced time entry today (within [StatRange.ThisWeek]). */
