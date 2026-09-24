@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Reports and templates consistency sweep. Feature-scoped file; do not merge into strings.xml. -->
+
+    <!-- Dashboard: projects beyond the top few fold into one legend item and breakdown row. -->
+    <string name="stats_sweep_other">Overig</string>
+    <plurals name="stats_sweep_other_projects">
+        <item quantity="one">%1$d ander project</item>
+        <item quantity="other">%1$d andere projecten</item>
+    </plurals>
+
+    <!-- Template editor -->
+    <string name="templates_sweep_delete_template">Sjabloon verwijderen</string>
+</resources>

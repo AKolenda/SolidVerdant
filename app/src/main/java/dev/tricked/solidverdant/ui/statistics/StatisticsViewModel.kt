@@ -88,6 +88,9 @@ sealed interface DrillDownTarget {
 
     /** A trend bar covering the inclusive [start]..[end] window it represents. */
     data class TrendSlice(val label: String, val start: LocalDate, val end: LocalDate) : DrillDownTarget
+
+    /** The Dashboard's "Other" row: every project folded out of the top list. */
+    data class OtherProjects(val projectIds: Set<String?>) : DrillDownTarget
 }
 
 /** Contents of the drill-down bottom sheet for the currently tapped [target]. */
@@ -345,7 +348,12 @@ class StatisticsViewModel @Inject constructor(
                                     granularity = granularityFor(previous),
                                     firstDayOfWeek = policy.firstDayOfWeek,
                                 )
-                                val estimates = StatisticsAggregator.projectEstimateProgress(catalog.projects, filters)
+                                val estimates = StatisticsAggregator.projectEstimateProgress(
+                                    projects = catalog.projects,
+                                    filters = filters,
+                                    relevantProjectIds = current.perProject.mapNotNullTo(HashSet()) { it.projectId },
+                                    limit = DASHBOARD_TOP_ESTIMATES,
+                                )
                                 EstimateComputation(current, computeComparison(current, prior, previous), filtered, estimates)
                             }
                             val exportEntries = withContext(Dispatchers.Default) {
@@ -420,6 +428,11 @@ class StatisticsViewModel @Inject constructor(
         openDrillDown(DrillDownTarget.ProjectSlice(projectId, projectName, colorHex))
     }
 
+    /** Opens the drill-down list for the Dashboard's "Other" row covering [projectIds]. */
+    fun openOtherProjectsDrillDown(projectIds: Set<String?>) {
+        openDrillDown(DrillDownTarget.OtherProjects(projectIds))
+    }
+
     /** Opens the drill-down list for a tapped trend bar covering [start]..[end] (inclusive). */
     fun openTrendDrillDown(label: String, start: LocalDate, end: LocalDate) {
         openDrillDown(DrillDownTarget.TrendSlice(label, start, end))
@@ -453,6 +466,16 @@ class StatisticsViewModel @Inject constructor(
                         selEnd = rangeEnd,
                         matchProject = true,
                         projectId = target.projectId,
+                    )
+                    is DrillDownTarget.OtherProjects -> StatisticsAggregator.drillDown(
+                        entries = snapshot.filteredEntries.filter { it.projectId in target.projectIds },
+                        projects = snapshot.catalog.projects,
+                        tasks = snapshot.catalog.tasks,
+                        zone = snapshotZone,
+                        selStart = rangeStart,
+                        selEnd = rangeEnd,
+                        matchProject = false,
+                        projectId = null,
                     )
                     is DrillDownTarget.TrendSlice -> {
                         val selStart = if (target.start.isAfter(rangeStart)) target.start else rangeStart

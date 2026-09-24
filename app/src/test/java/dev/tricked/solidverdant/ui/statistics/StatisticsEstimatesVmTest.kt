@@ -14,6 +14,8 @@ import dev.tricked.solidverdant.data.local.db.AppDatabase
 import dev.tricked.solidverdant.data.local.db.MembershipEntity
 import dev.tricked.solidverdant.data.local.db.OrganizationEntity
 import dev.tricked.solidverdant.data.local.db.ProjectEntity
+import dev.tricked.solidverdant.data.local.db.SyncState
+import dev.tricked.solidverdant.data.local.db.TimeEntryEntity
 import dev.tricked.solidverdant.data.remote.FakeRemoteDataSource
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
@@ -35,6 +37,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * The Statistics UI state must surface project estimate budgets ([EstimateProgress]) derived
@@ -139,6 +143,27 @@ class StatisticsEstimatesVmTest {
                 ),
             ),
         )
+        // The estimates section lists projects with time in the selected range (this week).
+        val nine = LocalDate.now(ZoneId.systemDefault()).atTime(9, 0).atZone(ZoneId.systemDefault())
+        listOf("p-est", "p-none").forEach { projectId ->
+            db.timeEntryDao().upsert(
+                TimeEntryEntity(
+                    id = "entry-$projectId",
+                    description = null,
+                    userId = memberId,
+                    start = nine.toInstant().toString(),
+                    end = nine.plusHours(1).toInstant().toString(),
+                    duration = 3600,
+                    taskId = null,
+                    projectId = projectId,
+                    billable = false,
+                    organizationId = orgId,
+                    updatedAt = 1L,
+                    syncState = SyncState.SYNCED,
+                    pendingDelete = false,
+                ),
+            )
+        }
     }
 
     @Test
@@ -155,6 +180,19 @@ class StatisticsEstimatesVmTest {
         assertEquals(8 * 3600, ep.estimatedSeconds)
         assertEquals(2 * 3600, ep.spentSeconds)
         assertTrue(ep.fraction in 0.24f..0.26f)
+    }
+
+    @Test
+    fun estimated_projects_without_time_in_the_range_are_left_out() = runTest(dispatcher.scheduler) {
+        seed(orgId = "org1", memberId = "m1")
+        db.timeEntryDao().deleteById("entry-p-est")
+        authDataStore.saveCurrentMembershipId("m1")
+
+        val vm = viewModel()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        val state = vm.uiState.first { !it.isLoading && it.summary.entryCount == 1 }
+        assertTrue(state.estimateProgress.isEmpty())
     }
 
     @Test

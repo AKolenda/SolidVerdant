@@ -62,6 +62,8 @@ fun StatDrillDownSheet(state: DrillDownUiState, onDismiss: () -> Unit) {
     val title = when (val target = state.target) {
         is DrillDownTarget.ProjectSlice -> target.projectName ?: stringResource(R.string.stats2_no_project)
         is DrillDownTarget.TrendSlice -> target.label
+        is DrillDownTarget.OtherProjects ->
+            pluralStringResource(R.plurals.stats_sweep_other_projects, target.projectIds.size, target.projectIds.size)
     }
     ModalBottomSheet(
         onDismissRequest = onDismiss,

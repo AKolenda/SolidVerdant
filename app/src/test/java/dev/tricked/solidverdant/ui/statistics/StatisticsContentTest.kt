@@ -7,11 +7,16 @@
 package dev.tricked.solidverdant.ui.statistics
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.ui.statistics.charts.StackedBarChartTestTags
@@ -87,8 +92,74 @@ class StatisticsContentTest {
         composeRule.onNodeWithTag(StackedBarChartTestTags.bar(1)).performScrollTo().performClick()
         assertEquals(listOf(LocalDate.parse("2026-07-07")), buckets.map { it.startDate })
 
-        composeRule.onNodeWithTag(DashboardTestTags.projectRow("p2")).performScrollTo().performClick()
+        composeRule.onNodeWithTag(DashboardTestTags.LIST).performScrollToNode(hasTestTag(DashboardTestTags.projectRow("p2")))
+        composeRule.onNodeWithTag(DashboardTestTags.projectRow("p2")).performClick()
         assertEquals(listOf("p2"), projectsTapped.map { it.projectId })
+        composeRule.onNodeWithTag(DashboardTestTags.OTHER_PROJECTS_ROW).assertDoesNotExist()
+    }
+
+    @Test
+    fun smallerProjectsFoldIntoOneOtherRowThatOpensTheirEntries() {
+        val many = (1..10).map { Project(id = "p$it", name = "Project $it", color = "#336699") }
+        val summary = StatisticsAggregator.compute(
+            // Project n gets n hours, so p10..p5 are the top six and p4..p1 fold into "Other".
+            entries = many.mapIndexed { i, project -> entry("e$i", "2026-07-06T00:00:00Z", (i + 1) * 3600, project.id) },
+            projects = many,
+            rangeStart = start,
+            rangeEnd = end,
+            zone = ZoneId.of("UTC"),
+            granularity = TrendGranularity.DAY,
+            firstDayOfWeek = DayOfWeek.MONDAY,
+        )
+        val othersTapped = mutableListOf<Set<String?>>()
+        composeRule.setContent {
+            MaterialTheme {
+                StatisticsContent(
+                    state = state.copy(summary = summary, catalog = StatCatalog(projects = many)),
+                    exporting = false,
+                    onRangeChange = {},
+                    onFiltersChange = {},
+                    onClearFilters = {},
+                    onRefresh = {},
+                    onExport = {},
+                    onProjectClick = {},
+                    onBucketClick = {},
+                    onOtherProjectsClick = { othersTapped += it },
+                )
+            }
+        }
+
+        val list = composeRule.onNodeWithTag(DashboardTestTags.LIST)
+        list.performScrollToNode(hasTestTag(DashboardTestTags.projectRow("p5")))
+        list.performScrollToNode(hasTestTag(DashboardTestTags.OTHER_PROJECTS_ROW))
+        composeRule.onNodeWithTag(DashboardTestTags.projectRow("p4")).assertDoesNotExist()
+        composeRule.onNodeWithTag(DashboardTestTags.OTHER_PROJECTS_ROW).assert(hasContentDescription("4 other projects", substring = true))
+        composeRule.onNodeWithTag(DashboardTestTags.OTHER_PROJECTS_ROW).performClick()
+        assertEquals(listOf(setOf<String?>("p1", "p2", "p3", "p4")), othersTapped)
+    }
+
+    @Test
+    fun failedRefreshOffersRetryAboveTheCachedCards() {
+        var retries = 0
+        composeRule.setContent {
+            MaterialTheme {
+                StatisticsContent(
+                    state = state.copy(refreshFailed = true),
+                    exporting = false,
+                    onRangeChange = {},
+                    onFiltersChange = {},
+                    onClearFilters = {},
+                    onRefresh = { retries++ },
+                    onExport = {},
+                    onProjectClick = {},
+                    onBucketClick = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Retry").performClick()
+        assertEquals(1, retries)
+        composeRule.onNodeWithTag(DashboardTestTags.TOTAL).assertTextEquals("1h 30m")
     }
 
     @Test

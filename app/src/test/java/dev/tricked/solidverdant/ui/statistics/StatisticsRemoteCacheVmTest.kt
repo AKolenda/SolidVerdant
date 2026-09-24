@@ -215,6 +215,21 @@ class StatisticsRemoteCacheVmTest {
     }
 
     @Test
+    fun other_projects_drill_down_lists_the_folded_projects_from_server_and_room() = runTest(dispatcher.scheduler) {
+        seedMembership()
+        serverEntries = listOf(entry("srv-small").copy(projectId = "small"), entry("srv-big").copy(projectId = "big"))
+        db.timeEntryDao().upsert(entry("room-small").copy(projectId = "small").toEntity(updatedAt = 1L, syncState = SyncState.PENDING))
+        val vm = viewModel()
+        vm.settled { it.summary.entryCount == 3 }
+
+        vm.openOtherProjectsDrillDown(setOf("small"))
+        dispatcher.scheduler.advanceUntilIdle()
+
+        val drillDown = vm.drillDown.first { it != null && !it.isLoading }!!
+        assertEquals(setOf("srv-small", "room-small"), drillDown.rows.map { it.entryId }.toSet())
+    }
+
+    @Test
     fun refresh_bypasses_the_ttl() = runTest(dispatcher.scheduler) {
         seedMembership()
         serverEntries = listOf(entry("srv-1"))

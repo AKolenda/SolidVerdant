@@ -13,25 +13,24 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,6 +47,9 @@ import androidx.core.graphics.toColorInt
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.components.ErrorState
+import dev.tricked.solidverdant.ui.components.GroupedSection
+import dev.tricked.solidverdant.ui.components.LoadingState
 import dev.tricked.solidverdant.ui.navigation.MainTopBar
 import dev.tricked.solidverdant.ui.theme.Dimens
 import java.time.LocalDate
@@ -141,6 +143,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
             onRefresh = viewModel::refresh,
             onExport = viewModel::export,
             onProjectClick = { viewModel.openProjectDrillDown(it.projectId, it.projectName, it.colorHex) },
+            onOtherProjectsClick = viewModel::openOtherProjectsDrillDown,
             onBucketClick = { bucket ->
                 val end = when (state.granularity) {
                     TrendGranularity.DAY -> bucket.startDate
@@ -162,8 +165,10 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
 
 /**
  * Stateless Dashboard body: large title with export, period and offset controls, filter row, then
- * the total card, the stacked "By day" chart, the per-project breakdown and estimates.
+ * the total card, the stacked "By day" chart, the per-project breakdown and estimates. The cards
+ * are lazy items, and pulling down refreshes the range from the server.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Suppress("LongParameterList", "LongMethod")
 @Composable
 internal fun StatisticsContent(
@@ -177,63 +182,59 @@ internal fun StatisticsContent(
     onProjectClick: (ProjectTotal) -> Unit,
     onBucketClick: (TrendBucket) -> Unit,
     modifier: Modifier = Modifier,
+    onOtherProjectsClick: (Set<String?>) -> Unit = {},
 ) {
+    val overview = remember(state.summary) { StatisticsAggregator.projectOverview(state.summary) }
     Column(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         MainTopBar(
             title = stringResource(R.string.nav_reports),
             actions = { ExportAction(exporting = exporting, onExport = onExport) },
         )
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .navigationBarsPadding()
-                .padding(top = Dimens.Space8, bottom = Dimens.Space24),
-            verticalArrangement = Arrangement.spacedBy(Dimens.Space16),
+        PullToRefreshBox(
+            isRefreshing = state.isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
         ) {
-            StatRangeControls(range = state.range, onSelect = onRangeChange)
-
-            StatFilterBar(
-                filters = state.filters,
-                catalog = state.catalog,
-                onFiltersChange = onFiltersChange,
-                onClearFilters = onClearFilters,
-            )
-
-            if (state.isRefreshing) {
-                LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = Dimens.Space16))
-            }
-            if (state.refreshFailed) {
-                DashboardCard {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
-                        Text(
-                            stringResource(R.string.stats_cached_refresh_failed),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(onClick = onRefresh) { Text(stringResource(R.string.retry)) }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().navigationBarsPadding().testTag(DashboardTestTags.LIST),
+                contentPadding = PaddingValues(top = Dimens.Space8, bottom = Dimens.Space24),
+                verticalArrangement = Arrangement.spacedBy(Dimens.Space16),
+            ) {
+                item(key = "range") { StatRangeControls(range = state.range, onSelect = onRangeChange) }
+                item(key = "filters") {
+                    StatFilterBar(
+                        filters = state.filters,
+                        catalog = state.catalog,
+                        onFiltersChange = onFiltersChange,
+                        onClearFilters = onClearFilters,
+                    )
+                }
+                if (state.refreshFailed) {
+                    item(key = "refresh_failed") {
+                        GroupedSection {
+                            ErrorState(text = stringResource(R.string.stats_cached_refresh_failed), onRetry = onRefresh)
+                        }
                     }
                 }
-            }
-
-            when {
-                state.isLoading -> Box(Modifier.fillMaxWidth().padding(Dimens.Space32), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-                else -> {
-                    val range = state.rangeStart?.let { start -> state.rangeEnd?.let { end -> start..end } }
-                    SummaryCard(
-                        summary = state.summary,
-                        range = range,
-                        comparison = state.comparison,
-                        emptyText = if (state.isEmpty) stringResource(R.string.stats_empty) else null,
-                    )
+                if (state.isLoading) {
+                    item(key = "loading") { LoadingState() }
+                } else {
+                    item(key = "summary") {
+                        val range = state.rangeStart?.let { start -> state.rangeEnd?.let { end -> start..end } }
+                        SummaryCard(
+                            summary = state.summary,
+                            range = range,
+                            comparison = state.comparison,
+                            emptyText = if (state.isEmpty) stringResource(R.string.stats_empty) else null,
+                        )
+                    }
                     if (!state.isEmpty) {
-                        TrendCard(state.summary, state.granularity, onBucketClick)
-                        ProjectBreakdownCard(state.summary, onProjectClick)
+                        item(key = "trend") { TrendCard(overview, state.granularity, onBucketClick) }
+                        item(key = "projects") {
+                            ProjectBreakdownCard(state.summary, overview, onProjectClick, onOtherProjectsClick)
+                        }
                         if (state.estimateProgress.isNotEmpty()) {
-                            EstimatesCard(state.estimateProgress)
+                            item(key = "estimates") { EstimatesCard(state.estimateProgress) }
                         }
                     }
                 }

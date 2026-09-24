@@ -54,8 +54,14 @@ import kotlin.math.roundToLong
 internal object DashboardTestTags {
     const val EXPORT = "stats_export"
     const val TOTAL = "stats_total"
+    const val LIST = "stats_dashboard_list"
+    const val OTHER_PROJECTS_ROW = "stats_projects_other_row"
     fun projectRow(projectId: String?) = "stats_project_row_${projectId ?: "none"}"
 }
+
+/** The swatch and bar colour for the folded "Other" projects, distinct from the no-project grey. */
+@Composable
+private fun otherProjectsColor(): Color = MaterialTheme.colorScheme.secondary
 
 private const val TRAILING_WEEK_DAYS = 6L
 private const val WEEKDAY_LABEL_MAX_BARS = 7
@@ -160,15 +166,19 @@ private fun ComparisonLine(comparison: PeriodComparison, locale: Locale) {
 
 /**
  * "By day" (or "By week") stacked bars with a project legend. Up to a week of day bars is
- * labelled by weekday; longer ranges label a few evenly spaced dates.
+ * labelled by weekday; longer ranges label a few evenly spaced dates. The legend names the
+ * overview's top projects and one "Other" swatch, the same folding the bars are stacked with.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun TrendCard(summary: StatisticsSummary, granularity: TrendGranularity, onBucketClick: (TrendBucket) -> Unit) {
+internal fun TrendCard(overview: ProjectOverview, granularity: TrendGranularity, onBucketClick: (TrendBucket) -> Unit) {
     val locale = appLocale()
     val fallback = MaterialTheme.colorScheme.outline
-    val trend = summary.trend
-    val segmentColors = remember(trend, fallback) { trend.map { b -> b.segments.map { hexToColor(it.colorHex, fallback) } } }
+    val otherColor = otherProjectsColor()
+    val trend = overview.trend
+    val segmentColors = remember(trend, fallback, otherColor) {
+        trend.map { b -> b.segments.map { if (it.isOther) otherColor else hexToColor(it.colorHex, fallback) } }
+    }
     val xLabels = remember(trend, granularity, locale) {
         val shown = sparseLabelIndices(trend.size)
         val weekdays = granularity == TrendGranularity.DAY && trend.size <= WEEKDAY_LABEL_MAX_BARS
@@ -201,66 +211,101 @@ internal fun TrendCard(summary: StatisticsSummary, granularity: TrendGranularity
             horizontalArrangement = Arrangement.spacedBy(Dimens.Space12),
             verticalArrangement = Arrangement.spacedBy(Dimens.Space4),
         ) {
-            summary.perProject.forEach { project ->
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.Space4)) {
-                    ProjectSwatch(hexToColor(project.colorHex, fallback))
-                    Text(
-                        projectDisplayName(project),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+            overview.top.forEach { project ->
+                LegendItem(hexToColor(project.colorHex, fallback), projectDisplayName(project))
+            }
+            if (overview.hasOther) LegendItem(otherColor, stringResource(R.string.stats_sweep_other))
+        }
+    }
+}
+
+@Composable
+private fun LegendItem(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.Space4)) {
+        ProjectSwatch(color)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
+ * One row per top project: name and duration over a thin bar in the project colour. Each bar's
+ * length is the project's share of the range total, so the bars read as a proportion of all
+ * tracked time. The projects folded out of [overview]'s top list share one "N other projects" row
+ * that opens their entries.
+ */
+@Composable
+internal fun ProjectBreakdownCard(
+    summary: StatisticsSummary,
+    overview: ProjectOverview,
+    onProjectClick: (ProjectTotal) -> Unit,
+    onOtherProjectsClick: (Set<String?>) -> Unit,
+) {
+    val fallback = MaterialTheme.colorScheme.outline
+    DashboardCard(title = stringResource(R.string.stats_by_project)) {
+        Column {
+            overview.top.forEach { project ->
+                BreakdownRow(
+                    name = projectDisplayName(project),
+                    seconds = project.seconds,
+                    totalSeconds = summary.totalSeconds,
+                    color = hexToColor(project.colorHex, fallback),
+                    testTag = DashboardTestTags.projectRow(project.projectId),
+                    onClick = { onProjectClick(project) },
+                )
+            }
+            if (overview.hasOther) {
+                val count = overview.otherProjectIds.size
+                BreakdownRow(
+                    name = pluralStringResource(R.plurals.stats_sweep_other_projects, count, count),
+                    seconds = overview.otherSeconds,
+                    totalSeconds = summary.totalSeconds,
+                    color = otherProjectsColor(),
+                    testTag = DashboardTestTags.OTHER_PROJECTS_ROW,
+                    onClick = { onOtherProjectsClick(overview.otherProjectIds) },
+                )
             }
         }
     }
 }
 
-/**
- * One row per project: name and duration over a thin bar in the project colour. Each bar's length
- * is the project's share of the range total, so the bars read as a proportion of all tracked time.
- */
 @Composable
-internal fun ProjectBreakdownCard(summary: StatisticsSummary, onProjectClick: (ProjectTotal) -> Unit) {
-    val fallback = MaterialTheme.colorScheme.outline
-    DashboardCard(title = stringResource(R.string.stats_by_project)) {
-        Column {
-            summary.perProject.forEach { project ->
-                val name = projectDisplayName(project)
-                val duration = formatDuration(project.seconds)
-                val description = stringResource(R.string.stats2_drilldown_project_content_description, name) + ", " + duration
-                val fraction = if (summary.totalSeconds > 0) project.seconds.toFloat() / summary.totalSeconds else 0f
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = Dimens.MinTouchTarget)
-                        .testTag(DashboardTestTags.projectRow(project.projectId))
-                        .clickable(role = Role.Button) { onProjectClick(project) }
-                        .clearAndSetSemantics { contentDescription = description }
-                        .padding(vertical = Dimens.Space8),
-                    verticalArrangement = Arrangement.spacedBy(Dimens.Space8),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
-                        ProjectSwatch(hexToColor(project.colorHex, fallback))
-                        Text(
-                            name,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Text(
-                            duration,
-                            style = MaterialTheme.typography.bodyMedium.tabular(),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    ProportionBar(fraction, hexToColor(project.colorHex, fallback))
-                }
-            }
+private fun BreakdownRow(name: String, seconds: Long, totalSeconds: Long, color: Color, testTag: String, onClick: () -> Unit) {
+    val duration = formatDuration(seconds)
+    val description = stringResource(R.string.stats2_drilldown_project_content_description, name) + ", " + duration
+    val fraction = if (totalSeconds > 0) seconds.toFloat() / totalSeconds else 0f
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = Dimens.MinTouchTarget)
+            .testTag(testTag)
+            .clickable(role = Role.Button, onClick = onClick)
+            .clearAndSetSemantics { contentDescription = description }
+            .padding(vertical = Dimens.Space8),
+        verticalArrangement = Arrangement.spacedBy(Dimens.Space8),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
+            ProjectSwatch(color)
+            Text(
+                name,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                duration,
+                style = MaterialTheme.typography.bodyMedium.tabular(),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
+        ProportionBar(fraction, color)
     }
 }
 

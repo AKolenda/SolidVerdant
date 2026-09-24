@@ -23,8 +23,11 @@ enum class TrendGranularity { DAY, WEEK }
 /** [projectName] is null when the entry has no project or its project is missing from the catalogue. */
 data class ProjectTotal(val projectId: String?, val projectName: String?, val colorHex: String, val seconds: Long)
 
-/** One project's share of a [TrendBucket]; [projectId] null is the "no project" bucket. */
-data class ProjectSegment(val projectId: String?, val colorHex: String, val seconds: Long)
+/**
+ * One project's share of a [TrendBucket]; [projectId] null is the "no project" bucket. [isOther]
+ * marks the segment [StatisticsAggregator.projectOverview] folds the smaller projects into.
+ */
+data class ProjectSegment(val projectId: String?, val colorHex: String, val seconds: Long, val isOther: Boolean = false)
 
 /**
  * One bar of the trend chart. [segments] stack the bucket's non-zero time by project, ordered like
@@ -42,6 +45,26 @@ data class StatisticsSummary(
     val perProject: List<ProjectTotal>,
     val trend: List<TrendBucket>,
 )
+
+/** Projects the Dashboard names in its legend and breakdown; smaller ones fold into "Other". */
+const val DASHBOARD_TOP_PROJECTS = 6
+
+/** Estimate rows the Dashboard shows, most urgent first. */
+const val DASHBOARD_TOP_ESTIMATES = 6
+
+/**
+ * The Dashboard's per-project view: the [top] projects by time, the remaining [otherProjectIds]
+ * folded into one [otherSeconds] total, and the [trend] with the same folding so the chart's
+ * colours match the legend. Without folding, [top] is every project and [trend] is unchanged.
+ */
+data class ProjectOverview(
+    val top: List<ProjectTotal>,
+    val otherSeconds: Long,
+    val otherProjectIds: Set<String?>,
+    val trend: List<TrendBucket>,
+) {
+    val hasOther: Boolean get() = otherProjectIds.isNotEmpty()
+}
 
 /** Fraction at/above which a project is flagged as approaching its estimate (but not yet over). */
 private const val NEAR_THRESHOLD = 0.9f
@@ -112,6 +135,30 @@ object StatisticsAggregator {
     }
 
     /**
+     * Keeps the [limit] projects with the most time and folds the rest, in every trend bucket too,
+     * into one "Other" total. A single leftover project is shown by name instead: folding it would
+     * hide its name without saving a row.
+     */
+    fun projectOverview(summary: StatisticsSummary, limit: Int = DASHBOARD_TOP_PROJECTS): ProjectOverview {
+        if (summary.perProject.size <= limit + 1) {
+            return ProjectOverview(summary.perProject, otherSeconds = 0, otherProjectIds = emptySet(), trend = summary.trend)
+        }
+        val top = summary.perProject.take(limit)
+        val rest = summary.perProject.drop(limit)
+        val topIds = top.mapTo(HashSet()) { it.projectId }
+        val trend = summary.trend.map { bucket ->
+            val (kept, folded) = bucket.segments.partition { it.projectId in topIds }
+            if (folded.isEmpty()) {
+                bucket
+            } else {
+                val other = ProjectSegment(projectId = null, colorHex = "", seconds = folded.sumOf { it.seconds }, isOther = true)
+                bucket.copy(segments = kept + other)
+            }
+        }
+        return ProjectOverview(top, rest.sumOf { it.seconds }, rest.mapTo(HashSet()) { it.projectId }, trend)
+    }
+
+    /**
      * Budget/progress for every in-scope project that carries a positive Solidtime estimate.
      *
      * Uses the server's authoritative project-level [Project.spentTime] vs [Project.estimatedTime]
@@ -122,10 +169,20 @@ object StatisticsAggregator {
      * section's scope stays consistent with the by-project view above it; the entry-level task/tag
      * dimensions have no project-level meaning here and are ignored. Sorted over-budget first (most
      * urgent), then by consumed fraction descending, then by name for a stable order.
+     *
+     * The Dashboard passes [relevantProjectIds], the projects with time in the selected range after
+     * every filter, so the section follows the range instead of listing every estimated project in
+     * the organization, and caps it at the [limit] most urgent.
      */
-    fun projectEstimateProgress(projects: List<Project>, filters: StatFilters): List<EstimateProgress> = projects.asSequence()
+    fun projectEstimateProgress(
+        projects: List<Project>,
+        filters: StatFilters,
+        relevantProjectIds: Set<String>? = null,
+        limit: Int = Int.MAX_VALUE,
+    ): List<EstimateProgress> = projects.asSequence()
         .filter { !it.isArchived }
         .filter { (it.estimatedTime ?: 0) > 0 }
+        .filter { relevantProjectIds == null || it.id in relevantProjectIds }
         .filter { p ->
             val projectOk = filters.projectIds.isEmpty() || p.id in filters.projectIds
             val clientOk = filters.clientIds.isEmpty() || (p.clientId != null && p.clientId in filters.clientIds)
@@ -150,6 +207,7 @@ object StatisticsAggregator {
                 .thenByDescending { it.fraction }
                 .thenBy { it.name },
         )
+        .take(limit)
         .toList()
 
     /** In-range contribution (seconds) of [e], or null when it does not overlap the window. */
