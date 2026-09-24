@@ -23,4 +23,9 @@
     <string name="sweep_inbox_work_days_none">None</string>
     <string name="sweep_inbox_work_days_every">Every day</string>
     <string name="sweep_inbox_work_days_range">%1$s–%2$s</string>
+
+    <!-- Review day -->
+    <string name="sweep_review_skip_failed_title">Stop syncing this change?</string>
+    <string name="sweep_review_skip_failed_message">The change stays on this device but is never sent to the server. This can\'t be undone.</string>
+    <string name="sweep_review_skip_failed_confirm">Stop syncing</string>
 </resources>

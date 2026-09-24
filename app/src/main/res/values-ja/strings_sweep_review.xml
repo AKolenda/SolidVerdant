@@ -21,4 +21,9 @@
     <string name="sweep_inbox_work_days_none">なし</string>
     <string name="sweep_inbox_work_days_every">毎日</string>
     <string name="sweep_inbox_work_days_range">%1$s〜%2$s</string>
+
+    <!-- Review day -->
+    <string name="sweep_review_skip_failed_title">この変更の同期をやめますか？</string>
+    <string name="sweep_review_skip_failed_message">変更はこのデバイスに残りますが、サーバーには送信されません。この操作は元に戻せません。</string>
+    <string name="sweep_review_skip_failed_confirm">同期をやめる</string>
 </resources>

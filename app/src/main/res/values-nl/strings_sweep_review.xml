@@ -21,4 +21,9 @@
     <string name="sweep_inbox_work_days_none">Geen</string>
     <string name="sweep_inbox_work_days_every">Elke dag</string>
     <string name="sweep_inbox_work_days_range">%1$s–%2$s</string>
+
+    <!-- Review day -->
+    <string name="sweep_review_skip_failed_title">Deze wijziging niet meer synchroniseren?</string>
+    <string name="sweep_review_skip_failed_message">De wijziging blijft op dit apparaat, maar wordt nooit naar de server gestuurd. Dit kan niet ongedaan worden gemaakt.</string>
+    <string name="sweep_review_skip_failed_confirm">Niet synchroniseren</string>
 </resources>

@@ -11,48 +11,41 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimePicker
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toColorInt
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.components.AppTimePickerDialog
+import dev.tricked.solidverdant.ui.components.PickerDialog
+import dev.tricked.solidverdant.ui.components.PickerItem
+import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.util.NotificationPermissionHelper
 
 /**
- * Material3 time-picker dialog shared by the reminder settings screen and the "adjust end time"
- * review action. Reports the chosen [Int] hour/minute on confirm.
+ * The time picker shared by the reminder settings and the "adjust end time" review action: the
+ * app's [AppTimePickerDialog], so it follows the device's 12- or 24-hour clock like every other one.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ReviewTimePickerDialog(
     title: String,
@@ -60,90 +53,69 @@ internal fun ReviewTimePickerDialog(
     initialMinute: Int,
     onConfirm: (hour: Int, minute: Int) -> Unit,
     onDismiss: () -> Unit,
+    confirmTestTag: String = ReviewTestTags.REVIEW_TIME_CONFIRM,
 ) {
-    val context = LocalContext.current
-    val is24Hour = remember { android.text.format.DateFormat.is24HourFormat(context) }
-    val timeState = rememberTimePickerState(
+    AppTimePickerDialog(
+        title = title,
         initialHour = initialHour,
         initialMinute = initialMinute,
-        is24Hour = is24Hour,
-    )
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                TimePicker(state = timeState)
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(timeState.hour, timeState.minute) }) {
-                Text(stringResource(R.string.review_dialog_confirm))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.review_dialog_cancel))
-            }
-        },
+        onDismiss = onDismiss,
+        onConfirm = onConfirm,
+        confirmLabel = stringResource(R.string.review_dialog_confirm),
+        confirmTestTag = confirmTestTag,
     )
 }
 
 /**
- * Dialog listing selectable projects for the "assign project" review action. Uses a lazy list so a
- * large project catalogue is never eagerly composed (per the UI guidance in AGENTS.md).
+ * Project choice for the "assign project" review action, in the app's searchable picker: the same
+ * lazily listed, full-screen-on-phones dialog as the filter and entry pickers. There is no "All" or
+ * "No project" row because the step exists to give the entry a project.
  */
 @Composable
 internal fun ProjectPickerDialog(projects: List<ReviewProject>, onSelect: (projectId: String) -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.review_project_dialog_title)) },
-        text = {
-            if (projects.isEmpty()) {
-                Text(stringResource(R.string.review_project_dialog_empty))
-            } else {
-                LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
-                    items(projects, key = { it.id }) { project ->
-                        TextButton(
-                            onClick = { onSelect(project.id) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp),
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Start,
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(12.dp)
-                                        .clip(CircleShape)
-                                        .background(projectColor(project.color)),
-                                )
-                                Text(
-                                    text = project.name,
-                                    modifier = Modifier.padding(start = 12.dp),
-                                )
-                            }
-                        }
-                    }
-                }
+    var query by rememberSaveable { mutableStateOf("") }
+    val filtered = remember(projects, query) {
+        val normalized = query.trim()
+        if (normalized.isEmpty()) projects else projects.filter { it.name.contains(normalized, ignoreCase = true) }
+    }
+    PickerDialog(
+        title = stringResource(R.string.review_project_dialog_title),
+        searchPlaceholder = stringResource(R.string.search_projects),
+        searchQuery = query,
+        onSearchQueryChange = { query = it },
+        onClose = onDismiss,
+        listTestTag = ReviewTestTags.REVIEW_PROJECT_LIST,
+        searchTestTag = ReviewTestTags.REVIEW_PROJECT_SEARCH,
+    ) {
+        items(filtered, key = { it.id }) { project ->
+            val color = projectColor(project.color)
+            PickerItem(
+                text = project.name,
+                selected = false,
+                onClick = { onSelect(project.id) },
+                leadingContent = {
+                    Box(Modifier.size(Dimens.ProjectDot).clip(CircleShape).background(color))
+                },
+                modifier = Modifier.testTag(ReviewTestTags.reviewProject(project.id)),
+            )
+        }
+        if (filtered.isEmpty()) {
+            item(key = "empty") {
+                Text(
+                    text = stringResource(if (query.isBlank()) R.string.review_project_dialog_empty else R.string.no_results_found),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = Dimens.Space24, vertical = Dimens.Space16),
+                )
             }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.review_dialog_cancel))
-            }
-        },
-    )
+        }
+    }
 }
 
 @Composable
 private fun projectColor(hex: String): Color {
     val fallback = MaterialTheme.colorScheme.onSurfaceVariant
-    return remember(hex) {
+    return remember(hex, fallback) {
         runCatching { Color(hex.toColorInt()) }.getOrDefault(fallback)
     }
 }
