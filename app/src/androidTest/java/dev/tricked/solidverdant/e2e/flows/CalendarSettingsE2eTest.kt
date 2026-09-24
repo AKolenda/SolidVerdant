@@ -14,6 +14,7 @@ import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
@@ -42,7 +43,8 @@ class CalendarSettingsE2eTest {
         openCalendar()
         openSettings()
 
-        chooseOption(TestTags.CALENDAR_SETTINGS_SNAP, "30")
+        // Snap is a segmented control: its segments are on screen, no picker to open.
+        e2e.composeRule.onNodeWithTag(snapOption("30"), useUnmergedTree = true).performClick()
         chooseOption(TestTags.CALENDAR_SETTINGS_START, "8")
         chooseOption(TestTags.CALENDAR_SETTINGS_END, "18")
         e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_SETTINGS_DENSITY_SPACIOUS, useUnmergedTree = true).performClick()
@@ -66,18 +68,18 @@ class CalendarSettingsE2eTest {
     }
 
     private fun chooseOption(control: String, value: String) {
-        e2e.composeRule.onNodeWithTag(control, useUnmergedTree = true).performClick()
+        e2e.composeRule.onNodeWithTag(control, useUnmergedTree = true).performScrollTo().performClick()
         val option = TestTags.calendarSettingsOption(control, value)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(option), WAIT_MS)
-        e2e.composeRule.onNodeWithTag(option, useUnmergedTree = true).performClick()
+        // The hour list scrolls; later hours start below the dialog's visible area.
+        e2e.composeRule.onNodeWithTag(option, useUnmergedTree = true).performScrollTo().performClick()
     }
+
+    private fun snapOption(minutes: String) = TestTags.calendarSettingsOption(TestTags.CALENDAR_SETTINGS_SNAP, minutes)
 
     private fun assertSettingsAreVisible() {
         e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_SETTINGS_SHEET, useUnmergedTree = true).assertIsDisplayed()
-        e2e.composeRule.onNodeWithTag(
-            TestTags.calendarSettingsValue(TestTags.CALENDAR_SETTINGS_SNAP),
-            useUnmergedTree = true,
-        ).assertTextContains("30", substring = true)
+        e2e.composeRule.onNodeWithTag(snapOption("30"), useUnmergedTree = true).assertIsSelected()
         e2e.composeRule.onNodeWithTag(
             TestTags.calendarSettingsValue(TestTags.CALENDAR_SETTINGS_START),
             useUnmergedTree = true,
