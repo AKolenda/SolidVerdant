@@ -24,11 +24,13 @@ import dev.tricked.solidverdant.sync.StopPayload
 import dev.tricked.solidverdant.sync.UpdatePayload
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -426,6 +428,53 @@ class TimeEntryRepositoryWriteTest {
         testJson,
         db,
     )
+
+    @Test fun observed_entries_emit_once_per_change_and_skip_unrelated_writes() = runTest {
+        db.catalogDao().upsertTags(listOf(dev.tricked.solidverdant.data.local.db.TagEntity("t1", "tag one", "org1")))
+        val entry = TimeEntry(id = "server-1", userId = "u", organizationId = "org1", start = "2026-07-07T08:00:00Z", end = "2026-07-07T09:00:00Z")
+        db.timeEntryDao().upsert(entry.toEntity(1L, SyncState.SYNCED))
+        db.timeEntryDao().replaceTagRefs(entry.id, listOf("t1"))
+
+        val emissions = mutableListOf<List<TimeEntry>>()
+        val collector = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+            repo.observeTimeEntries("org1").collect { emissions += it }
+        }
+        awaitUntil { emissions.size == 1 }
+        assertEquals(listOf(Tag("t1", "tag one")), emissions.single().single().tags)
+
+        // A write to another organization's entry invalidates the table but changes nothing here.
+        db.timeEntryDao().upsert(entry.copy(id = "other-org", organizationId = "org2").toEntity(1L, SyncState.SYNCED))
+        // A real change is delivered.
+        db.timeEntryDao().upsert(entry.copy(description = "edited").toEntity(2L, SyncState.SYNCED))
+        awaitUntil { emissions.size >= 2 }
+        kotlinx.coroutines.delay(200)
+        collector.cancel()
+
+        assertEquals(2, emissions.size)
+        assertEquals("edited", emissions.last().single().description)
+    }
+
+    private suspend fun awaitUntil(condition: () -> Boolean) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+        kotlinx.coroutines.withTimeout(5_000) {
+            while (!condition()) kotlinx.coroutines.delay(10)
+        }
+    }
+
+    @Test fun prune_keeps_months_loaded_in_this_process() = runTest {
+        var now = java.time.Instant.parse("2026-09-01T00:00:00Z").toEpochMilli()
+        val repository = repoAt({ now })
+        val veryOld = TimeEntry(id = "very-old", userId = "u", organizationId = "org1", start = "2024-03-10T08:00:00Z", end = "2024-03-10T09:00:00Z")
+        val loadedOld = veryOld.copy(id = "loaded-old", start = "2024-06-10T08:00:00Z", end = "2024-06-10T09:00:00Z")
+        db.timeEntryDao().upsert(veryOld.toEntity(1L, SyncState.SYNCED))
+        db.timeEntryDao().upsert(loadedOld.toEntity(1L, SyncState.SYNCED))
+        // The calendar shows June 2024 (its rows are unchanged, so nothing rewrote them).
+        repository.loadMonth("org1", "m", java.time.YearMonth.of(2024, 6), java.time.ZoneOffset.UTC)
+
+        assertEquals(1, repository.pruneOldCache())
+
+        assertNull(db.timeEntryDao().getById(veryOld.id))
+        assertNotNull(db.timeEntryDao().getById(loadedOld.id))
+    }
 
     @Test fun soft_delete_whose_undo_window_was_lost_is_committed_by_the_sweep() = runTest {
         var now = 1_000L

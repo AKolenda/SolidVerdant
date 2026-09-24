@@ -60,6 +60,54 @@ class TimeEntryDaoTest {
         assertEquals("b", dao.observeActive("org1").first()?.id)
     }
 
+    @Test fun joined_entries_carry_catalogue_tags_in_order_and_skip_unknown_tags() = runTest {
+        db.catalogDao().upsertTags(
+            listOf(TagEntity("t1", "one", "org1"), TagEntity("t2", "two", "org1"), TagEntity("foreign", "x", "org2")),
+        )
+        dao.upsert(entry("newer").copy(start = "2026-01-02T09:00:00Z"))
+        dao.upsert(entry("older"))
+        dao.upsert(entry("hidden").copy(pendingDelete = true))
+        dao.replaceTagRefs("newer", listOf("t2", "t1", "foreign", "missing"))
+
+        val rows = dao.observeVisibleEntriesWithTags("org1").first()
+
+        // Newest start first; each entry's tags in the order they were set; refs to tags outside
+        // the organization's catalogue come back without a tag (callers drop them).
+        assertEquals(listOf("newer", "newer", "newer", "newer", "older"), rows.map { it.entry.id })
+        assertEquals(listOf("t2", "t1", null, null, null), rows.map { it.tagId })
+        assertEquals(listOf("two", "one", null, null, null), rows.map { it.tagName })
+    }
+
+    @Test fun prune_drops_only_old_untouched_synced_rows_with_nothing_queued() = runTest {
+        val old = "2024-01-01T09:00:00Z"
+        dao.upsert(entry("old-synced").copy(start = old, updatedAt = 10L))
+        dao.upsert(entry("old-pending").copy(start = old, updatedAt = 10L, syncState = SyncState.PENDING))
+        dao.upsert(entry("old-conflict").copy(start = old, updatedAt = 10L, syncState = SyncState.CONFLICT))
+        dao.upsert(entry("old-queued").copy(start = old, updatedAt = 10L))
+        dao.upsert(entry("old-running", end = null).copy(start = old, updatedAt = 10L))
+        dao.upsert(entry("old-recently-written").copy(start = old, updatedAt = 1_000L))
+        dao.upsert(entry("recent").copy(start = "2026-01-01T09:00:00Z", updatedAt = 10L))
+        dao.replaceTagRefs("old-synced", listOf("t1"))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = "old-queued",
+                payloadJson = "{}",
+                createdAtMs = 1L,
+            ),
+        )
+
+        val pruned = dao.pruneSyncedEntries(startBefore = "2025-01-01T00:00:00Z", untouchedSinceMs = 500L)
+
+        assertEquals(1, pruned)
+        assertNull(dao.getById("old-synced"))
+        assertTrue(dao.tagIdsFor("old-synced").isEmpty())
+        listOf("old-pending", "old-conflict", "old-queued", "old-running", "old-recently-written", "recent").forEach {
+            assertNotNull("$it must survive", dao.getById(it))
+        }
+    }
+
     @Test fun completed_entry_without_end_but_with_duration_is_not_running() = runTest {
         // Solidtime's second completed-entry shape: no end, positive duration (domain rule in
         // isRunningTimeEntry). A zero duration still means running.

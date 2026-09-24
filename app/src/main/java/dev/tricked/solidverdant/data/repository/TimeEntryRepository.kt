@@ -41,6 +41,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 import retrofit2.HttpException
@@ -64,6 +65,12 @@ private const val MAX_MONTH_ENTRIES = 15_000
  */
 private const val MONTH_CARRY_IN_DAYS = 31L
 
+/** Cached history kept offline: a bit over a year, covering the calendar's and statistics' usual reach. */
+private const val CACHE_RETENTION_DAYS = 400L
+
+/** A prune candidate must also not have been written (pulled or edited) for this long. */
+private const val CACHE_UNTOUCHED_DAYS = 30L
+
 // A rate-limited month page waits for the server's Retry-After (clamped) before trying again.
 private const val RATE_LIMIT_ATTEMPTS = 3
 private const val HTTP_TOO_MANY_REQUESTS = 429
@@ -85,6 +92,31 @@ class TimeEntryRepository @Inject constructor(
     private val database: AppDatabase,
 ) : TimeEntryReader {
     private val softDeleteCommitter = SoftDeleteCommitter(timeEntryDao, outboxDao, database, json, clock)
+
+    /** The earliest month-query start loaded in this process; the cache prune never goes past it. */
+    private val earliestLoadedStart = java.util.concurrent.atomic.AtomicReference<String?>(null)
+    private val cachePrunedThisProcess = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * Drop cached server copies far older than anything the app shows by default, so the
+     * unbounded per-organization history query stays small. Conservative: only SYNCED rows with
+     * nothing queued, started more than [CACHE_RETENTION_DAYS] ago, not written for
+     * [CACHE_UNTOUCHED_DAYS], and never inside a month the calendar loaded in this process.
+     * Pruned entries come back with the next month load or pull that covers them.
+     */
+    suspend fun pruneOldCache(): Int {
+        val now = clock.nowMs()
+        val retentionFloor = formatTimeEntryInstant(
+            java.time.Instant.ofEpochMilli(now).minus(Duration.ofDays(CACHE_RETENTION_DAYS)).atZone(ZoneOffset.UTC),
+        )
+        val floor = earliestLoadedStart.get()?.let { minOf(it, retentionFloor) } ?: retentionFloor
+        val pruned = timeEntryDao.pruneSyncedEntries(
+            startBefore = floor,
+            untouchedSinceMs = now - Duration.ofDays(CACHE_UNTOUCHED_DAYS).toMillis(),
+        )
+        if (pruned > 0) Timber.i("Pruned %d old cached entries", pruned)
+        return pruned
+    }
 
     enum class EntrySyncStatus { SYNCED, PENDING, RETRYING, FAILED, CONFLICT }
 
@@ -117,18 +149,26 @@ class TimeEntryRepository @Inject constructor(
     suspend fun createTag(organizationId: String, name: String): Result<Tag> =
         remote.createTag(organizationId, name).onSuccess { catalogDao.upsertTags(listOf(it.toEntity(organizationId))) }
 
-    override fun observeTimeEntries(organizationId: String): Flow<List<TimeEntry>> = combine(
-        timeEntryDao.observeVisibleEntries(organizationId),
-        catalogDao.observeTags(organizationId),
-        timeEntryDao.observeTagRefs(organizationId),
-    ) { entities, tagEntities, tagRefs ->
-        val tagsById = tagEntities.associate { it.id to it.toModel() }
-        val tagIdsByEntry = tagRefs.groupBy({ it.timeEntryId }, { it.tagId })
-        entities.map { entity ->
-            val tags = tagIdsByEntry[entity.id].orEmpty().mapNotNull { tagsById[it] }
-            entity.toModel(tags)
-        }
-    }
+    /**
+     * The organization's visible entries (newest start first) with their catalogue tags. One
+     * joined query instead of three combined flows, so a write produces one emission, and an
+     * emission equal to the previous one (a write that changed nothing visible, e.g. another
+     * organization's rows) is not re-delivered to every screen.
+     */
+    override fun observeTimeEntries(organizationId: String): Flow<List<TimeEntry>> =
+        timeEntryDao.observeVisibleEntriesWithTags(organizationId)
+            .map { rows ->
+                val entities = LinkedHashMap<String, TimeEntryEntity>()
+                val tagsByEntry = HashMap<String, MutableList<Tag>>()
+                rows.forEach { row ->
+                    entities.putIfAbsent(row.entry.id, row.entry)
+                    if (row.tagId != null) {
+                        tagsByEntry.getOrPut(row.entry.id, ::mutableListOf) += Tag(row.tagId, row.tagName.orEmpty())
+                    }
+                }
+                entities.values.map { entity -> entity.toModel(tagsByEntry[entity.id].orEmpty()) }
+            }
+            .distinctUntilChanged()
 
     fun observeConflicts(organizationId: String): Flow<List<SyncConflict>> = combine(
         timeEntryDao.observeConflicts(organizationId),
@@ -162,6 +202,9 @@ class TimeEntryRepository @Inject constructor(
         var offset = 0
         val queryStart = month.atDay(1).minusDays(MONTH_CARRY_IN_DAYS).atStartOfDay(zone).toInstant().toString()
         val queryEnd = month.plusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toString()
+        earliestLoadedStart.accumulateAndGet(canonicalTimestamp(queryStart)) { current, loaded ->
+            if (current == null || (loaded != null && loaded < current)) loaded else current
+        }
         // Tombstoning (SV-020) must be scoped to exactly what was fetched: the union of every
         // returned id, bounded by the tightest [minStart, maxStart] actually observed across all
         // pages of this call. Widening either bound risks deleting a local row the fetch never
@@ -376,6 +419,12 @@ class TimeEntryRepository @Inject constructor(
         // Stamp the pull-refresh moment without clobbering the push timestamp (a concurrent
         // SyncWorker flush may have written lastPushAtMs); stampFullSync updates that column alone.
         syncMetaDao.stampFullSync(organizationId, now)
+        if (cachePrunedThisProcess.compareAndSet(false, true)) {
+            runCatching { pruneOldCache() }.onFailure { error ->
+                if (error is CancellationException) throw error
+                Timber.w(error, "Could not prune the entry cache")
+            }
+        }
         Result.success(Unit)
     } catch (e: CancellationException) {
         throw e

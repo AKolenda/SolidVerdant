@@ -298,4 +298,47 @@ class MigrationTest {
         }
         helper.close()
     }
+
+    @Test fun migration_8_9_replaces_the_organization_index_with_organization_and_start() {
+        val helper = openHelper(8) { db ->
+            db.execSQL(
+                "CREATE TABLE time_entries (id TEXT NOT NULL, description TEXT, userId TEXT NOT NULL, " +
+                    "start TEXT NOT NULL, end TEXT, duration INTEGER, taskId TEXT, projectId TEXT, " +
+                    "billable INTEGER NOT NULL, organizationId TEXT NOT NULL, updatedAt INTEGER NOT NULL, " +
+                    "syncState TEXT NOT NULL, pendingDelete INTEGER NOT NULL, conflictServerJson TEXT, " +
+                    "type TEXT NOT NULL DEFAULT 'work', PRIMARY KEY(id))",
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_time_entries_organizationId` ON `time_entries` (`organizationId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_time_entries_start` ON `time_entries` (`start`)")
+            db.execSQL(
+                "INSERT INTO time_entries (id, userId, start, billable, organizationId, updatedAt, " +
+                    "syncState, pendingDelete) VALUES ('e1', 'u1', '2026-08-11T09:00:00Z', 0, 'o1', 1, 'PENDING', 0)",
+            )
+        }
+        val db = helper.writableDatabase
+
+        AppDatabase.MIGRATION_8_9.migrate(db)
+
+        val indexes = mutableListOf<String>()
+        db.query("PRAGMA index_list(`time_entries`)").use { cursor ->
+            val name = cursor.getColumnIndexOrThrow("name")
+            while (cursor.moveToNext()) indexes += cursor.getString(name)
+        }
+        assertEquals(
+            setOf("index_time_entries_organizationId_start", "index_time_entries_start"),
+            indexes.filter { it.startsWith("index_") }.toSet(),
+        )
+        val columns = mutableListOf<String>()
+        db.query("PRAGMA index_info(`index_time_entries_organizationId_start`)").use { cursor ->
+            val name = cursor.getColumnIndexOrThrow("name")
+            while (cursor.moveToNext()) columns += cursor.getString(name)
+        }
+        assertEquals(listOf("organizationId", "start"), columns)
+        // Index-only change: the pending row is untouched.
+        db.query("SELECT syncState FROM time_entries WHERE id = 'e1'").use { cursor ->
+            cursor.moveToFirst()
+            assertEquals("PENDING", cursor.getString(0))
+        }
+        helper.close()
+    }
 }

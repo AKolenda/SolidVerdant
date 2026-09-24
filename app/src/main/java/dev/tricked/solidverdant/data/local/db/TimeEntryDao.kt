@@ -32,6 +32,19 @@ interface TimeEntryDao {
     fun observeVisibleEntries(orgId: String): Flow<List<TimeEntryEntity>>
 
     /**
+     * Visible entries joined with their catalogue tags in one query, so one Room write produces
+     * one emission (three separately observed flows produced two or three). Tags missing from the
+     * organization's catalogue are left out, as before; `r.rowid` keeps each entry's tag order.
+     */
+    @Query(
+        "SELECT e.*, t.id AS tagId, t.name AS tagName FROM time_entries e " +
+            "LEFT JOIN time_entry_tag_cross_ref r ON r.timeEntryId = e.id " +
+            "LEFT JOIN tags t ON t.id = r.tagId AND t.organizationId = e.organizationId " +
+            "WHERE e.organizationId = :orgId AND e.pendingDelete = 0 ORDER BY e.start DESC, r.rowid",
+    )
+    fun observeVisibleEntriesWithTags(orgId: String): Flow<List<TimeEntryWithTagRow>>
+
+    /**
      * The running work timer, by the domain rule ([dev.tricked.solidverdant.domain.time.isRunningTimeEntry]):
      * no end and no positive duration. A cached completed entry can come back with `end = null`
      * and a positive duration; that one is finished, not running.
@@ -308,6 +321,34 @@ interface TimeEntryDao {
             .filterNot(serverIdSet::contains)
             .chunked(SQLITE_SAFE_ID_CHUNK)
             .forEach { deleteByIds(it) }
+    }
+
+    /**
+     * Cached server copies that are safe to drop: SYNCED, not hidden by a pending delete, nothing
+     * queued or parked for them, completed, started before [startBefore] and not written since
+     * [untouchedSinceMs]. Pending edits, conflicts and anything the outbox references are never
+     * candidates; a later pull or month load re-downloads a pruned entry.
+     */
+    @Query(
+        "SELECT id FROM time_entries WHERE syncState = 'SYNCED' AND pendingDelete = 0 " +
+            "AND start < :startBefore AND updatedAt < :untouchedSinceMs " +
+            "AND (end IS NOT NULL OR duration > 0) " +
+            "AND id NOT IN (SELECT timeEntryId FROM outbox)",
+    )
+    suspend fun findPrunableSyncedEntries(startBefore: String, untouchedSinceMs: Long): List<String>
+
+    @Query("DELETE FROM time_entry_tag_cross_ref WHERE timeEntryId IN (:ids)")
+    suspend fun clearTagRefsFor(ids: List<String>)
+
+    /** Drop old cached server copies (see [findPrunableSyncedEntries]). Returns how many. */
+    @Transaction
+    suspend fun pruneSyncedEntries(startBefore: String, untouchedSinceMs: Long): Int {
+        val ids = findPrunableSyncedEntries(startBefore, untouchedSinceMs)
+        ids.chunked(SQLITE_SAFE_ID_CHUNK).forEach { chunk ->
+            clearTagRefsFor(chunk)
+            deleteByIds(chunk)
+        }
+        return ids.size
     }
 
     private companion object {
