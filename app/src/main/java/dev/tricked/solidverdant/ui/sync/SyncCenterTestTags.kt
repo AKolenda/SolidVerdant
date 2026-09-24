@@ -14,4 +14,6 @@ object SyncCenterTestTags {
     fun conflictRetry(entryId: String) = "sync_conflict_retry_$entryId"
 
     fun failedRetry(entryId: String) = "sync_failed_retry_$entryId"
+
+    fun pendingRetry(entryId: String) = "sync_pending_retry_$entryId"
 }

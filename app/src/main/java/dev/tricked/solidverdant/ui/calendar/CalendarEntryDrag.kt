@@ -13,6 +13,8 @@ import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,6 +30,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.zIndex
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.ui.tracking.EntryTrustRules
+import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -39,6 +42,12 @@ import kotlin.math.roundToInt
  * and the complete interval is preserved through the caller's Room/outbox mutation path. Until the
  * long press lands, a drag belongs to the grid, so a swipe or scroll that starts on an entry still
  * pages or scrolls the calendar, and taps remain available to the caller's click modifier.
+ *
+ * The gesture is read outside the drag offset: reading it inside made every pointer position
+ * relative to the block's own moving bounds, so the block chased itself and jittered. On drop the
+ * block settles on the snapped slot and stays there until the moved entry arrives, rather than
+ * snapping back to its old time for a frame. [onDragActiveChange] lets the day column draw above
+ * its neighbours while an entry is dragged across them.
  */
 @Composable
 internal fun calendarEntryDragModifier(
@@ -54,6 +63,7 @@ internal fun calendarEntryDragModifier(
     gridHeightPx: Float,
     columnWidthPx: Float,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
+    onDragActiveChange: (Boolean) -> Unit = {},
 ): Modifier {
     val canMove = entry.end != null && entryStartDate(entry, zone) == day
     val density = androidx.compose.ui.platform.LocalDensity.current
@@ -64,23 +74,42 @@ internal fun calendarEntryDragModifier(
     if (!canMove || columnWidthPx <= 0f || gridHeightPx <= 0f || blockHeightPx <= 0f) return sizedModifier
 
     val onMoveEntryState by rememberUpdatedState(onMoveEntry)
+    val onDragActiveChangeState by rememberUpdatedState(onDragActiveChange)
+    // The gesture outlives recompositions, so it reads the latest entry and position, not the
+    // values captured when it started: a second drag must start from where the first one landed.
+    val currentEntry by rememberUpdatedState(entry)
+    val baseTopPx by rememberUpdatedState(blockStartFraction * gridHeightPx)
     val haptic = LocalHapticFeedback.current
-    val baseTopPx = blockStartFraction * gridHeightPx
     var dragOffset by remember(entry.id, day) { mutableStateOf(Offset.Zero) }
     var isDragging by remember(entry.id, day) { mutableStateOf(false) }
+    var awaitingMove by remember(entry.id, day) { mutableStateOf(false) }
+
+    // The moved entry has arrived at its dropped slot, so the block no longer needs the offset.
+    LaunchedEffect(entry.start, entry.end) {
+        if (!isDragging) {
+            dragOffset = Offset.Zero
+            awaitingMove = false
+        }
+    }
+    // A move the caller did not apply must not leave the block stranded at the drop slot.
+    LaunchedEffect(awaitingMove) {
+        if (awaitingMove) {
+            delay(MOVE_SETTLE_TIMEOUT_MS)
+            dragOffset = Offset.Zero
+            awaitingMove = false
+        }
+    }
+    // Paired start/stop, so a block that leaves the column mid-move still releases its column.
+    val dragActive = isDragging || awaitingMove
+    DisposableEffect(dragActive) {
+        if (dragActive) onDragActiveChangeState(true)
+        onDispose { if (dragActive) onDragActiveChangeState(false) }
+    }
 
     return sizedModifier
-        .offset { IntOffset(dragOffset.x.roundToInt(), dragOffset.y.roundToInt()) }
-        .zIndex(if (isDragging) DRAGGED_ENTRY_Z_INDEX else 0f)
-        .graphicsLayer { alpha = if (isDragging) DRAGGED_ENTRY_ALPHA else 1f }
-        .pointerInput(entry.id, day, dayIndex, dayCount, gridHeightPx, columnWidthPx, blockHeightPx, settings) {
-            var totalDrag = Offset.Zero
-            fun reset() {
-                totalDrag = Offset.Zero
-                dragOffset = Offset.Zero
-                isDragging = false
-            }
-            fun dispatchMove() {
+        .zIndex(if (isDragging || awaitingMove) DRAGGED_ENTRY_Z_INDEX else 0f)
+        .pointerInput(entry.id, day, dayIndex, dayCount, gridHeightPx, columnWidthPx, settings) {
+            fun dropTarget(totalDrag: Offset): Pair<Offset, CalendarEntryRange>? {
                 val targetDayIndex = (dayIndex + (totalDrag.x / columnWidthPx).roundToInt())
                     .coerceIn(0, (dayCount - 1).coerceAtLeast(0))
                 val targetDay = day.plusDays((targetDayIndex - dayIndex).toLong())
@@ -91,26 +120,44 @@ internal fun calendarEntryDragModifier(
                     zone = zone,
                     settings = settings,
                 )
-                calendarEntryRangeAt(entry, targetStart)?.let { range ->
-                    dispatchIfChanged(entry, range.start, range.end, onMoveEntryState)
-                }
+                val range = calendarEntryRangeAt(currentEntry, targetStart) ?: return null
+                val grid = calendarGridBounds(targetDay, zone, settings)
+                val targetTopPx = (targetStart.toInstant().epochSecond - grid.start.epochSecond).toFloat() /
+                    grid.seconds.coerceAtLeast(1L) * gridHeightPx
+                val settled = Offset((targetDayIndex - dayIndex) * columnWidthPx, targetTopPx - baseTopPx)
+                return settled to range
             }
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 // Null when the pointer lifts or moves (a tap, scroll or swipe) before the hold.
                 val lifted = awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
                 isDragging = true
+                awaitingMove = false
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 lifted.consume()
+                // Positions are in this node's layout bounds, which the drag offset does not move.
+                val startPosition = down.position
+                var totalDrag = Offset.Zero
                 val completed = drag(lifted.id) { change ->
-                    totalDrag = change.position - down.position
+                    totalDrag = change.position - startPosition
                     dragOffset = totalDrag
                     change.consume()
                 }
-                if (completed && totalDrag != Offset.Zero) dispatchMove()
-                reset()
+                val target = if (completed && totalDrag != Offset.Zero) dropTarget(totalDrag) else null
+                val moved = target != null && movesEntry(currentEntry, target.second)
+                if (target != null && moved) {
+                    dragOffset = target.first
+                    awaitingMove = true
+                    isDragging = false
+                    dispatchMove(currentEntry, target.second, onMoveEntryState)
+                } else {
+                    dragOffset = Offset.Zero
+                    isDragging = false
+                }
             }
         }
+        .offset { IntOffset(dragOffset.x.roundToInt(), dragOffset.y.roundToInt()) }
+        .graphicsLayer { alpha = if (isDragging) DRAGGED_ENTRY_ALPHA else 1f }
 }
 
 /**
@@ -129,15 +176,11 @@ internal fun calendarMoveOverlapsExisting(
     return existingEntries.any { candidate -> EntryTrustRules.overlaps(moved, candidate, now) }
 }
 
-private fun dispatchIfChanged(
-    entry: TimeEntry,
-    start: java.time.ZonedDateTime,
-    end: java.time.ZonedDateTime,
-    callback: (TimeEntry, String, String) -> Unit,
-) {
-    val formattedStart = start.format(ENTRY_TIME_FORMATTER)
-    val formattedEnd = end.format(ENTRY_TIME_FORMATTER)
-    if (formattedStart != entry.start || formattedEnd != entry.end) callback(entry, formattedStart, formattedEnd)
+private fun movesEntry(entry: TimeEntry, range: CalendarEntryRange): Boolean =
+    range.start.format(ENTRY_TIME_FORMATTER) != entry.start || range.end.format(ENTRY_TIME_FORMATTER) != entry.end
+
+private fun dispatchMove(entry: TimeEntry, range: CalendarEntryRange, callback: (TimeEntry, String, String) -> Unit) {
+    callback(entry, range.start.format(ENTRY_TIME_FORMATTER), range.end.format(ENTRY_TIME_FORMATTER))
 }
 
 private fun entryStartDate(entry: TimeEntry, zone: ZoneId): LocalDate? =
@@ -146,3 +189,4 @@ private fun entryStartDate(entry: TimeEntry, zone: ZoneId): LocalDate? =
 private val ENTRY_TIME_FORMATTER = java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME
 private const val DRAGGED_ENTRY_ALPHA = 0.72f
 private const val DRAGGED_ENTRY_Z_INDEX = 2f
+private const val MOVE_SETTLE_TIMEOUT_MS = 1_500L

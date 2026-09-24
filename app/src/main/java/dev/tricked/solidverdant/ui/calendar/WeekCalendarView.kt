@@ -37,7 +37,10 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
 import dev.tricked.solidverdant.data.model.Client
@@ -494,14 +498,18 @@ private fun DayColumn(
 ) {
     val untitled = stringResource(R.string.calendar_overlay_event_untitled)
     val noDescription = stringResource(R.string.calendar_entry_untitled)
+    // Later columns draw over earlier ones, so the column holding a dragged entry rises above them.
+    var draggingEntries by remember(day) { mutableStateOf(0) }
     BoxWithConstraints(
         modifier = modifier
-            .padding(horizontal = 1.dp)
+            .zIndex(if (draggingEntries > 0) 1f else 0f)
+            .padding(horizontal = COLUMN_PADDING)
             .testTag("week-day-column-$day"),
     ) {
         val colWidth = maxWidth
         val density = LocalDensity.current
-        val colWidthPx = with(density) { colWidth.toPx() }
+        // One day to the next: the column plus its padding on both sides.
+        val columnPitchPx = with(density) { (colWidth + COLUMN_PADDING * 2).toPx() }
         val totalHeight = calendarTotalHeight(settings)
         val gridHeightPx = with(density) { totalHeight.toPx() }
 
@@ -599,9 +607,10 @@ private fun DayColumn(
                     (totalHeight * block.heightFraction).coerceAtLeast(Dimens.EntryMinHeight).toPx()
                 },
                 gridHeightPx = gridHeightPx,
-                columnWidthPx = colWidthPx,
+                columnWidthPx = columnPitchPx,
                 settings = settings,
                 onMoveEntry = onMoveEntry,
+                onDragActiveChange = { active -> draggingEntries = (draggingEntries + if (active) 1 else -1).coerceAtLeast(0) },
             )
             EntryBlock(
                 color = base,
@@ -740,3 +749,5 @@ internal fun weekOf(date: LocalDate, weekStart: DayOfWeek): List<LocalDate> {
 
 private const val DAYS_PER_WEEK = 7L
 private const val GRIDLINE_ALPHA = 0.7f
+
+private val COLUMN_PADDING = 1.dp

@@ -112,7 +112,11 @@ fun SyncCenterScreen(onBack: () -> Unit, viewModel: SyncCenterViewModel = hiltVi
                 )
             }
             if (state.pending.isNotEmpty()) {
-                PendingSection(state.pending)
+                PendingSection(
+                    pending = state.pending,
+                    activeRecoveryEntryIds = state.activeRecoveryEntryIds,
+                    onRetry = viewModel::retry,
+                )
             }
             if (state.conflicts.isNotEmpty()) {
                 ConflictsSection(
@@ -219,17 +223,27 @@ private fun StatusSummarySection(state: SyncCenterUiState) {
 }
 
 @Composable
-private fun PendingSection(pending: List<SyncOperation>) {
+private fun PendingSection(pending: List<SyncOperation>, activeRecoveryEntryIds: Set<String>, onRetry: (String) -> Unit) {
     SectionCard(title = stringResource(R.string.sync_pending_section_title)) {
         pending.forEachIndexed { index, op ->
             if (index > 0) HorizontalDivider()
-            Column {
-                Text(opLabel(op.type), style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    stringResource(pendingReasonRes(op)),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(opLabel(op.type), style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        stringResource(pendingReasonRes(op)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                // Send a waiting or backing-off change now instead of after its retry delay.
+                TextButton(
+                    onClick = { onRetry(op.entryId) },
+                    enabled = op.entryId !in activeRecoveryEntryIds,
+                    modifier = Modifier.testTag(SyncCenterTestTags.pendingRetry(op.entryId)),
+                ) {
+                    Text(stringResource(R.string.sync_retry))
+                }
             }
         }
     }

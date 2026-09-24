@@ -6,7 +6,9 @@
 
 package dev.tricked.solidverdant.ui.tracking
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,12 +44,16 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -69,8 +75,8 @@ import dev.tricked.solidverdant.ui.theme.tabular
 
 /**
  * The running timer, docked at the bottom of Time Tracker: description and
- * "Project: Task" on the left (tap to edit the entry), then the elapsed time, pause or resume, and
- * the orange-red stop button.
+ * "Project: Task" on the left, then the elapsed time, pause or resume, and the orange-red stop
+ * button. Tapping the details or swiping the bar up opens the running entry's full details.
  */
 @Composable
 internal fun ActiveTimerBar(
@@ -82,6 +88,66 @@ internal fun ActiveTimerBar(
     onEditActiveEntry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val canEdit = uiState.currentTimeEntry != null && !uiState.isMutating
+    val barColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    val swipeUpThresholdPx = with(LocalDensity.current) { Dimens.TimerSwipeUpThreshold.toPx() }
+    // The swipe gesture outlives recompositions; it must open the timer that is running now.
+    val openDetails by rememberUpdatedState(onEditActiveEntry)
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag(TrackingTestTags.ACTIVE_TIMER_BAR)
+            .pointerInput(canEdit, swipeUpThresholdPx) {
+                if (!canEdit) return@pointerInput
+                var dragged = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { dragged = 0f },
+                    onDragEnd = { if (dragged <= -swipeUpThresholdPx) openDetails() },
+                    onVerticalDrag = { change, dragAmount ->
+                        dragged += dragAmount
+                        change.consume()
+                    },
+                )
+            },
+        color = barColor,
+        shape = RoundedCornerShape(topStart = Dimens.RadiusXl, topEnd = Dimens.RadiusXl),
+        shadowElevation = Dimens.SheetShadow,
+    ) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
+            // The handle says the bar pulls up into the entry's details, like a bottom sheet.
+            Box(
+                modifier = Modifier
+                    .padding(top = Dimens.Space8)
+                    .align(Alignment.CenterHorizontally)
+                    .size(width = Dimens.SheetHandleWidth, height = Dimens.SheetHandleHeight)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = HANDLE_ALPHA)),
+            )
+            ActiveTimerRow(
+                uiState = uiState,
+                elapsedSeconds = elapsedSeconds,
+                canEdit = canEdit,
+                barColor = barColor,
+                onStop = onStop,
+                onPause = onPause,
+                onResume = onResume,
+                onEditActiveEntry = onEditActiveEntry,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ActiveTimerRow(
+    uiState: TrackingUiState,
+    elapsedSeconds: Long,
+    canEdit: Boolean,
+    barColor: Color,
+    onStop: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onEditActiveEntry: () -> Unit,
+) {
     val haptic = LocalHapticFeedback.current
     val project = remember(uiState.projects, uiState.editingProjectId) {
         uiState.projects.firstOrNull { it.id == uiState.editingProjectId }
@@ -89,103 +155,170 @@ internal fun ActiveTimerBar(
     val task = remember(uiState.tasks, uiState.editingTaskId) {
         uiState.tasks.firstOrNull { it.id == uiState.editingTaskId }
     }
-    val canEdit = uiState.currentTimeEntry != null && !uiState.isMutating
-    val barColor = MaterialTheme.colorScheme.surfaceContainerHigh
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = barColor,
-        shape = RoundedCornerShape(topStart = Dimens.RadiusXl, topEnd = Dimens.RadiusXl),
-        shadowElevation = Dimens.SheetShadow,
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = Dimens.Space4, end = Dimens.Space12, bottom = Dimens.Space4),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
     ) {
-        Row(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(start = Dimens.Space4, end = Dimens.Space12, top = Dimens.Space4, bottom = Dimens.Space4),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
+                .weight(1f)
+                .heightIn(min = Dimens.ControlHeightLarge)
+                .clip(MaterialTheme.shapes.medium)
+                .testTag(TrackingTestTags.EDIT_ACTIVE_ENTRY)
+                .clickable(
+                    enabled = canEdit,
+                    role = Role.Button,
+                    onClickLabel = stringResource(R.string.edit),
+                    onClick = onEditActiveEntry,
+                )
+                .padding(horizontal = Dimens.Space12, vertical = Dimens.Space8),
+            verticalArrangement = Arrangement.Center,
         ) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = Dimens.ControlHeightLarge)
-                    .clip(MaterialTheme.shapes.medium)
-                    .testTag(TrackingTestTags.EDIT_ACTIVE_ENTRY)
-                    .clickable(
-                        enabled = canEdit,
-                        role = Role.Button,
-                        onClickLabel = stringResource(R.string.edit),
-                        onClick = onEditActiveEntry,
-                    )
-                    .padding(horizontal = Dimens.Space12, vertical = Dimens.Space8),
-                verticalArrangement = Arrangement.Center,
+            if (uiState.isPaused) {
+                Text(
+                    text = stringResource(R.string.paused),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
+            }
+            Text(
+                text = uiState.editingDescription.ifBlank { stringResource(R.string.no_description) },
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (uiState.editingDescription.isBlank()) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            ProjectTaskLine(project = project, task = task, background = barColor)
+        }
+        if (uiState.isTracking) {
+            Text(
+                text = formatElapsedTime(elapsedSeconds),
+                style = MaterialTheme.typography.titleMedium.tabular(),
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.testTag(TrackingTestTags.ELAPSED_TIMER),
+            )
+            FilledTonalIconButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onPause()
+                },
+                enabled = !uiState.isMutating,
+                modifier = Modifier.size(Dimens.MinTouchTarget),
             ) {
-                if (uiState.isPaused) {
-                    Text(
-                        text = stringResource(R.string.paused),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.tertiary,
-                    )
-                }
-                Text(
-                    text = uiState.editingDescription.ifBlank { stringResource(R.string.no_description) },
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = if (uiState.editingDescription.isBlank()) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                ProjectTaskLine(project = project, task = task, background = barColor)
+                Icon(Icons.Default.Pause, contentDescription = stringResource(R.string.pause))
             }
-            if (uiState.isTracking) {
-                Text(
-                    text = formatElapsedTime(elapsedSeconds),
-                    style = MaterialTheme.typography.titleMedium.tabular(),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.testTag(TrackingTestTags.ELAPSED_TIMER),
-                )
-                FilledTonalIconButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onPause()
-                    },
-                    enabled = !uiState.isMutating,
-                    modifier = Modifier.size(Dimens.MinTouchTarget),
-                ) {
-                    Icon(Icons.Default.Pause, contentDescription = stringResource(R.string.pause))
-                }
-            } else {
-                FilledIconButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onResume()
-                    },
-                    enabled = !uiState.isMutating,
-                    modifier = Modifier.size(Dimens.MinTouchTarget),
-                ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.resume))
-                }
-            }
+        } else {
             FilledIconButton(
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onStop()
+                    onResume()
                 },
                 enabled = !uiState.isMutating,
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.error,
-                    contentColor = MaterialTheme.colorScheme.onError,
-                ),
-                modifier = Modifier.size(Dimens.MinTouchTarget).testTag(TrackingTestTags.STOP_BUTTON),
+                modifier = Modifier.size(Dimens.MinTouchTarget),
             ) {
-                Icon(Icons.Default.Stop, contentDescription = stringResource(R.string.stop))
+                Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.resume))
             }
+        }
+        FilledIconButton(
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onStop()
+            },
+            enabled = !uiState.isMutating,
+            colors = IconButtonDefaults.filledIconButtonColors(
+                containerColor = MaterialTheme.colorScheme.error,
+                contentColor = MaterialTheme.colorScheme.onError,
+            ),
+            modifier = Modifier.size(Dimens.MinTouchTarget).testTag(TrackingTestTags.STOP_BUTTON),
+        ) {
+            Icon(Icons.Default.Stop, contentDescription = stringResource(R.string.stop))
         }
     }
 }
+
+/**
+ * Top of the running entry's details: the live elapsed time with pause or resume and stop, so the
+ * timer stays controllable while its description, project, tags and start are edited below.
+ */
+@Composable
+internal fun RunningTimerControls(
+    elapsedSeconds: Long,
+    isPaused: Boolean,
+    enabled: Boolean,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptic = LocalHapticFeedback.current
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.Space16)
+            .testTag(TrackingTestTags.RUNNING_TIMER_CONTROLS),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Space12),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = stringResource(if (isPaused) R.string.paused else R.string.running_entries),
+                style = MaterialTheme.typography.labelMedium,
+                color = if (isPaused) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = formatElapsedTime(elapsedSeconds),
+                style = MaterialTheme.typography.displaySmall.tabular(),
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        if (isPaused) {
+            FilledIconButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onResume()
+                },
+                enabled = enabled,
+                modifier = Modifier.size(Dimens.MinTouchTarget),
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.resume))
+            }
+        } else {
+            FilledTonalIconButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onPause()
+                },
+                enabled = enabled,
+                modifier = Modifier.size(Dimens.MinTouchTarget),
+            ) {
+                Icon(Icons.Default.Pause, contentDescription = stringResource(R.string.pause))
+            }
+        }
+        FilledIconButton(
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onStop()
+            },
+            enabled = enabled,
+            colors = IconButtonDefaults.filledIconButtonColors(
+                containerColor = MaterialTheme.colorScheme.error,
+                contentColor = MaterialTheme.colorScheme.onError,
+            ),
+            modifier = Modifier.size(Dimens.MinTouchTarget).testTag(TrackingTestTags.RUNNING_TIMER_STOP),
+        ) {
+            Icon(Icons.Default.Stop, contentDescription = stringResource(R.string.stop))
+        }
+    }
+}
+
+private const val HANDLE_ALPHA = 0.4f
 
 /**
  * The new-entry button. Idle, "+" unfolds into Manual (add a finished entry) and Timer

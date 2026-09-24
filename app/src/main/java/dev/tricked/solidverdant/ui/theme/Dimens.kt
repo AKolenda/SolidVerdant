@@ -101,6 +101,9 @@ object Dimens {
     /** Horizontal travel that turns a calendar swipe into the previous/next day, week or month. */
     val CalendarSwipeThreshold = 72.dp
 
+    /** How far the running-timer bar is dragged up before it opens the entry's details. */
+    val TimerSwipeUpThreshold = 32.dp
+
     val NarrowCalendarWidth = 600.dp
     val PickerMaxWidth = 560.dp
     val PickerMaxHeight = 640.dp

@@ -721,6 +721,25 @@ fun TrackingScreen(
                 deletedEntries = listOf(entry)
                 onDeleteEntry(entry.id)
             },
+            // The running timer's details keep its clock and controls on top.
+            runningControls = if (entry.id == uiState.currentTimeEntry?.id) {
+                {
+                    val elapsed by elapsedSeconds.collectAsState()
+                    RunningTimerControls(
+                        elapsedSeconds = elapsed,
+                        isPaused = uiState.isPaused,
+                        enabled = !uiState.isMutating,
+                        onPause = onPauseTracking,
+                        onResume = onResumeTracking,
+                        onStop = {
+                            showEditDialog = null
+                            onStopTracking()
+                        },
+                    )
+                }
+            } else {
+                null
+            },
         )
     }
 
@@ -1728,6 +1747,7 @@ internal fun TimeEntryFormSheet(
     onDuplicate: (() -> Unit)? = null,
     onSplit: ((String) -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
+    runningControls: (@Composable () -> Unit)? = null,
 ) {
     var description by remember { mutableStateOf(entry?.description ?: "") }
     var projectId by remember { mutableStateOf(entry?.projectId) }
@@ -1835,6 +1855,8 @@ internal fun TimeEntryFormSheet(
                     saveTag = TrackingTestTags.SHEET_SAVE_BUTTON,
                 )
             }
+
+            if (isRunningEntry) runningControls?.invoke()
 
             EntryDescriptionField(
                 value = description,

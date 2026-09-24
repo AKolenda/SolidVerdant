@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.FreeBreakfast
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Today
@@ -643,9 +644,19 @@ private fun CalendarEntryActionsSheet(
                     )
                 }
                 when (operation.status) {
+                    // A queued or backing-off change can be sent again now instead of waiting.
+                    TimeEntryRepository.EntrySyncStatus.PENDING,
+                    TimeEntryRepository.EntrySyncStatus.RETRYING,
+                    -> CalendarEntryActionButton(
+                        label = stringResource(R.string.sync_retry),
+                        icon = Icons.Default.Refresh,
+                        onClick = onRetrySync,
+                        actionTestTag = CalendarTestTags.SYNC_RETRY,
+                    )
                     TimeEntryRepository.EntrySyncStatus.FAILED -> {
                         CalendarEntryActionButton(
                             label = stringResource(R.string.sync_retry),
+                            icon = Icons.Default.Refresh,
                             onClick = onRetrySync,
                             actionTestTag = CalendarTestTags.SYNC_RETRY,
                         )
