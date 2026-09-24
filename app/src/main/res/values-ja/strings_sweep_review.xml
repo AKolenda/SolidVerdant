@@ -26,4 +26,26 @@
     <string name="sweep_review_skip_failed_title">この変更の同期をやめますか？</string>
     <string name="sweep_review_skip_failed_message">変更はこのデバイスに残りますが、サーバーには送信されません。この操作は元に戻せません。</string>
     <string name="sweep_review_skip_failed_confirm">同期をやめる</string>
+
+    <!-- Logout -->
+    <string name="sweep_logout_title">ログアウトしますか？</string>
+    <string name="sweep_logout_synced_message">このデバイスのデータはすべてサーバーに届いています。再度サインインが必要です。お気に入りはこのデバイスに残ります。</string>
+    <plurals name="sweep_logout_unsynced_title">
+        <item quantity="other">%1$d件の変更を失ってログアウトしますか？</item>
+    </plurals>
+    <plurals name="sweep_logout_unsynced_message">
+        <item quantity="other">このデバイスの%1$d件の変更はまだサーバーに届いていません。ログアウトすると完全に削除されます。ログインしたままインターネットに接続して先に同期してください（または「同期と復旧」を確認してください）。</item>
+    </plurals>
+    <string name="sweep_logout_confirm">ログアウト</string>
+    <string name="sweep_logout_confirm_anyway">それでもログアウト</string>
+
+    <!-- Privacy: clearing the cache -->
+    <string name="sweep_privacy_cleared">キャッシュデータを消去しました</string>
+    <string name="sweep_privacy_clear_failed">キャッシュデータを消去できませんでした。もう一度お試しください。</string>
+    <plurals name="sweep_privacy_clear_blocked_title">
+        <item quantity="other">%1$d件の変更が同期待ちです</item>
+    </plurals>
+    <plurals name="sweep_privacy_clear_blocked_message">
+        <item quantity="other">今キャッシュを消去すると、これらの変更は削除されます。先にサーバーへ送信し、「同期と復旧」に待機中の変更がなくなってからキャッシュを消去してください。</item>
+    </plurals>
 </resources>

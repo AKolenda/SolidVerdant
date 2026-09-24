@@ -42,6 +42,7 @@ object TestTags {
     const val SETTINGS_SCREEN = SettingsTestTags.SCREEN
     const val SETTINGS_REVIEW_ROW = SettingsTestTags.REVIEW_ROW
     const val SETTINGS_LOGOUT_BUTTON = SettingsTestTags.LOGOUT_BUTTON
+    const val SETTINGS_LOGOUT_CONFIRM = SettingsTestTags.LOGOUT_CONFIRM
     const val SETTINGS_LIVE_UPDATE_SWITCH = SettingsTestTags.LIVE_UPDATE_SWITCH
     const val TRACK_ADD_ENTRY_BUTTON = TrackingTestTags.ADD_ENTRY_BUTTON
     const val TRACK_EDIT_ACTIVE_ENTRY = TrackingTestTags.EDIT_ACTIVE_ENTRY

@@ -26,4 +26,30 @@
     <string name="sweep_review_skip_failed_title">Deze wijziging niet meer synchroniseren?</string>
     <string name="sweep_review_skip_failed_message">De wijziging blijft op dit apparaat, maar wordt nooit naar de server gestuurd. Dit kan niet ongedaan worden gemaakt.</string>
     <string name="sweep_review_skip_failed_confirm">Niet synchroniseren</string>
+
+    <!-- Logout -->
+    <string name="sweep_logout_title">Uitloggen?</string>
+    <string name="sweep_logout_synced_message">Alles op dit apparaat staat op de server. Je moet opnieuw inloggen; favorieten blijven op dit apparaat.</string>
+    <plurals name="sweep_logout_unsynced_title">
+        <item quantity="one">Uitloggen en %1$d wijziging kwijtraken?</item>
+        <item quantity="other">Uitloggen en %1$d wijzigingen kwijtraken?</item>
+    </plurals>
+    <plurals name="sweep_logout_unsynced_message">
+        <item quantity="one">%1$d wijziging op dit apparaat heeft de server nog niet bereikt. Uitloggen verwijdert die definitief. Blijf ingelogd, maak verbinding met internet en laat die eerst synchroniseren (of kijk in Synchronisatie en herstel).</item>
+        <item quantity="other">%1$d wijzigingen op dit apparaat hebben de server nog niet bereikt. Uitloggen verwijdert ze definitief. Blijf ingelogd, maak verbinding met internet en laat ze eerst synchroniseren (of kijk in Synchronisatie en herstel).</item>
+    </plurals>
+    <string name="sweep_logout_confirm">Uitloggen</string>
+    <string name="sweep_logout_confirm_anyway">Toch uitloggen</string>
+
+    <!-- Privacy: clearing the cache -->
+    <string name="sweep_privacy_cleared">Gecachte gegevens gewist</string>
+    <string name="sweep_privacy_clear_failed">De gecachte gegevens konden niet worden gewist. Probeer het opnieuw.</string>
+    <plurals name="sweep_privacy_clear_blocked_title">
+        <item quantity="one">%1$d wijziging wacht op synchronisatie</item>
+        <item quantity="other">%1$d wijzigingen wachten op synchronisatie</item>
+    </plurals>
+    <plurals name="sweep_privacy_clear_blocked_message">
+        <item quantity="one">Als je de cache nu wist, gaat deze wijziging verloren. Stuur die eerst naar de server en wis de cache zodra Synchronisatie en herstel niets meer laat wachten.</item>
+        <item quantity="other">Als je de cache nu wist, gaan deze wijzigingen verloren. Stuur ze eerst naar de server en wis de cache zodra Synchronisatie en herstel niets meer laat wachten.</item>
+    </plurals>
 </resources>

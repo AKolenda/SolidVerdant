@@ -61,9 +61,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.core.net.toUri
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.local.AppThemeMode
@@ -121,6 +123,8 @@ fun SettingsScreen(
     onLogout: () -> Unit,
 ) {
     val context = LocalContext.current
+    val unsyncedChangesViewModel: UnsyncedChangesViewModel = hiltViewModel()
+    val unsyncedChanges by unsyncedChangesViewModel.unsyncedChanges.collectAsStateWithLifecycle()
     val liveUpdatesSupported = Build.VERSION.SDK_INT >= LIVE_UPDATES_API_LEVEL
     var systemLiveUpdatesEnabled by remember(context, liveUpdatesSupported) {
         mutableStateOf(canPostPromotedNotifications(context))
@@ -178,6 +182,7 @@ fun SettingsScreen(
         liveUpdatesSupported = liveUpdatesSupported,
         systemLiveUpdatesEnabled = systemLiveUpdatesEnabled,
         onRequestNotificationPermission = requestNotificationsIfNeeded,
+        unsyncedChanges = unsyncedChanges,
     )
 }
 
@@ -215,9 +220,11 @@ internal fun SettingsContent(
     liveUpdatesSupported: Boolean,
     systemLiveUpdatesEnabled: Boolean,
     onRequestNotificationPermission: () -> Unit,
+    unsyncedChanges: Int = 0,
 ) {
     val context = LocalContext.current
     var picker by rememberSaveable { mutableStateOf<SettingsPicker?>(null) }
+    var confirmLogout by rememberSaveable { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -374,11 +381,23 @@ internal fun SettingsContent(
                     title = stringResource(R.string.logout),
                     leadingIcon = Icons.AutoMirrored.Filled.ExitToApp,
                     destructive = true,
-                    onClick = onLogout,
+                    // Logout wipes this device's data and upload queue: confirm, with what is at stake.
+                    onClick = { confirmLogout = true },
                     modifier = Modifier.testTag(SettingsTestTags.LOGOUT_BUTTON),
                 )
             }
         }
+    }
+
+    if (confirmLogout) {
+        LogoutConfirmDialog(
+            unsyncedChanges = unsyncedChanges,
+            onConfirm = {
+                confirmLogout = false
+                onLogout()
+            },
+            onDismiss = { confirmLogout = false },
+        )
     }
 
     when (picker) {

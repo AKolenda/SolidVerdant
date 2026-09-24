@@ -28,4 +28,30 @@
     <string name="sweep_review_skip_failed_title">Stop syncing this change?</string>
     <string name="sweep_review_skip_failed_message">The change stays on this device but is never sent to the server. This can\'t be undone.</string>
     <string name="sweep_review_skip_failed_confirm">Stop syncing</string>
+
+    <!-- Logout -->
+    <string name="sweep_logout_title">Log out?</string>
+    <string name="sweep_logout_synced_message">Everything on this device has reached the server. You\'ll need to sign in again; favourites stay on this device.</string>
+    <plurals name="sweep_logout_unsynced_title">
+        <item quantity="one">Log out and lose %1$d change?</item>
+        <item quantity="other">Log out and lose %1$d changes?</item>
+    </plurals>
+    <plurals name="sweep_logout_unsynced_message">
+        <item quantity="one">%1$d change on this device hasn\'t reached the server. Logging out deletes it for good. Stay logged in, connect to the internet and let it sync (or check Sync &amp; recovery) first.</item>
+        <item quantity="other">%1$d changes on this device haven\'t reached the server. Logging out deletes them for good. Stay logged in, connect to the internet and let them sync (or check Sync &amp; recovery) first.</item>
+    </plurals>
+    <string name="sweep_logout_confirm">Log out</string>
+    <string name="sweep_logout_confirm_anyway">Log out anyway</string>
+
+    <!-- Privacy: clearing the cache -->
+    <string name="sweep_privacy_cleared">Cached data cleared</string>
+    <string name="sweep_privacy_clear_failed">Couldn\'t clear the cached data. Please try again.</string>
+    <plurals name="sweep_privacy_clear_blocked_title">
+        <item quantity="one">%1$d change is waiting to sync</item>
+        <item quantity="other">%1$d changes are waiting to sync</item>
+    </plurals>
+    <plurals name="sweep_privacy_clear_blocked_message">
+        <item quantity="one">Clearing the cache now would delete it. Send it to the server first, then clear the cache once Sync &amp; recovery shows nothing waiting.</item>
+        <item quantity="other">Clearing the cache now would delete them. Send them to the server first, then clear the cache once Sync &amp; recovery shows nothing waiting.</item>
+    </plurals>
 </resources>
