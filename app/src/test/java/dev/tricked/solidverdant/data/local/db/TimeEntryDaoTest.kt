@@ -41,7 +41,8 @@ class TimeEntryDaoTest {
 
     private fun entry(id: String, org: String = "org1", end: String? = "2026-01-01T10:00:00Z") = TimeEntryEntity(
         id = id, description = "d", userId = "u", start = "2026-01-01T09:00:00Z",
-        end = end, duration = 3600, taskId = null, projectId = null,
+        // A running timer (no end) has no duration yet, like Solidtime's active entry.
+        end = end, duration = if (end == null) null else 3600, taskId = null, projectId = null,
         billable = false, organizationId = org, updatedAt = 1L,
         syncState = SyncState.SYNCED, pendingDelete = false,
     )
@@ -55,8 +56,19 @@ class TimeEntryDaoTest {
 
     @Test fun observe_active_returns_entry_with_null_end() = runTest {
         dao.upsert(entry("a", end = "2026-01-01T10:00:00Z"))
-        dao.upsert(entry("b", end = null))
+        dao.upsert(entry("b", end = null).copy(duration = null))
         assertEquals("b", dao.observeActive("org1").first()?.id)
+    }
+
+    @Test fun completed_entry_without_end_but_with_duration_is_not_running() = runTest {
+        // Solidtime's second completed-entry shape: no end, positive duration (domain rule in
+        // isRunningTimeEntry). A zero duration still means running.
+        dao.upsert(entry("completed", end = null).copy(duration = 3_600))
+        assertNull(dao.observeActive("org1").first())
+        assertNull(dao.getActive("org1"))
+
+        dao.upsert(entry("running", end = null).copy(duration = 0))
+        assertEquals("running", dao.getActive("org1")?.id)
     }
 
     @Test fun rekey_moves_row_to_new_id() = runTest {

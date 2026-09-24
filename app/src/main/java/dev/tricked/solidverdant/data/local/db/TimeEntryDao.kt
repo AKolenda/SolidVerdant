@@ -31,8 +31,14 @@ interface TimeEntryDao {
     @Query("SELECT * FROM time_entries WHERE organizationId = :orgId AND pendingDelete = 0 ORDER BY start DESC")
     fun observeVisibleEntries(orgId: String): Flow<List<TimeEntryEntity>>
 
+    /**
+     * The running work timer, by the domain rule ([dev.tricked.solidverdant.domain.time.isRunningTimeEntry]):
+     * no end and no positive duration. A cached completed entry can come back with `end = null`
+     * and a positive duration; that one is finished, not running.
+     */
     @Query(
-        "SELECT * FROM time_entries WHERE organizationId = :orgId AND type = 'work' AND end IS NULL AND pendingDelete = 0 ORDER BY start DESC LIMIT 1",
+        "SELECT * FROM time_entries WHERE organizationId = :orgId AND type = 'work' AND end IS NULL " +
+            "AND (duration IS NULL OR duration <= 0) AND pendingDelete = 0 ORDER BY start DESC LIMIT 1",
     )
     fun observeActive(orgId: String): Flow<TimeEntryEntity?>
 
@@ -50,9 +56,21 @@ interface TimeEntryDao {
     suspend fun findByIdentity(orgId: String, userId: String, start: String): TimeEntryEntity?
 
     @Query(
-        "SELECT * FROM time_entries WHERE organizationId = :orgId AND type = 'work' AND end IS NULL AND pendingDelete = 0 ORDER BY start DESC LIMIT 1",
+        "SELECT * FROM time_entries WHERE organizationId = :orgId AND type = 'work' AND end IS NULL " +
+            "AND (duration IS NULL OR duration <= 0) AND pendingDelete = 0 ORDER BY start DESC LIMIT 1",
     )
     suspend fun getActive(orgId: String): TimeEntryEntity?
+
+    /**
+     * Rows hidden by a soft delete whose commit never happened: the undo window's job lives in a
+     * ViewModel and dies with the process or the screen. No DELETE was queued, and pulls skip
+     * pending deletes, so without a sweep the entry stays hidden locally and alive on the server.
+     */
+    @Query(
+        "SELECT * FROM time_entries WHERE pendingDelete = 1 AND syncState != 'CONFLICT' AND updatedAt < :cutoffMs " +
+            "AND id NOT IN (SELECT timeEntryId FROM outbox WHERE opType = 'DELETE')",
+    )
+    suspend fun findUncommittedSoftDeletes(cutoffMs: Long): List<TimeEntryEntity>
 
     @Query("SELECT * FROM time_entries WHERE organizationId = :orgId AND syncState = 'CONFLICT' ORDER BY start DESC")
     fun observeConflicts(orgId: String): Flow<List<TimeEntryEntity>>

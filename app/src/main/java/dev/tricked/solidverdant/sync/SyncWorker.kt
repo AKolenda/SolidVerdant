@@ -26,6 +26,7 @@ import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.RemoteDataSource
 import dev.tricked.solidverdant.data.remote.SolidtimeTimestamps
 import dev.tricked.solidverdant.data.remote.TimeEntriesQuery
+import dev.tricked.solidverdant.data.repository.SoftDeleteCommitter
 import dev.tricked.solidverdant.domain.time.parseTimeEntryInstant
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.CancellationException
@@ -111,6 +112,13 @@ class SyncWorker @AssistedInject constructor(
         // the whole outbox, and each op already carries its own organizationId for the API call.
         // (The per-org filtering in observeSyncOperations is only for scoping the UI display.)
         // Dead-lettered ops are excluded so permanently-failed work is never re-attempted.
+        // First queue the DELETE of any soft delete whose undo window died with its ViewModel, so
+        // it syncs in this run instead of staying hidden locally while the server keeps the entry.
+        runCatching { SoftDeleteCommitter(timeEntryDao, outboxDao, database, json, clock).commitOrphans() }
+            .onFailure { error ->
+                if (error is CancellationException) throw error
+                Timber.w(error, "Could not commit orphaned soft deletes")
+            }
         val ops = outboxDao.peekPending() // id ASC
         val conflictIndexes = loadConflictIndexes(ops)
         val drain = Drain()

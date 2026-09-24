@@ -387,6 +387,150 @@ class TimeEntryRepositoryWriteTest {
         assertTrue(db.outboxDao().peekAll().none { it.timeEntryId == entryId })
     }
 
+    @Test fun undo_keeps_the_row_pending_while_an_earlier_edit_is_still_queued() = runTest {
+        val entry = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "before",
+        )
+        db.timeEntryDao().upsert(entry.toEntity(1L, SyncState.SYNCED))
+        repo.updateEntry(entry.copy(description = "edited"), emptyList())
+
+        // Window still open ...
+        repo.softDeleteLocal(entry.copy(description = "edited"))
+        assertTrue(repo.undoDelete(entry, "m"))
+        assertEquals(SyncState.PENDING, db.timeEntryDao().getById(entry.id)?.syncState)
+
+        // ... and after the DELETE was committed.
+        repo.deleteEntry(entry.copy(description = "edited"))
+        assertTrue(repo.undoDelete(entry, "m"))
+
+        val restored = requireNotNull(db.timeEntryDao().getById(entry.id))
+        assertEquals("A queued UPDATE must keep pulls from overwriting the edit", SyncState.PENDING, restored.syncState)
+        assertEquals("edited", restored.description)
+        assertEquals(listOf(OutboxOpType.UPDATE), db.outboxDao().peekAll().map { it.opType })
+    }
+
+    private fun repoAt(clockMs: () -> Long, remote: FakeRemoteDataSource = FakeRemoteDataSource()) = TimeEntryRepository(
+        db.timeEntryDao(),
+        db.catalogDao(),
+        db.outboxDao(),
+        db.syncMetaDao(),
+        remote,
+        object : Clock {
+            override fun nowMs() = clockMs()
+        },
+        testJson,
+        db,
+    )
+
+    @Test fun soft_delete_whose_undo_window_was_lost_is_committed_by_the_sweep() = runTest {
+        var now = 1_000L
+        val repository = repoAt({ now })
+        val synced = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+        )
+        db.timeEntryDao().upsert(synced.toEntity(1L, SyncState.SYNCED))
+        val neverSynced = repository.createCompletedEntry("org1", "m", "u", "local", null, null, emptyList(), false, synced.start, synced.end!!)
+        repository.softDeleteLocal(synced)
+        repository.softDeleteLocal(neverSynced)
+
+        // Inside the undo window nothing is committed.
+        now += 5_000L
+        assertEquals(0, repository.commitOrphanedSoftDeletes())
+        assertEquals(listOf(OutboxOpType.CREATE), db.outboxDao().peekAll().map { it.opType })
+
+        // The ViewModel job died with the process; the sweep commits both deletes.
+        now += SoftDeleteCommitter.ORPHANED_SOFT_DELETE_AGE_MS
+        assertEquals(2, repository.commitOrphanedSoftDeletes())
+
+        val op = db.outboxDao().peekAll().single()
+        assertEquals(OutboxOpType.DELETE, op.opType)
+        assertEquals(synced.id, op.timeEntryId)
+        assertNull("A never-synced entry is dropped with its CREATE", db.timeEntryDao().getById(neverSynced.id))
+        assertEquals(0, repository.commitOrphanedSoftDeletes())
+    }
+
+    @Test fun refresh_commits_orphaned_soft_deletes_before_pulling() = runTest {
+        var now = 1_000L
+        val server = TimeEntry(id = "server-1", userId = "u", organizationId = "org1", start = "2026-07-07T08:00:00Z", end = "2026-07-07T09:00:00Z")
+        val repository = repoAt({ now }, FakeRemoteDataSource(entries = listOf(server)))
+        db.timeEntryDao().upsert(server.toEntity(1L, SyncState.SYNCED))
+        repository.softDeleteLocal(server)
+        now += SoftDeleteCommitter.ORPHANED_SOFT_DELETE_AGE_MS + 1
+
+        assertTrue(repository.refreshAll("org1", "m").isSuccess)
+
+        assertEquals(listOf(OutboxOpType.DELETE), db.outboxDao().peekAll().map { it.opType })
+        assertEquals(true, db.timeEntryDao().getById(server.id)?.pendingDelete)
+    }
+
+    @Test fun discarding_a_rejected_edit_hands_the_row_back_to_pulls() = runTest {
+        val server = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "server",
+        )
+        var now = 1_000L
+        val fake = FakeRemoteDataSource(entries = listOf(server))
+        val repository = repoAt({ now }, fake)
+        db.timeEntryDao().upsert(server.toEntity(1L, SyncState.SYNCED))
+        repository.updateEntry(server.copy(description = "rejected"), emptyList())
+        db.outboxDao().peekAll().forEach { db.outboxDao().update(it.copy(deadLettered = true)) }
+
+        assertTrue(repository.discardFailedSync(server.id))
+        assertEquals(SyncState.SYNCED, db.timeEntryDao().getById(server.id)?.syncState)
+
+        now += 10
+        assertTrue(repository.refreshAll("org1", "m").isSuccess)
+        assertEquals("server", db.timeEntryDao().getById(server.id)?.description)
+    }
+
+    @Test fun discarding_a_rejected_create_removes_the_local_only_entry() = runTest {
+        val created = repo.createCompletedEntry(
+            "org1", "m", "u", "rejected", null, null, emptyList(), false,
+            "2026-07-07T08:00:00Z", "2026-07-07T09:00:00Z",
+        )
+        db.outboxDao().peekAll().forEach { db.outboxDao().update(it.copy(deadLettered = true)) }
+
+        assertTrue(repo.discardFailedSync(created.id))
+
+        assertNull(db.timeEntryDao().getById(created.id))
+    }
+
+    @Test fun writes_store_canonical_utc_timestamps_and_identity_lookups_accept_offsets() = runTest {
+        val created = repo.createCompletedEntry(
+            "org1", "m", "u", "offset", null, null, emptyList(), false,
+            "2026-07-07T10:00:00+02:00", "2026-07-07T11:30:00+02:00",
+        )
+        assertEquals("2026-07-07T08:00:00Z", db.timeEntryDao().getById(created.id)?.start)
+        assertEquals("2026-07-07T09:30:00Z", db.timeEntryDao().getById(created.id)?.end)
+
+        // The worker rekeys the row to its server id while a surface still holds the local copy
+        // with the offset form of the same instant.
+        db.timeEntryDao().rekey(created.id, "server-1")
+        db.outboxDao().peekAll().forEach { db.outboxDao().delete(it) }
+        repo.updateEntry(
+            created.copy(start = "2026-07-07T10:00:00+02:00", end = "2026-07-07T12:00:00+02:00", description = "moved"),
+            emptyList(),
+        )
+
+        val stored = requireNotNull(db.timeEntryDao().getById("server-1"))
+        assertEquals("moved", stored.description)
+        assertEquals("2026-07-07T10:00:00Z", stored.end)
+        assertNull(db.timeEntryDao().getById(created.id))
+    }
+
     @Test fun update_on_synced_entry_captures_pre_mutation_base() = runTest {
         // SV-027 rule 3: no queued op yet, no queued START/CREATE -> base = pre-mutation content.
         val entry = TimeEntry(
@@ -974,7 +1118,8 @@ class TimeEntryRepositoryWriteTest {
 
         val copy = repo.duplicateEntry(entry.id, "member1").getOrThrow()
 
-        assertEquals("2026-07-07T23:00:00+02:00", copy.start)
+        // Local writes store Solidtime's canonical UTC form.
+        assertEquals("2026-07-07T21:00:00Z", copy.start)
         assertEquals("2026-07-08T23:00:00Z", copy.end)
         assertEquals(26 * 3600, copy.duration)
     }
@@ -1080,7 +1225,7 @@ class TimeEntryRepositoryWriteTest {
 
         val secondId = repo.splitEntry(entry.id, "2026-07-08T10:00:00+02:00", "member1").getOrThrow()
 
-        assertEquals("2026-07-08T10:00:00+02:00", db.timeEntryDao().getById(entry.id)?.end)
+        assertEquals("2026-07-08T08:00:00Z", db.timeEntryDao().getById(entry.id)?.end)
         assertEquals("2026-07-08T23:00:00Z", db.timeEntryDao().getById(secondId)?.end)
     }
 

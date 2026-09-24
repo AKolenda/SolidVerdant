@@ -1737,6 +1737,22 @@ class SyncWorkerTest {
         assertTrue(db.outboxDao().peekAll().isEmpty())
     }
 
+    @Test fun worker_commits_and_sends_a_delete_whose_undo_window_was_lost() = runTest {
+        val entry =
+            TimeEntry(id = "server-1", userId = "u1", organizationId = "org1", start = "2026-07-07T08:00:00Z", end = "2026-07-07T09:00:00Z")
+        db.timeEntryDao().upsert(entry.toEntity(updatedAt = 1L, syncState = SyncState.SYNCED))
+        repository().softDeleteLocal(entry)
+        remote.entries = listOf(entry)
+        remote.memberships = listOf(Membership("m1", "member", Organization("org1", "Org", "USD")))
+        nowMs = 1L + dev.tricked.solidverdant.data.repository.SoftDeleteCommitter.ORPHANED_SOFT_DELETE_AGE_MS + 1
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        assertEquals(listOf(entry.id), remote.deleted)
+        assertNull(db.timeEntryDao().getById(entry.id))
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+    }
+
     @Test fun start_sends_the_tags_and_billable_flag_chosen_on_start() = runTest {
         repository().startEntry("org1", "m1", "u1", null, null, "tagged", listOf("tag-1"), billable = true)
 
