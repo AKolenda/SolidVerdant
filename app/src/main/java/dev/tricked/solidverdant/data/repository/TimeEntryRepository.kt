@@ -236,6 +236,37 @@ class TimeEntryRepository @Inject constructor(
         entity?.toModel(timeEntryDao.tagIdsFor(entity.id).map { Tag(it) })
     }
 
+    /**
+     * This user's running timer in Room for [orgId], or null. Surfaces outside the app use it to
+     * act on the same timer Track shows, including one whose START has not synced yet.
+     */
+    suspend fun localActiveEntry(orgId: String, userId: String): TimeEntry? =
+        timeEntryDao.getActive(orgId)?.takeIf { it.userId == userId }?.let { it.toModel(timeEntryDao.tagIdsFor(it.id).map(::Tag)) }
+
+    /** Whether any operation for [entryId] is still queued or parked in the outbox. */
+    suspend fun hasPendingSync(entryId: String): Boolean = outboxDao.hasAnyForEntry(entryId)
+
+    /** Stopped or deleted on this device while the server has not received it yet. */
+    suspend fun isStoppingLocally(entryId: String): Boolean {
+        val row = timeEntryDao.getById(entryId) ?: return false
+        return (row.end != null || row.pendingDelete) && outboxDao.hasAnyForEntry(entryId)
+    }
+
+    /**
+     * Cache one authoritative server entry (e.g. the account's active timer found by a system
+     * surface) with the same guards as a pull: a pending edit or conflict keeps the local row.
+     * Returns the Room row afterwards.
+     */
+    suspend fun adoptServerEntry(entry: TimeEntry): TimeEntry? {
+        val now = clock.nowMs()
+        applyServerEntries(
+            listOf(entry.toEntity(updatedAt = now, syncState = SyncState.SYNCED)),
+            mapOf(entry.id to entry.tags.map { it.id }),
+            pullStartedAtMs = now,
+        )
+        return timeEntryDao.getById(entry.id)?.let { it.toModel(timeEntryDao.tagIdsFor(it.id).map(::Tag)) }
+    }
+
     /** Room's view of whether [entryId] is still running: false when it was stopped, deleted, or never cached. */
     suspend fun isEntryRunning(entryId: String): Boolean =
         timeEntryDao.getById(entryId)?.let { it.end == null && (it.duration ?: 0) <= 0 && !it.pendingDelete } ?: false

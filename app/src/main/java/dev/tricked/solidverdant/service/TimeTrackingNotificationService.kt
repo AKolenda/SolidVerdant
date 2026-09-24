@@ -24,6 +24,7 @@ import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.AuthRepository
+import dev.tricked.solidverdant.data.repository.TimerCommands
 import dev.tricked.solidverdant.ui.tile.ProjectSelectionActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +52,10 @@ class TimeTrackingNotificationService : Service() {
 
     @Inject
     lateinit var settingsDataStore: SettingsDataStore
+
+    /** Starts and stops go through Room + the outbox, like Track (see [TimerCommands]). */
+    @Inject
+    lateinit var timerCommands: TimerCommands
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
@@ -252,49 +257,36 @@ class TimeTrackingNotificationService : Service() {
             organizationId = membership.organizationId
 
             // Quick Start can be launched from an idle notification or the tile picker after
-            // another client has started a timer. Recheck the account-wide endpoint immediately
-            // before POSTing: a stale local surface must not create a second active entry.
-            val existingActive = authRepository.getActiveTimeEntry().getOrElse { error ->
+            // another client has started a timer. TimerCommands adopts a timer that is already
+            // running (in Room or on the server) instead of creating a second one, and otherwise
+            // writes the new timer to Room and queues its START, so it works offline and Track
+            // shows it immediately.
+            runCatching {
+                timerCommands.start(
+                    TimerCommands.Account(membership.organizationId, membership.id, user.id),
+                    projectId = intent.getStringExtra(EXTRA_PROJECT_ID),
+                    taskId = intent.getStringExtra(EXTRA_TASK_ID),
+                    description = description.orEmpty(),
+                )
+            }.onSuccess { result ->
                 mutationInProgress = false
-                Timber.e(error, "Quick start failed while checking for an active timer")
-                if (stateGeneration == quickStartGeneration) stopService()
-                return@launch
-            }
-            if (stateGeneration != quickStartGeneration) {
-                mutationInProgress = false
-                return@launch
-            }
-            if (existingActive != null) {
-                mutationInProgress = false
-                organizationId = existingActive.organizationId
-                projectId = existingActive.projectId
-                taskId = existingActive.taskId
-                projectName = projectName.takeIf { existingActive.projectId == intent.getStringExtra(EXTRA_PROJECT_ID) }
-                taskName = taskName.takeIf { existingActive.taskId == intent.getStringExtra(EXTRA_TASK_ID) }
-                description = existingActive.description
-                startTime = Instant.parse(existingActive.start)
+                if (stateGeneration != quickStartGeneration) return@onSuccess
+                val entry = result.entry
+                organizationId = entry.organizationId
+                startTime = Instant.parse(entry.start)
+                if (result is TimerCommands.StartResult.AlreadyRunning) {
+                    projectId = entry.projectId
+                    taskId = entry.taskId
+                    projectName = projectName.takeIf { entry.projectId == intent.getStringExtra(EXTRA_PROJECT_ID) }
+                    taskName = taskName.takeIf { entry.taskId == intent.getStringExtra(EXTRA_TASK_ID) }
+                    description = entry.description
+                }
                 cancelLongTimerWarning()
                 publishNotification()
                 scheduleLongTimerWarning()
-                return@launch
-            }
-
-            authRepository.startTimeEntry(
-                organizationId = membership.organizationId,
-                memberId = membership.id,
-                userId = user.id,
-                projectId = intent.getStringExtra(EXTRA_PROJECT_ID),
-                taskId = intent.getStringExtra(EXTRA_TASK_ID),
-                description = description.orEmpty(),
-            ).onSuccess { entry ->
-                mutationInProgress = false
-                if (stateGeneration == quickStartGeneration) {
-                    organizationId = entry.organizationId
-                    startTime = Instant.parse(entry.start)
-                    refreshNotificationIfVisible()
-                }
             }.onFailure { error ->
                 mutationInProgress = false
+                if (error is kotlinx.coroutines.CancellationException) throw error
                 Timber.e(error, "Quick start failed")
                 if (stateGeneration == quickStartGeneration) stopService()
             }
@@ -448,63 +440,36 @@ class TimeTrackingNotificationService : Service() {
         check(requestedOrganizationId == null || membership.organizationId == requestedOrganizationId) {
             "The paused timer belongs to a different organization"
         }
-        authRepository.getActiveTimeEntry().getOrThrow()?.let { return@runCatching it }
         // Exact IDs survive duplicate names and catalogue renames. Name lookup remains only for
         // notification PendingIntents created by an older app version before IDs were included.
-        val resolvedProjectId = requestedProjectId ?: authRepository.getProjects(membership.organizationId)
-            .getOrThrow()
-            .find { it.name == requestedProjectName }
-            ?.id
-        val resolvedTaskId = requestedTaskId ?: authRepository.getTasks(membership.organizationId)
-            .getOrThrow()
-            .find { it.name == requestedTaskName }
-            ?.id
-
-        val entry = authRepository.startTimeEntry(
-            organizationId = membership.organizationId,
-            memberId = membership.id,
-            userId = user.id,
+        val resolvedProjectId = requestedProjectId ?: requestedProjectName?.let { name ->
+            authRepository.getProjects(membership.organizationId).getOrThrow().find { it.name == name }?.id
+        }
+        val resolvedTaskId = requestedTaskId ?: requestedTaskName?.let { name ->
+            authRepository.getTasks(membership.organizationId).getOrThrow().find { it.name == name }?.id
+        }
+        // A timer already running (e.g. started elsewhere while paused) is adopted instead of
+        // starting a second one; otherwise the resumed timer is written to Room with a queued START.
+        timerCommands.start(
+            TimerCommands.Account(membership.organizationId, membership.id, user.id),
             projectId = resolvedProjectId,
             taskId = resolvedTaskId,
             description = requestedDescription.orEmpty(),
-        ).getOrThrow()
-        entry
+        ).entry
     }
 
-    /** Stop the account-wide active entry. Used only by explicit notification actions. */
-    private suspend fun stopActiveEntry(expectedStart: Instant?): Result<Boolean> {
-        val activeEntry = authRepository.getActiveTimeEntry()
-            .getOrElse { return Result.failure(it) }
-            ?: return Result.success(false)
-        if (expectedStart != null) {
-            val activeStart = runCatching { Instant.parse(activeEntry.start) }.getOrNull()
-            if (activeStart?.toEpochMilli() != expectedStart.toEpochMilli()) {
+    /**
+     * Stop the timer this notification shows. Used only by explicit notification actions. The stop
+     * is written to Room with a queued STOP, so it also covers a timer whose START has not synced
+     * yet (the server knows nothing about it) and works offline.
+     */
+    private suspend fun stopActiveEntry(expectedStart: Instant?): Result<Boolean> =
+        timerCommands.stop(organizationId, expectedStart).map { result ->
+            if (result == TimerCommands.StopResult.NotTheExpectedTimer) {
                 Timber.d("Ignoring stale notification action for a replaced active timer")
-                return Result.success(false)
             }
+            result is TimerCommands.StopResult.Stopped
         }
-        val user = authRepository.getCurrentUser()
-            .getOrElse { return Result.failure(it) }
-
-        val stopResult = authRepository.stopTimeEntry(
-            organizationId = activeEntry.organizationId,
-            timeEntryId = activeEntry.id,
-            userId = user.id,
-            startTime = activeEntry.start,
-        )
-        if (stopResult.isSuccess) return Result.success(true)
-
-        // The remote update may have committed even if its response could not be decoded or the
-        // connection dropped while returning it. Confirm the authoritative state before showing
-        // a retry error: retrying an already-completed stop is both confusing and unnecessary.
-        val confirmedActiveEntry = authRepository.getActiveTimeEntry()
-        return if (confirmedActiveEntry.isSuccess && confirmedActiveEntry.getOrNull() == null) {
-            Timber.d("Stop response failed, but the server confirms there is no active entry")
-            Result.success(true)
-        } else {
-            Result.failure(checkNotNull(stopResult.exceptionOrNull()))
-        }
-    }
 
     private fun showIdleNotification(startId: Int) {
         cancelLongTimerWarning()
