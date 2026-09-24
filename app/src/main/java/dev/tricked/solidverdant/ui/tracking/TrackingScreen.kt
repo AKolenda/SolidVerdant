@@ -53,16 +53,26 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.CallSplit
+import androidx.compose.material.icons.automirrored.outlined.Label
+import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.automirrored.outlined.Notes
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.BookmarkAdd
+import androidx.compose.material.icons.outlined.Business
+import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.FolderOff
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.SyncProblem
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -73,13 +83,11 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -100,7 +108,6 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
@@ -155,6 +162,7 @@ import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.domain.time.isWorkTimeEntry
 import dev.tricked.solidverdant.domain.time.timeEntryLocalDaySlices
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
+import dev.tricked.solidverdant.ui.components.DateRangePickerDialog
 import dev.tricked.solidverdant.ui.components.DestructiveActionRow
 import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
 import dev.tricked.solidverdant.ui.components.EntryDatePickerDialog
@@ -162,13 +170,16 @@ import dev.tricked.solidverdant.ui.components.EntryDescriptionField
 import dev.tricked.solidverdant.ui.components.EntryDurationRow
 import dev.tricked.solidverdant.ui.components.EntrySheetHeader
 import dev.tricked.solidverdant.ui.components.EntryTimeRow
+import dev.tricked.solidverdant.ui.components.FilterOption
+import dev.tricked.solidverdant.ui.components.FilterRow
 import dev.tricked.solidverdant.ui.components.GroupedDivider
 import dev.tricked.solidverdant.ui.components.GroupedRow
 import dev.tricked.solidverdant.ui.components.GroupedSection
 import dev.tricked.solidverdant.ui.components.GroupedSwitchRow
-import dev.tricked.solidverdant.ui.components.SearchableSingleSelectDialog
 import dev.tricked.solidverdant.ui.components.SectionCard
+import dev.tricked.solidverdant.ui.components.SegmentedControl
 import dev.tricked.solidverdant.ui.components.SelectorStyle
+import dev.tricked.solidverdant.ui.components.SingleSelectFilterPicker
 import dev.tricked.solidverdant.ui.components.SyncChip
 import dev.tricked.solidverdant.ui.components.TagsSelector
 import dev.tricked.solidverdant.ui.components.retimedEnd
@@ -885,189 +896,263 @@ private fun HistorySearchBar(filter: HistoryFilter, onChange: (HistoryFilter) ->
     }
 }
 
-/** The search options in a sheet: status, date and categorisation chips, then catalogue pickers. */
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+/** The date choices of the search options; Custom opens the range picker. */
+private enum class HistoryDateChoice { ANY, TODAY, WEEK, CUSTOM }
+
+private fun HistoryFilter.dateChoice(today: LocalDate): HistoryDateChoice = when {
+    startDate == null && endDate == null -> HistoryDateChoice.ANY
+    startDate == today && endDate == today -> HistoryDateChoice.TODAY
+    startDate == today.minusDays(LAST_7_DAYS_OFFSET) && endDate == today -> HistoryDateChoice.WEEK
+    else -> HistoryDateChoice.CUSTOM
+}
+
+/**
+ * The search options in a sheet, laid out like the entry form: a Date section, the catalogue
+ * filters as full-width rows that open the same searchable pickers, then billable and the status
+ * checks as switches.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 @Suppress("LongMethod")
-private fun HistoryFiltersSheet(
+internal fun HistoryFiltersSheet(
     filter: HistoryFilter,
     uiState: TrackingUiState,
     onChange: (HistoryFilter) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var showDateRangePicker by remember { mutableStateOf(false) }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    var openPicker by remember { mutableStateOf<HistoryFilterPicker?>(null) }
+    val today = LocalDate.now(uiState.zone)
+    val clients = remember(uiState.clients) { uiState.clients.map { FilterOption(it.id, it.name) } }
+    val projects = remember(uiState.projects, filter.clientId) {
+        uiState.projects
+            .filter { filter.clientId == null || it.clientId == filter.clientId }
+            .map { FilterOption(it.id, it.name) }
+    }
+    val tasks = remember(uiState.tasks, filter.projectId) {
+        uiState.tasks.filter { it.projectId == filter.projectId }.map { FilterOption(it.id, it.name) }
+    }
+    val tags = remember(uiState.tags) { uiState.tags.map { FilterOption(it.id, it.name) } }
+    val all = stringResource(R.string.filter_all)
+    fun nameOf(options: List<FilterOption>, id: String?) = options.firstOrNull { it.id == id }?.name ?: all
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.background,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = Dimens.Space16)
                 .padding(bottom = Dimens.Space24),
-            verticalArrangement = Arrangement.spacedBy(Dimens.Space8),
+            verticalArrangement = Arrangement.spacedBy(Dimens.Space16),
         ) {
-            Text(
-                text = stringResource(R.string.search_options),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = filter.billable == true,
-                    onClick = { onChange(filter.copy(billable = if (filter.billable == true) null else true)) },
-                    label = { Text(stringResource(R.string.billable)) },
-                )
-                FilterChip(
-                    selected = filter.billable == false,
-                    onClick = { onChange(filter.copy(billable = if (filter.billable == false) null else false)) },
-                    label = { Text(stringResource(R.string.non_billable)) },
-                )
-                FilterChip(
-                    selected = filter.runningOnly,
-                    onClick = { onChange(filter.copy(runningOnly = !filter.runningOnly)) },
-                    label = { Text(stringResource(R.string.running_entries)) },
-                )
-                FilterChip(
-                    selected = filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED,
-                    onClick = {
-                        val toggled = if (filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED) {
-                            null
-                        } else {
-                            TimeEntryRepository.EntrySyncStatus.FAILED
-                        }
-                        onChange(filter.copy(syncStatus = toggled))
-                    },
-                    label = { Text(stringResource(R.string.sync_failed)) },
-                )
-                val today = LocalDate.now(uiState.zone)
-                FilterChip(
-                    selected = filter.startDate == today && filter.endDate == today,
-                    onClick = { onChange(filter.copy(startDate = today, endDate = today)) },
-                    label = { Text(stringResource(R.string.today)) },
-                )
-                FilterChip(
-                    selected = filter.startDate == today.minusDays(LAST_7_DAYS_OFFSET) && filter.endDate == today,
-                    onClick = { onChange(filter.copy(startDate = today.minusDays(LAST_7_DAYS_OFFSET), endDate = today)) },
-                    label = { Text(stringResource(R.string.stats_last_7_days)) },
-                )
-                FilterChip(
-                    selected = filter.startDate != null &&
-                        filter.endDate != null &&
-                        !(filter.startDate == today && filter.endDate == today) &&
-                        !(filter.startDate == today.minusDays(LAST_7_DAYS_OFFSET) && filter.endDate == today),
-                    onClick = { showDateRangePicker = true },
-                    label = { Text(stringResource(R.string.stats_custom)) },
-                )
-                FilterChip(
-                    selected = filter.needsCategorization,
-                    onClick = { onChange(filter.copy(needsCategorization = !filter.needsCategorization)) },
-                    label = { Text(stringResource(R.string.needs_categorization)) },
-                )
-                FilterChip(
-                    selected = filter.missingProjectOnly,
-                    onClick = { onChange(filter.copy(missingProjectOnly = !filter.missingProjectOnly)) },
-                    label = { Text(stringResource(R.string.without_project)) },
-                )
-                FilterChip(
-                    selected = filter.missingDescriptionOnly,
-                    onClick = { onChange(filter.copy(missingDescriptionOnly = !filter.missingDescriptionOnly)) },
-                    label = { Text(stringResource(R.string.without_description)) },
-                )
-            }
-            FilterDropdown(
-                label = stringResource(R.string.client),
-                selectedId = filter.clientId,
-                options = uiState.clients.map { it.id to it.name },
-                onSelect = { onChange(filter.copy(clientId = it, projectId = null, taskId = null)) },
-            )
-            FilterDropdown(
-                label = stringResource(R.string.project),
-                selectedId = filter.projectId,
-                options = uiState.projects
-                    .filter { filter.clientId == null || it.clientId == filter.clientId }
-                    .map { it.id to it.name },
-                onSelect = { onChange(filter.copy(projectId = it, taskId = null)) },
-            )
-            if (filter.projectId != null) {
-                FilterDropdown(
-                    label = stringResource(R.string.task),
-                    selectedId = filter.taskId,
-                    options = uiState.tasks.filter { it.projectId == filter.projectId }.map { it.id to it.name },
-                    onSelect = { onChange(filter.copy(taskId = it)) },
-                )
-            }
-            FilterDropdown(
-                label = stringResource(R.string.tags),
-                selectedId = filter.tagId,
-                options = uiState.tags.map { it.id to it.name },
-                onSelect = { onChange(filter.copy(tagId = it)) },
-            )
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = Dimens.Space8),
-                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8, Alignment.End),
+                modifier = Modifier.fillMaxWidth().padding(start = Dimens.Space16 + Dimens.Space16, end = Dimens.Space16),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                Text(
+                    text = stringResource(R.string.search_options),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
                 if (filter.activeOptionsCount() > 0) {
                     TextButton(onClick = { onChange(HistoryFilter(query = filter.query)) }) {
                         Text(stringResource(R.string.clear_filters))
                     }
                 }
+            }
+
+            val dateChoice = filter.dateChoice(today)
+            GroupedSection(header = stringResource(R.string.filter_section_date)) {
+                SegmentedControl(
+                    options = HistoryDateChoice.entries,
+                    selected = dateChoice,
+                    onSelect = { choice ->
+                        when (choice) {
+                            HistoryDateChoice.ANY -> onChange(filter.copy(startDate = null, endDate = null))
+                            HistoryDateChoice.TODAY -> onChange(filter.copy(startDate = today, endDate = today))
+                            HistoryDateChoice.WEEK -> onChange(
+                                filter.copy(startDate = today.minusDays(LAST_7_DAYS_OFFSET), endDate = today),
+                            )
+                            HistoryDateChoice.CUSTOM -> showDateRangePicker = true
+                        }
+                    },
+                    label = { choice ->
+                        stringResource(
+                            when (choice) {
+                                HistoryDateChoice.ANY -> R.string.filter_any_time
+                                HistoryDateChoice.TODAY -> R.string.today
+                                HistoryDateChoice.WEEK -> R.string.filter_week_short
+                                HistoryDateChoice.CUSTOM -> R.string.stats_custom
+                            },
+                        )
+                    },
+                    modifier = Modifier.padding(horizontal = Dimens.Space8, vertical = Dimens.Space4),
+                )
+                val start = filter.startDate
+                val end = filter.endDate
+                if (dateChoice == HistoryDateChoice.CUSTOM && start != null && end != null) {
+                    val locale = appLocale()
+                    val formatter = remember(locale) {
+                        DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM).withLocale(locale)
+                    }
+                    GroupedDivider()
+                    GroupedRow(
+                        title = "${start.format(formatter)} – ${end.format(formatter)}",
+                        leadingIcon = Icons.Outlined.DateRange,
+                        onClick = { showDateRangePicker = true },
+                    )
+                }
+            }
+
+            GroupedSection(header = stringResource(R.string.filter_section_details)) {
+                FilterRow(
+                    label = stringResource(R.string.client),
+                    icon = Icons.Outlined.Business,
+                    value = nameOf(clients, filter.clientId),
+                    onClick = { openPicker = HistoryFilterPicker.CLIENT },
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                FilterRow(
+                    label = stringResource(R.string.project),
+                    icon = Icons.Outlined.Folder,
+                    value = nameOf(projects, filter.projectId),
+                    onClick = { openPicker = HistoryFilterPicker.PROJECT },
+                )
+                if (filter.projectId != null) {
+                    GroupedDivider(inset = Dimens.SettingsIconInset)
+                    FilterRow(
+                        label = stringResource(R.string.task),
+                        icon = Icons.AutoMirrored.Outlined.List,
+                        value = nameOf(tasks, filter.taskId),
+                        onClick = { openPicker = HistoryFilterPicker.TASK },
+                    )
+                }
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                FilterRow(
+                    label = stringResource(R.string.tags),
+                    icon = Icons.AutoMirrored.Outlined.Label,
+                    value = nameOf(tags, filter.tagId),
+                    onClick = { openPicker = HistoryFilterPicker.TAG },
+                )
+            }
+
+            GroupedSection(header = stringResource(R.string.filter_section_status)) {
+                val billableOptions = listOf(null, true, false)
+                SegmentedControl(
+                    options = billableOptions,
+                    selected = filter.billable,
+                    onSelect = { onChange(filter.copy(billable = it)) },
+                    label = { billable ->
+                        stringResource(
+                            when (billable) {
+                                null -> R.string.filter_all
+                                true -> R.string.billable
+                                false -> R.string.non_billable
+                            },
+                        )
+                    },
+                    modifier = Modifier.padding(horizontal = Dimens.Space8, vertical = Dimens.Space4),
+                )
+                GroupedDivider()
+                GroupedSwitchRow(
+                    title = stringResource(R.string.running_entries),
+                    leadingIcon = Icons.Outlined.Timer,
+                    checked = filter.runningOnly,
+                    onCheckedChange = { onChange(filter.copy(runningOnly = it)) },
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedSwitchRow(
+                    title = stringResource(R.string.filter_failed_sync),
+                    leadingIcon = Icons.Outlined.SyncProblem,
+                    checked = filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED,
+                    onCheckedChange = { failed ->
+                        onChange(filter.copy(syncStatus = TimeEntryRepository.EntrySyncStatus.FAILED.takeIf { failed }))
+                    },
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedSwitchRow(
+                    title = stringResource(R.string.needs_categorization),
+                    leadingIcon = Icons.Outlined.Category,
+                    checked = filter.needsCategorization,
+                    onCheckedChange = { onChange(filter.copy(needsCategorization = it)) },
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedSwitchRow(
+                    title = stringResource(R.string.without_project),
+                    leadingIcon = Icons.Outlined.FolderOff,
+                    checked = filter.missingProjectOnly,
+                    onCheckedChange = { onChange(filter.copy(missingProjectOnly = it)) },
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedSwitchRow(
+                    title = stringResource(R.string.without_description),
+                    leadingIcon = Icons.AutoMirrored.Outlined.Notes,
+                    checked = filter.missingDescriptionOnly,
+                    onCheckedChange = { onChange(filter.copy(missingDescriptionOnly = it)) },
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space16),
+                horizontalArrangement = Arrangement.End,
+            ) {
                 Button(onClick = onDismiss, modifier = Modifier.testTag(TrackingTestTags.FILTER_CLOSE_BUTTON)) {
                     Text(stringResource(R.string.done))
                 }
             }
         }
     }
-    if (showDateRangePicker) {
-        val pickerState = rememberDateRangePickerState(
-            initialSelectedStartDateMillis = filter.startDate?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
-            initialSelectedEndDateMillis = filter.endDate?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
+
+    when (openPicker) {
+        HistoryFilterPicker.CLIENT -> SingleSelectFilterPicker(
+            title = stringResource(R.string.client),
+            options = clients,
+            selectedId = filter.clientId,
+            onSelect = { onChange(filter.copy(clientId = it, projectId = null, taskId = null)) },
+            onDismiss = { openPicker = null },
         )
-        DatePickerDialog(
-            onDismissRequest = { showDateRangePicker = false },
-            confirmButton = {
-                TextButton(
-                    enabled = pickerState.selectedStartDateMillis != null && pickerState.selectedEndDateMillis != null,
-                    onClick = {
-                        val start = pickerState.selectedStartDateMillis?.let(::utcDateOf)
-                        val end = pickerState.selectedEndDateMillis?.let(::utcDateOf)
-                        if (start != null && end != null) onChange(filter.copy(startDate = start, endDate = end))
-                        showDateRangePicker = false
-                    },
-                ) { Text(stringResource(R.string.apply)) }
+        HistoryFilterPicker.PROJECT -> SingleSelectFilterPicker(
+            title = stringResource(R.string.project),
+            options = projects,
+            selectedId = filter.projectId,
+            onSelect = { onChange(filter.copy(projectId = it, taskId = null)) },
+            onDismiss = { openPicker = null },
+        )
+        HistoryFilterPicker.TASK -> SingleSelectFilterPicker(
+            title = stringResource(R.string.task),
+            options = tasks,
+            selectedId = filter.taskId,
+            onSelect = { onChange(filter.copy(taskId = it)) },
+            onDismiss = { openPicker = null },
+        )
+        HistoryFilterPicker.TAG -> SingleSelectFilterPicker(
+            title = stringResource(R.string.tags),
+            options = tags,
+            selectedId = filter.tagId,
+            onSelect = { onChange(filter.copy(tagId = it)) },
+            onDismiss = { openPicker = null },
+        )
+        null -> Unit
+    }
+
+    if (showDateRangePicker) {
+        DateRangePickerDialog(
+            initialStart = filter.startDate,
+            initialEnd = filter.endDate,
+            onDismiss = { showDateRangePicker = false },
+            onConfirm = { start, end ->
+                onChange(filter.copy(startDate = start, endDate = end))
+                showDateRangePicker = false
             },
-            dismissButton = {
-                TextButton(onClick = { showDateRangePicker = false }) { Text(stringResource(R.string.cancel)) }
-            },
-        ) { DateRangePicker(state = pickerState) }
+        )
     }
 }
 
-@Composable
-private fun FilterDropdown(label: String, selectedId: String?, options: List<Pair<String, String>>, onSelect: (String?) -> Unit) {
-    if (options.isEmpty()) return
-    var expanded by remember { mutableStateOf(false) }
-    FilterChip(
-        selected = selectedId != null,
-        onClick = { expanded = true },
-        label = {
-            Text(
-                options.firstOrNull { it.first == selectedId }?.second ?: label,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        },
-    )
-    if (expanded) {
-        SearchableSingleSelectDialog(
-            title = label,
-            searchPlaceholder = stringResource(R.string.search_items, label),
-            allLabel = stringResource(R.string.all_items, label),
-            options = options,
-            selectedId = selectedId,
-            onSelect = onSelect,
-            onDismiss = { expanded = false },
-        )
-    }
-}
+private enum class HistoryFilterPicker { CLIENT, PROJECT, TASK, TAG }
 
 @Composable
 private fun SyncCenter(
@@ -2349,4 +2434,3 @@ internal fun groupCompletedEntriesByLocalDay(entries: List<TimeEntry>, zone: Zon
         .toSortedMap(compareByDescending { it })
 
 /** Date-picker millis are UTC-midnight instants; resolve them back to the picked date. */
-private fun utcDateOf(epochMillis: Long): LocalDate = Instant.ofEpochMilli(epochMillis).atZone(ZoneOffset.UTC).toLocalDate()

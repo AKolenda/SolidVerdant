@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Search options and statistics filters: grouped rows, pickers and the date range. -->
+    <string name="filter_all">All</string>
+    <string name="filter_nothing_to_choose">Nothing to choose from yet</string>
+    <string name="filter_select_dates">Select dates</string>
+    <string name="filter_section_date">Date</string>
+    <string name="filter_section_details">Details</string>
+    <string name="filter_section_status">Status</string>
+    <string name="filter_any_time">Any time</string>
+    <string name="filter_week_short">7 days</string>
+    <string name="filter_failed_sync">Failed to sync</string>
+    <plurals name="filter_selected_count">
+        <item quantity="one">%1$d selected</item>
+        <item quantity="other">%1$d selected</item>
+    </plurals>
+</resources>

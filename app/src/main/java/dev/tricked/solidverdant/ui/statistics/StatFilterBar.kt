@@ -9,8 +9,6 @@ package dev.tricked.solidverdant.ui.statistics
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -19,22 +17,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Label
+import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.UnfoldMore
+import androidx.compose.material.icons.outlined.Business
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,19 +41,28 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.components.FilterOption
+import dev.tricked.solidverdant.ui.components.FilterRow
+import dev.tricked.solidverdant.ui.components.GroupedDivider
 import dev.tricked.solidverdant.ui.components.GroupedSection
+import dev.tricked.solidverdant.ui.components.MultiSelectFilterPicker
+import dev.tricked.solidverdant.ui.components.SegmentedControl
+import dev.tricked.solidverdant.ui.components.multiSelectSummary
 import dev.tricked.solidverdant.ui.theme.Dimens
 
 internal object StatisticsFilterTestTags {
     const val OPEN = "stats_filter_open"
     const val CLEAR = "stats_filter_clear"
     const val PROJECT_SEARCH = "stats_project_filter_search"
+    const val DONE = "stats_filter_done"
     fun projectOption(id: String) = "stats_project_filter_$id"
     fun section(section: StatFilterSection) = "stats_filter_section_${section.name.lowercase()}"
 }
@@ -159,7 +166,12 @@ fun StatFilterBar(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+/**
+ * The statistics filters, laid out like the entry form: billable as a segmented choice, then
+ * projects, clients, tasks and tags as full-width rows. Each row opens a searchable, lazily listed
+ * picker, so a large project catalogue opens as quickly as the entry form's project picker.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StatFilterSheet(
     filters: StatFilters,
@@ -168,28 +180,31 @@ private fun StatFilterSheet(
     onReset: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var selectedSection by rememberSaveable { mutableStateOf(StatFilterSection.BILLABLE) }
-    var projectQuery by rememberSaveable { mutableStateOf("") }
-    val filteredProjects = remember(catalog.projects, projectQuery) {
-        val query = projectQuery.trim()
-        if (query.isEmpty()) catalog.projects else catalog.projects.filter { it.name.contains(query, ignoreCase = true) }
-    }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    var openSection by rememberSaveable { mutableStateOf<StatFilterSection?>(null) }
+    val projects = remember(catalog.projects) { catalog.projects.map { FilterOption(it.id, it.name) } }
+    val clients = remember(catalog.clients) { catalog.clients.map { FilterOption(it.id, it.name) } }
+    val tasks = remember(catalog.tasks) { catalog.tasks.map { FilterOption(it.id, it.name) } }
+    val tags = remember(catalog.tags) { catalog.tags.map { FilterOption(it.id, it.name) } }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.background,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = Dimens.Space16)
                 .padding(bottom = Dimens.Space24),
-            verticalArrangement = Arrangement.spacedBy(Dimens.Space12),
+            verticalArrangement = Arrangement.spacedBy(Dimens.Space16),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(start = Dimens.Space16 + Dimens.Space16, end = Dimens.Space16),
             ) {
                 Text(
                     stringResource(R.string.stats2_filter_sheet_title),
                     style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
                 TextButton(onClick = onReset, enabled = filters.isActive) {
@@ -197,124 +212,93 @@ private fun StatFilterSheet(
                 }
             }
 
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
-                verticalArrangement = Arrangement.spacedBy(Dimens.Space4),
+            GroupedSection(
+                header = statFilterSectionLabel(StatFilterSection.BILLABLE),
+                modifier = Modifier.testTag(StatisticsFilterTestTags.section(StatFilterSection.BILLABLE)),
             ) {
-                statFilterSectionOrder.forEach { section ->
-                    FilterChip(
-                        selected = selectedSection == section,
-                        onClick = { selectedSection = section },
-                        label = { Text(statFilterSectionLabel(section)) },
-                        modifier = Modifier.testTag(StatisticsFilterTestTags.section(section)),
-                    )
-                }
+                SegmentedControl(
+                    options = listOf(BillableFilter.All, BillableFilter.Billable, BillableFilter.NonBillable),
+                    selected = filters.billable,
+                    onSelect = { onFiltersChange(filters.copy(billable = it)) },
+                    label = { billableLabel(it) },
+                    modifier = Modifier.padding(horizontal = Dimens.Space8, vertical = Dimens.Space4),
+                )
             }
 
-            when (selectedSection) {
-                StatFilterSection.BILLABLE -> {
-                    val billableOptions = listOf(
-                        BillableFilter.All,
-                        BillableFilter.Billable,
-                        BillableFilter.NonBillable,
-                    )
-                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                        billableOptions.forEachIndexed { index, option ->
-                            SegmentedButton(
-                                selected = filters.billable == option,
-                                onClick = { onFiltersChange(filters.copy(billable = option)) },
-                                shape = SegmentedButtonDefaults.itemShape(index, billableOptions.size),
-                            ) { Text(billableLabel(option)) }
-                        }
-                    }
-                }
+            GroupedSection {
+                StatFilterRow(StatFilterSection.PROJECTS, Icons.Outlined.Folder, filters.projectIds, projects) { openSection = it }
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                StatFilterRow(StatFilterSection.CLIENTS, Icons.Outlined.Business, filters.clientIds, clients) { openSection = it }
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                StatFilterRow(StatFilterSection.TASKS, Icons.AutoMirrored.Outlined.List, filters.taskIds, tasks) { openSection = it }
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                StatFilterRow(StatFilterSection.TAGS, Icons.AutoMirrored.Outlined.Label, filters.tagIds, tags) { openSection = it }
+            }
 
-                StatFilterSection.TASKS -> FilterSection(
-                    emptyText = stringResource(R.string.stats2_filter_empty_tasks),
-                    options = catalog.tasks.map { it.id to it.name },
-                    selected = filters.taskIds,
-                    onToggle = { onFiltersChange(filters.toggleTask(it)) },
-                )
-
-                StatFilterSection.TAGS -> FilterSection(
-                    emptyText = stringResource(R.string.stats2_filter_empty_tags),
-                    options = catalog.tags.map { it.id to it.name },
-                    selected = filters.tagIds,
-                    onToggle = { onFiltersChange(filters.toggleTag(it)) },
-                )
-
-                StatFilterSection.CLIENTS -> FilterSection(
-                    emptyText = stringResource(R.string.stats2_filter_empty_clients),
-                    options = catalog.clients.map { it.id to it.name },
-                    selected = filters.clientIds,
-                    onToggle = { onFiltersChange(filters.toggleClient(it)) },
-                )
-
-                StatFilterSection.PROJECTS -> {
-                    OutlinedTextField(
-                        value = projectQuery,
-                        onValueChange = { projectQuery = it },
-                        modifier = Modifier.fillMaxWidth().testTag(StatisticsFilterTestTags.PROJECT_SEARCH),
-                        label = { Text(stringResource(R.string.stats2_search_projects)) },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        trailingIcon = if (projectQuery.isNotEmpty()) {
-                            {
-                                IconButton(onClick = { projectQuery = "" }) {
-                                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_search))
-                                }
-                            }
-                        } else {
-                            null
-                        },
-                        singleLine = true,
-                    )
-                    val emptyProjectsText = if (projectQuery.isBlank()) {
-                        R.string.stats2_filter_empty_projects
-                    } else {
-                        R.string.no_results_found
-                    }
-                    FilterSection(
-                        emptyText = stringResource(emptyProjectsText),
-                        options = filteredProjects.map { it.id to it.name },
-                        selected = filters.projectIds,
-                        onToggle = { onFiltersChange(filters.toggleProject(it)) },
-                        optionTestTag = StatisticsFilterTestTags::projectOption,
-                    )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space16),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                Button(onClick = onDismiss, modifier = Modifier.testTag(StatisticsFilterTestTags.DONE)) {
+                    Text(stringResource(R.string.done))
                 }
             }
         }
+    }
+
+    val section = openSection ?: return
+    val title = statFilterSectionLabel(section)
+    val close = { openSection = null }
+    when (section) {
+        StatFilterSection.PROJECTS -> MultiSelectFilterPicker(
+            title = title,
+            options = projects,
+            selected = filters.projectIds,
+            onChange = { onFiltersChange(filters.copy(projectIds = it)) },
+            onDismiss = close,
+            searchTestTag = StatisticsFilterTestTags.PROJECT_SEARCH,
+            optionTestTag = StatisticsFilterTestTags::projectOption,
+        )
+        StatFilterSection.CLIENTS -> MultiSelectFilterPicker(
+            title = title,
+            options = clients,
+            selected = filters.clientIds,
+            onChange = { onFiltersChange(filters.copy(clientIds = it)) },
+            onDismiss = close,
+        )
+        StatFilterSection.TASKS -> MultiSelectFilterPicker(
+            title = title,
+            options = tasks,
+            selected = filters.taskIds,
+            onChange = { onFiltersChange(filters.copy(taskIds = it)) },
+            onDismiss = close,
+        )
+        StatFilterSection.TAGS -> MultiSelectFilterPicker(
+            title = title,
+            options = tags,
+            selected = filters.tagIds,
+            onChange = { onFiltersChange(filters.copy(tagIds = it)) },
+            onDismiss = close,
+        )
+        StatFilterSection.BILLABLE -> Unit
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
-private fun FilterSection(
-    emptyText: String,
-    options: List<Pair<String, String>>,
+private fun StatFilterRow(
+    section: StatFilterSection,
+    icon: ImageVector,
     selected: Set<String>,
-    onToggle: (String) -> Unit,
-    optionTestTag: ((String) -> String)? = null,
+    options: List<FilterOption>,
+    onOpen: (StatFilterSection) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(Dimens.Space4)) {
-        if (options.isEmpty()) {
-            Text(
-                emptyText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
-                options.forEach { (id, name) ->
-                    FilterChip(
-                        selected = id in selected,
-                        onClick = { onToggle(id) },
-                        label = { Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        modifier = optionTestTag?.let { Modifier.testTag(it(id)) } ?: Modifier,
-                    )
-                }
-            }
-        }
-    }
+    FilterRow(
+        label = statFilterSectionLabel(section),
+        icon = icon,
+        value = multiSelectSummary(selected, options),
+        onClick = { onOpen(section) },
+        modifier = Modifier.testTag(StatisticsFilterTestTags.section(section)),
+    )
 }
 
 @Composable
