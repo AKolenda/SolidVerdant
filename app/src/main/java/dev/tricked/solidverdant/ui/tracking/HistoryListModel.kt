@@ -85,8 +85,9 @@ internal fun historyEntryGroups(entries: List<TimeEntry>): List<List<TimeEntry>>
 
 /**
  * The single builder for the history list. [days] maps each local day to the completed entries that
- * overlap it (see [groupCompletedEntriesByLocalDay]); days are emitted newest first, with a week
- * header whenever a new week starting on [firstDayOfWeek] begins.
+ * overlap it (see [groupEntriesByLocalDay]); days are emitted newest first, with a week header
+ * whenever a new week starting on [firstDayOfWeek] begins. Running entries are dropped unless
+ * [includeRunning], for the "Running" search option; they count up to [now].
  */
 internal fun buildHistoryListItems(
     days: Map<LocalDate, List<TimeEntry>>,
@@ -94,11 +95,12 @@ internal fun buildHistoryListItems(
     today: LocalDate,
     zone: ZoneId,
     now: Instant,
+    includeRunning: Boolean = false,
 ): List<HistoryListItem> {
     val historyDays = days.entries
         .sortedByDescending { it.key }
         .mapNotNull { (date, entries) ->
-            val completed = entries.filter(::isCompletedTimeEntry)
+            val completed = if (includeRunning) entries else entries.filter(::isCompletedTimeEntry)
             if (completed.isEmpty()) return@mapNotNull null
             val groups = historyEntryGroups(completed).map { groupEntries ->
                 HistoryListItem.Group(
@@ -180,6 +182,37 @@ internal fun worstSyncStatusByEntryId(
 ): Map<String, TimeEntryRepository.EntrySyncStatus> = operations
     .groupBy { it.entryId }
     .mapValues { (_, entryOperations) -> entryOperations.minBy { syncStatusSeverity.indexOf(it.status) }.status }
+
+/**
+ * One history card's own sync and review state. Looked up where the card is placed, so a sync or
+ * review update for other entries leaves it equal and the card is skipped rather than redrawn.
+ */
+@Immutable
+internal data class HistoryCardStatus(
+    /** Aligned with the group's entries; null where an entry has no pending change. */
+    val entrySyncStatuses: List<TimeEntryRepository.EntrySyncStatus?> = emptyList(),
+    /** The review checks of all the group's entries. */
+    val reviewIssues: Set<EntryReviewIssue> = emptySet(),
+) {
+    val groupSyncStatus: TimeEntryRepository.EntrySyncStatus? get() = worstSyncStatus(entrySyncStatuses.filterNotNull())
+}
+
+internal fun historyCardStatus(
+    group: HistoryListItem.Group,
+    syncStatusByEntryId: Map<String, TimeEntryRepository.EntrySyncStatus>,
+    reviewIssues: Map<String, Set<EntryReviewIssue>>,
+): HistoryCardStatus = HistoryCardStatus(
+    entrySyncStatuses = if (syncStatusByEntryId.isEmpty()) {
+        List(group.entries.size) { null }
+    } else {
+        group.entries.map { syncStatusByEntryId[it.id] }
+    },
+    reviewIssues = if (reviewIssues.isEmpty()) {
+        emptySet()
+    } else {
+        group.entries.flatMapTo(sortedSetOf()) { reviewIssues[it.id].orEmpty() }
+    },
+)
 
 /** Statuses a user can act on from the card; PENDING is queued and will upload on its own. */
 internal fun canRetrySync(status: TimeEntryRepository.EntrySyncStatus): Boolean =

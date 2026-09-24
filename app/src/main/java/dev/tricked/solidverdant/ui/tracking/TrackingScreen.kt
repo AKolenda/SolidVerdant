@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
@@ -60,38 +59,38 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.Business
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.FolderOff
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Snooze
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.SyncProblem
 import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -103,18 +102,21 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -139,7 +141,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Client
@@ -155,6 +157,7 @@ import dev.tricked.solidverdant.domain.time.formatTimeEntryInstant
 import dev.tricked.solidverdant.domain.time.isCompletedTimeEntry
 import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.domain.time.isWorkTimeEntry
+import dev.tricked.solidverdant.domain.time.parseTimeEntryInstant
 import dev.tricked.solidverdant.domain.time.timeEntryLocalDaySlices
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import dev.tricked.solidverdant.ui.components.AppSheet
@@ -163,6 +166,7 @@ import dev.tricked.solidverdant.ui.components.ConfirmDialog
 import dev.tricked.solidverdant.ui.components.DateRangePickerDialog
 import dev.tricked.solidverdant.ui.components.DestructiveActionRow
 import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
+import dev.tricked.solidverdant.ui.components.EmptyState
 import dev.tricked.solidverdant.ui.components.EntryDatePickerDialog
 import dev.tricked.solidverdant.ui.components.EntryDescriptionField
 import dev.tricked.solidverdant.ui.components.EntryDurationRow
@@ -174,11 +178,10 @@ import dev.tricked.solidverdant.ui.components.GroupedDivider
 import dev.tricked.solidverdant.ui.components.GroupedRow
 import dev.tricked.solidverdant.ui.components.GroupedSection
 import dev.tricked.solidverdant.ui.components.GroupedSwitchRow
-import dev.tricked.solidverdant.ui.components.SectionCard
+import dev.tricked.solidverdant.ui.components.OptionPickerDialog
 import dev.tricked.solidverdant.ui.components.SegmentedControl
 import dev.tricked.solidverdant.ui.components.SelectorStyle
 import dev.tricked.solidverdant.ui.components.SingleSelectFilterPicker
-import dev.tricked.solidverdant.ui.components.SyncChip
 import dev.tricked.solidverdant.ui.components.TagsSelector
 import dev.tricked.solidverdant.ui.components.retimedEnd
 import dev.tricked.solidverdant.ui.localization.appLocale
@@ -189,18 +192,22 @@ import dev.tricked.solidverdant.ui.templates.TemplateDraft
 import dev.tricked.solidverdant.ui.templates.TemplateResolver
 import dev.tricked.solidverdant.ui.templates.templateDisplayLabel
 import dev.tricked.solidverdant.ui.theme.Dimens
+import dev.tricked.solidverdant.ui.theme.syncFailed
+import dev.tricked.solidverdant.ui.theme.syncPending
 import dev.tricked.solidverdant.util.NotificationPermissionHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -249,6 +256,11 @@ fun TrackingScreen(
     onJumpToDate: (LocalDate) -> Unit,
     onHistoryJumpConsumed: () -> Unit,
     onClearError: () -> Unit = {},
+    // The start sheet's draft, read only by its form so typing does not recompose the screen.
+    entryDraft: () -> EntryDraft = { uiState.entryDraft() },
+    // Pause or Stop tapped in the running entry's details, with that sheet's pending fields.
+    onStopTrackingWithEdits: (RunningEntryEdits) -> Unit = { onStopTracking() },
+    onPauseTrackingWithEdits: (RunningEntryEdits) -> Unit = { onPauseTracking() },
 ) {
     var showEditDialog by remember { mutableStateOf<TimeEntry?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -267,9 +279,13 @@ fun TrackingScreen(
     val templatesSavedMessage = stringResource(R.string.templates_saved)
     val entryDeletedMessage = stringResource(R.string.entry_deleted)
     val conflictEditLockedMessage = stringResource(R.string.sync_conflict_edit_locked)
+    val noTimerRunningMessage = stringResource(R.string.edit_active_entry_no_timer)
     val undoLabel = stringResource(R.string.undo)
     val scope = rememberCoroutineScope()
     val historyListState = rememberLazyListState()
+    // Read only where the clock is drawn, so the per-second tick redraws just that text.
+    val elapsed = elapsedSeconds.collectAsState()
+    val readElapsed: () -> Long = { elapsed.value }
     val routineSyncInProgress = uiState.isLoading ||
         uiState.isRefreshing ||
         uiState.syncOperations.any { operation ->
@@ -286,15 +302,23 @@ fun TrackingScreen(
         scope.launch { snackbarHostState.showSnackbar(templatesSavedMessage) }
     }
 
-    LaunchedEffect(editActiveEntryRequested, uiState.currentTimeEntry) {
-        if (editActiveEntryRequested) {
-            val entry = uiState.currentTimeEntry ?: return@LaunchedEffect
-            onEditActiveEntryConsumed()
-            if (entry.id in uiState.conflictedEntryIds) {
-                snackbarHostState.showSnackbar(conflictEditLockedMessage, withDismissAction = true)
-            } else {
-                showEditDialog = entry
+    LaunchedEffect(editActiveEntryRequested, uiState.currentTimeEntry, uiState.hasLoadedTimeEntries) {
+        if (!editActiveEntryRequested) return@LaunchedEffect
+        val entry = uiState.currentTimeEntry
+        if (entry == null) {
+            // The timer stopped before the request (the notification's "Adjust end time") was
+            // handled. Drop it once the timer state is known, or it would open the next timer.
+            if (uiState.hasLoadedTimeEntries) {
+                onEditActiveEntryConsumed()
+                snackbarHostState.showSnackbar(noTimerRunningMessage, withDismissAction = true)
             }
+            return@LaunchedEffect
+        }
+        onEditActiveEntryConsumed()
+        if (entry.id in uiState.conflictedEntryIds) {
+            snackbarHostState.showSnackbar(conflictEditLockedMessage, withDismissAction = true)
+        } else {
+            showEditDialog = entry
         }
     }
 
@@ -305,13 +329,26 @@ fun TrackingScreen(
     }
 
     // Roadmap #13: after a duplicate/split the VM emits the new entry's id; open it for editing
-    // once it surfaces in the observed list, then consume the one-shot signal.
-    LaunchedEffect(uiState.entryToEditId, uiState.timeEntries) {
+    // once it surfaces in the observed list, then consume the one-shot signal. A copy that does not
+    // show up soon (its id changed on sync, or it lies outside the loaded window) is given up rather
+    // than opened later on its own; leaving Time Tracker gives it up too.
+    val currentTimeEntries by rememberUpdatedState(uiState.timeEntries)
+    val currentConflictedIds by rememberUpdatedState(uiState.conflictedEntryIds)
+    val consumeEntryToEdit by rememberUpdatedState(onEntryToEditConsumed)
+    LaunchedEffect(uiState.entryToEditId) {
         val id = uiState.entryToEditId ?: return@LaunchedEffect
-        uiState.timeEntries.firstOrNull { it.id == id }?.let {
-            showEditDialog = it
-            onEntryToEditConsumed()
+        val entry = withTimeoutOrNull(ENTRY_TO_EDIT_WAIT_MS) {
+            snapshotFlow { currentTimeEntries.firstOrNull { it.id == id } }.filterNotNull().first()
         }
+        consumeEntryToEdit()
+        when {
+            entry == null -> Unit
+            entry.id in currentConflictedIds -> snackbarHostState.showSnackbar(conflictEditLockedMessage, withDismissAction = true)
+            else -> showEditDialog = entry
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose { consumeEntryToEdit() }
     }
 
     LaunchedEffect(historyFilter.startDate) {
@@ -401,10 +438,9 @@ fun TrackingScreen(
         }
     }
     BackHandler(enabled = fabExpanded) { fabExpanded = false }
+    // History is newest first, so the last described entry is near the top: stop at the first.
     val serverLastEntry = remember(uiState.timeEntries) {
-        uiState.timeEntries
-            .filter { isCompletedTimeEntry(it) && !it.description.isNullOrBlank() }
-            .maxByOrNull { it.start }
+        uiState.timeEntries.firstOrNull { isCompletedTimeEntry(it) && !it.description.isNullOrBlank() }
     }
     val lastEntry = remember(serverLastEntry, uiState.cachedContinueEntry, currentMembership) {
         serverLastEntry ?: uiState.cachedContinueEntry?.takeIf {
@@ -459,10 +495,9 @@ fun TrackingScreen(
         },
         bottomBar = {
             if (timerActive) {
-                val elapsed by elapsedSeconds.collectAsState()
                 ActiveTimerBar(
                     uiState = uiState,
-                    elapsedSeconds = elapsed,
+                    elapsedSeconds = readElapsed,
                     onStop = onStopTracking,
                     onPause = onPauseTracking,
                     onResume = onResumeTracking,
@@ -492,36 +527,47 @@ fun TrackingScreen(
             onRefresh = onRefresh,
             modifier = Modifier.padding(paddingValues),
         ) {
-            val historyListItems by produceState(
-                initialValue = emptyList<HistoryListItem>(),
+            // The sync-status search option is the only part of the list that depends on the outbox.
+            val filterSyncOperations = uiState.syncOperations.takeIf { historyFilter.syncStatus != null }
+            val historySnapshot by produceState(
+                initialValue = HistorySnapshot.Empty,
                 uiState.timeEntries,
                 uiState.projects,
                 uiState.tasks,
                 uiState.clients,
                 historyFilter,
+                filterSyncOperations,
                 uiState.zone,
                 uiState.firstDayOfWeek,
             ) {
+                val entries = uiState.timeEntries
+                val filter = historyFilter
                 value = withContext(Dispatchers.Default) {
                     val filtered = EntryTrustRules.filter(
-                        entries = uiState.timeEntries,
-                        filter = historyFilter,
+                        entries = entries,
+                        filter = filter,
                         projects = uiState.projects,
                         tasks = uiState.tasks,
                         clients = uiState.clients,
-                        syncOperations = uiState.syncOperations,
+                        syncOperations = filterSyncOperations.orEmpty(),
                         zone = uiState.zone,
                     )
                     val now = Instant.now()
-                    buildHistoryListItems(
-                        days = groupCompletedEntriesByLocalDay(filtered, uiState.zone, now),
+                    // Running entries are left to the docked timer, except when searching for them.
+                    val items = buildHistoryListItems(
+                        days = groupEntriesByLocalDay(filtered, uiState.zone, now, includeRunning = filter.runningOnly),
                         firstDayOfWeek = uiState.firstDayOfWeek,
                         today = LocalDate.now(uiState.zone),
                         zone = uiState.zone,
                         now = now,
+                        includeRunning = filter.runningOnly,
                     )
+                    HistorySnapshot(items = items, entries = entries, filter = filter)
                 }
             }
+            val historyListItems = historySnapshot.items
+            // Built off the main thread, the list can briefly lag the entries it is shown with.
+            val historyIsCurrent = historySnapshot.entries === uiState.timeEntries && historySnapshot.filter == historyFilter
             // The Review checks, shown on each entry's card.
             val reviewIssues by produceState(emptyMap<String, Set<EntryReviewIssue>>(), uiState.timeEntries, longTimerHours) {
                 value = withContext(Dispatchers.Default) {
@@ -551,9 +597,10 @@ fun TrackingScreen(
             val onHistoryDelete = remember(requestDelete) { { entry: TimeEntry -> requestDelete(listOf(entry)) } }
             val onHistoryDateClick = remember<(LocalDate) -> Unit> { { date -> calendarInitialDate = date } }
 
-            LaunchedEffect(uiState.historyJumpDate, historyListItems) {
+            LaunchedEffect(uiState.historyJumpDate, historySnapshot) {
                 val target = uiState.historyJumpDate ?: return@LaunchedEffect
-                val historyIndex = historyHeaderIndex(target, historyListItems)
+                val historyIndex = historyJumpHeaderIndex(target, historySnapshot.items, historySnapshot.entries, uiState.timeEntries)
+                    ?: return@LaunchedEffect
                 if (historyIndex >= 0) {
                     // The long-timer warning row, then the sync card when shown.
                     val leadingItemCount = 1 + (if (showSyncCenter) 1 else 0)
@@ -562,7 +609,8 @@ fun TrackingScreen(
                 onHistoryJumpConsumed()
             }
 
-            val sectionInset = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space16, vertical = Dimens.Space8)
+            // Grouped sections carry their own horizontal inset.
+            val sectionInset = Modifier.fillMaxWidth().padding(vertical = Dimens.Space8)
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                 CompositionLocalProvider(LocalLongEntryHours provides longTimerHours) {
                     LazyColumn(
@@ -578,17 +626,21 @@ fun TrackingScreen(
                         ),
                     ) {
                         item(key = "long_timer_warning") {
-                            val elapsed by elapsedSeconds.collectAsState()
-                            if (uiState.isTracking &&
-                                elapsed >= longTimerHours * SECONDS_PER_HOUR_LONG &&
-                                elapsed >= longTimerSnoozedUntil
-                            ) {
+                            // Recomposes when the warning appears or goes, not on every tick.
+                            val showWarning by remember(uiState.isTracking, longTimerHours) {
+                                derivedStateOf {
+                                    uiState.isTracking &&
+                                        elapsed.value >= longTimerHours * SECONDS_PER_HOUR_LONG &&
+                                        elapsed.value >= longTimerSnoozedUntil
+                                }
+                            }
+                            if (showWarning) {
                                 LongTimerWarning(
                                     modifier = sectionInset,
                                     hours = longTimerHours,
                                     onStop = onStopTracking,
                                     onKeepRunning = {
-                                        longTimerSnoozedUntil = elapsed + SECONDS_PER_HOUR_LONG
+                                        longTimerSnoozedUntil = elapsed.value + SECONDS_PER_HOUR_LONG
                                         TimeTrackingNotificationService.snoozeLongTimerWarning(context)
                                     },
                                     onAdjust = { uiState.currentTimeEntry?.let { showEditDialog = it } },
@@ -597,9 +649,13 @@ fun TrackingScreen(
                         }
                         if (showSyncCenter) {
                             item(key = "sync_center") {
-                                Box(sectionInset) {
-                                    SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter)
-                                }
+                                SyncCenter(
+                                    operations = uiState.syncOperations,
+                                    onRetry = onRetrySync,
+                                    onRetryEntry = onRetrySyncEntry,
+                                    onOpenSyncCenter = onOpenSyncCenter,
+                                    modifier = sectionInset,
+                                )
                             }
                         }
                         trackingHistoryItems(
@@ -617,6 +673,10 @@ fun TrackingScreen(
                             onDuplicate = { onDuplicateEntry(it.id) },
                             onDeleteStack = requestDelete,
                             reviewIssues = reviewIssues,
+                            showNoMatches = historyIsCurrent &&
+                                historyListItems.isEmpty() &&
+                                uiState.timeEntries.isNotEmpty() &&
+                                (historyFilter.query.isNotBlank() || historyFilter.activeOptionsCount() > 0),
                         )
                     }
                 }
@@ -650,6 +710,7 @@ fun TrackingScreen(
         StartTimerSheet(onDismiss = { showStartTimerSheet = false }) {
             StartTimerForm(
                 uiState = uiState,
+                draft = entryDraft(),
                 onDescriptionChange = onDescriptionChange,
                 onProjectChange = onProjectChange,
                 onTaskChange = onTaskChange,
@@ -659,23 +720,23 @@ fun TrackingScreen(
                 onBillableChange = onBillableChange,
                 onStart = { startAndClose(onStartTracking) },
             )
-            val sheetInset = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space16, vertical = Dimens.Space8)
-            lastEntry?.let { entry ->
-                Box(sheetInset) {
-                    ContinueLastEntryButton(
-                        entry = entry,
-                        projects = uiState.projects,
-                        onContinue = { startAndClose { continueEntry(entry) } },
-                    )
-                }
-            }
-            if (templateState.quickStart.isNotEmpty()) {
-                Box(sheetInset) {
+            if (lastEntry != null || templateState.quickStart.isNotEmpty()) {
+                // One-tap starts: the last entry, then the favourite and recent templates.
+                GroupedSection(header = stringResource(R.string.start_timer_shortcuts)) {
+                    lastEntry?.let { entry ->
+                        ContinueLastEntryRow(
+                            entry = entry,
+                            projects = uiState.projects,
+                            tasks = uiState.tasks,
+                            onContinue = { startAndClose { continueEntry(entry) } },
+                        )
+                    }
                     FavoriteTemplatesRow(
                         templates = templateState.quickStart,
                         projects = templateState.projects,
                         tasks = templateState.tasks,
                         tags = templateState.tags,
+                        leadingDivider = lastEntry != null,
                         onStart = { start ->
                             startAndClose {
                                 onDescriptionChange(start.description ?: "")
@@ -730,19 +791,23 @@ fun TrackingScreen(
                 deletedEntries = listOf(entry)
                 onDeleteEntry(entry.id)
             },
-            // The running timer's details keep its clock and controls on top.
-            runningControls = if (entry.id == uiState.currentTimeEntry?.id) {
-                {
-                    val elapsed by elapsedSeconds.collectAsState()
+            // The running timer's details keep its clock and controls on top. Pause
+            // and Stop commit the sheet's pending fields and close it: the entry has ended, and a
+            // later Save of the running copy must not bring the timer back.
+            runningControls = if (uiState.currentTimeEntry?.let { isSameRunningEntry(it, entry) } == true) {
+                { pendingEdits ->
                     RunningTimerControls(
-                        elapsedSeconds = elapsed,
+                        elapsedSeconds = readElapsed,
                         isPaused = uiState.isPaused,
                         enabled = !uiState.isMutating,
-                        onPause = onPauseTracking,
+                        onPause = {
+                            showEditDialog = null
+                            onPauseTrackingWithEdits(pendingEdits())
+                        },
                         onResume = onResumeTracking,
                         onStop = {
                             showEditDialog = null
-                            onStopTracking()
+                            onStopTrackingWithEdits(pendingEdits())
                         },
                     )
                 }
@@ -755,14 +820,7 @@ fun TrackingScreen(
     // Add-entry dialog
     if (showAddDialog) {
         val suggestedStart = remember(uiState.timeEntries, uiState.zone) {
-            val now = ZonedDateTime.now(uiState.zone)
-            uiState.timeEntries
-                .mapNotNull { it.end }
-                .mapNotNull { runCatching { ZonedDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME) }.getOrNull() }
-                .maxOrNull()
-                ?.withZoneSameInstant(uiState.zone)
-                ?.takeIf { it.toLocalDate() == now.toLocalDate() && it.isBefore(now) }
-                ?: now.minusHours(1)
+            suggestedManualEntryStart(uiState.timeEntries, ZonedDateTime.now(uiState.zone))
         }
         TimeEntryFormSheet(
             entry = null,
@@ -787,42 +845,34 @@ fun TrackingScreen(
 
     calendarInitialDate?.let { initialDate ->
         androidx.compose.runtime.key(initialDate) {
-            val datePickerState = rememberDatePickerState(
-                initialSelectedDateMillis = initialDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+            EntryDatePickerDialog(
+                initialDate = initialDate,
+                onDismiss = { calendarInitialDate = null },
+                onConfirm = { date ->
+                    calendarInitialDate = null
+                    onJumpToDate(date)
+                },
+                confirmLabel = stringResource(R.string.jump_to_date),
             )
-            DatePickerDialog(
-                onDismissRequest = { calendarInitialDate = null },
-                confirmButton = {
-                    TextButton(onClick = {
-                        datePickerState.selectedDateMillis?.let { millis ->
-                            onJumpToDate(Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate())
-                        }
-                        calendarInitialDate = null
-                    }) { Text(stringResource(R.string.jump_to_date)) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { calendarInitialDate = null }) {
-                        Text(stringResource(R.string.cancel))
-                    }
-                },
-            ) { DatePicker(state = datePickerState) }
         }
     }
 
     uiState.historyJumpTarget?.let { targetDate ->
-        Dialog(onDismissRequest = { }) {
-            Surface(shape = RoundedCornerShape(20.dp), tonalElevation = 6.dp) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    Text(
-                        text = stringResource(
-                            R.string.finding_date_entries,
-                            formatDate(targetDate, LocalContext.current, uiState.zone, appLocale()),
-                        ),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+        // A progress dialog in the app's dialog style; it closes itself when the jump finishes.
+        AlertDialog(
+            onDismissRequest = { },
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+            confirmButton = { },
+            title = {
+                Text(
+                    stringResource(
+                        R.string.finding_date_entries,
+                        formatDate(targetDate, LocalContext.current, uiState.zone, appLocale()),
+                    ),
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(Dimens.Space16)) {
                     LinearProgressIndicator(
                         progress = { uiState.historyJumpProgress ?: 0f },
                         modifier = Modifier.fillMaxWidth(),
@@ -835,9 +885,48 @@ fun TrackingScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-            }
-        }
+            },
+        )
     }
+}
+
+/**
+ * The day header a history jump to [target] scrolls to (-1 when the list has no day), or null to
+ * wait: the jump replaces the window, and until the list is rebuilt from those entries, [builtFrom]
+ * is the previous window, where the header would point somewhere else.
+ */
+internal fun historyJumpHeaderIndex(
+    target: LocalDate,
+    items: List<HistoryListItem>,
+    builtFrom: List<TimeEntry>?,
+    currentEntries: List<TimeEntry>,
+): Int? = if (builtFrom !== currentEntries) null else historyHeaderIndex(target, items)
+
+/** The history list and the entries and filter it was built from, to tell a lagging build apart. */
+@Immutable
+private class HistorySnapshot(val items: List<HistoryListItem>, val entries: List<TimeEntry>?, val filter: HistoryFilter?) {
+    companion object {
+        val Empty = HistorySnapshot(items = emptyList(), entries = null, filter = null)
+    }
+}
+
+/**
+ * Where a new manual entry starts: the latest end today that is already past, else an hour ago.
+ * History is newest first, so the scan stops at entries that started before yesterday; parsing
+ * every entry's end whenever the sheet opens was measurable with a long history.
+ */
+internal fun suggestedManualEntryStart(entries: List<TimeEntry>, now: ZonedDateTime): ZonedDateTime {
+    val scanFrom = now.toLocalDate().minusDays(1).atStartOfDay(now.zone).toInstant()
+    var latestEnd: Instant? = null
+    for (entry in entries) {
+        val start = parseTimeEntryInstant(entry.start) ?: continue
+        if (start < scanFrom) break
+        val end = entry.end?.let(::parseTimeEntryInstant) ?: continue
+        if (latestEnd == null || end > latestEnd) latestEnd = end
+    }
+    return latestEnd?.atZone(now.zone)
+        ?.takeIf { it.toLocalDate() == now.toLocalDate() && it.isBefore(now) }
+        ?: now.minusHours(1)
 }
 
 /** How many search options beyond the text query are active; shown on the filter button. */
@@ -1126,80 +1215,71 @@ internal fun HistoryFiltersSheet(
 
 private enum class HistoryFilterPicker { CLIENT, PROJECT, TASK, TAG }
 
+/**
+ * The Time Tracker's sync status, as a grouped section: the summary with Retry when changes can be
+ * retried, one row per change that failed, and a row into the sync details.
+ */
 @Composable
 private fun SyncCenter(
     operations: List<TimeEntryRepository.SyncOperation>,
     onRetry: () -> Unit,
     onRetryEntry: (String) -> Unit,
     onOpenSyncCenter: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val failed = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.FAILED }
+    val failedOperations = operations.filter { it.status == TimeEntryRepository.EntrySyncStatus.FAILED }
+    val failed = failedOperations.size
     val retrying = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.RETRYING }
     val conflicts = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.CONFLICT }
-    val summaryStatus = when {
-        failed > 0 -> TimeEntryRepository.EntrySyncStatus.FAILED
-        conflicts > 0 -> TimeEntryRepository.EntrySyncStatus.CONFLICT
-        retrying > 0 -> TimeEntryRepository.EntrySyncStatus.RETRYING
-        else -> TimeEntryRepository.EntrySyncStatus.PENDING
+    val (statusIcon, statusTint) = when {
+        failed > 0 -> Icons.Outlined.SyncProblem to MaterialTheme.colorScheme.syncFailed
+        conflicts > 0 -> Icons.Outlined.SyncProblem to MaterialTheme.colorScheme.error
+        retrying > 0 -> Icons.Outlined.Sync to MaterialTheme.colorScheme.syncPending
+        else -> Icons.Outlined.Schedule to MaterialTheme.colorScheme.syncPending
     }
-    SectionCard(
-        modifier = Modifier.testTag(TrackingTestTags.SYNC_STATUS_CARD),
-        title = stringResource(R.string.sync_status_card_title),
+    val retryLabel = stringResource(R.string.retry)
+    GroupedSection(
+        modifier = modifier.testTag(TrackingTestTags.SYNC_STATUS_CARD),
+        header = stringResource(R.string.sync_status_card_title),
     ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Space12),
-        ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
-            ) {
-                SyncChip(status = summaryStatus, showLabel = false)
-                Text(
-                    when {
-                        failed > 0 -> pluralStringResource(R.plurals.sync_failed_count, failed, failed)
-                        conflicts > 0 -> pluralStringResource(R.plurals.sync_conflict_count, conflicts, conflicts)
-                        retrying > 0 -> pluralStringResource(R.plurals.sync_retrying_count, retrying, retrying)
-                        else -> pluralStringResource(R.plurals.sync_pending_count, operations.size, operations.size)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (failed > 0 || retrying > 0) {
-                TextButton(onClick = onRetry) { Text(stringResource(R.string.retry)) }
-            }
+        GroupedRow(
+            title = when {
+                failed > 0 -> pluralStringResource(R.plurals.sync_failed_count, failed, failed)
+                conflicts > 0 -> pluralStringResource(R.plurals.sync_conflict_count, conflicts, conflicts)
+                retrying > 0 -> pluralStringResource(R.plurals.sync_retrying_count, retrying, retrying)
+                else -> pluralStringResource(R.plurals.sync_pending_count, operations.size, operations.size)
+            },
+            leadingIcon = statusIcon,
+            leadingIconTint = statusTint,
+            trailing = if (failed > 0 || retrying > 0) {
+                { TextButton(onClick = onRetry) { Text(retryLabel) } }
+            } else {
+                null
+            },
+        )
+        failedOperations.forEach { operation ->
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            GroupedRow(
+                title = stringResource(R.string.sync_entry_failed),
+                leadingIcon = Icons.Outlined.ErrorOutline,
+                leadingIconTint = MaterialTheme.colorScheme.syncFailed,
+                trailing = { TextButton(onClick = { onRetryEntry(operation.entryId) }) { Text(retryLabel) } },
+            )
         }
-        operations.filter { it.status == TimeEntryRepository.EntrySyncStatus.FAILED }.forEach { operation ->
-            HorizontalDivider()
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
-            ) {
-                Text(
-                    stringResource(R.string.sync_entry_failed),
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                TextButton(onClick = { onRetryEntry(operation.entryId) }) {
-                    Text(stringResource(R.string.retry))
-                }
-            }
-        }
-        HorizontalDivider()
-        TextButton(
+        GroupedDivider(inset = Dimens.SettingsIconInset)
+        GroupedRow(
+            title = stringResource(R.string.sync_center_open),
+            leadingIcon = Icons.Outlined.Info,
             onClick = onOpenSyncCenter,
-            modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.SYNC_DETAILS_BUTTON),
-        ) {
-            Text(stringResource(R.string.sync_center_open))
-        }
+            modifier = Modifier.testTag(TrackingTestTags.SYNC_DETAILS_BUTTON),
+        )
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * The long-running timer check, as a grouped section: the warning, then adjust the end, keep
+ * running for another hour, and stop, which is the destructive row.
+ */
 @Composable
 private fun LongTimerWarning(
     hours: Int,
@@ -1208,18 +1288,32 @@ private fun LongTimerWarning(
     onAdjust: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-        Column(Modifier.fillMaxWidth().padding(12.dp)) {
-            Text(
-                pluralStringResource(R.plurals.timer_running_long, hours, hours),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onStop) { Text(stringResource(R.string.stop_now)) }
-                TextButton(onClick = onKeepRunning) { Text(stringResource(R.string.keep_running)) }
-                TextButton(onClick = onAdjust) { Text(stringResource(R.string.adjust_end_time)) }
-            }
-        }
+    GroupedSection(modifier = modifier) {
+        GroupedRow(
+            title = pluralStringResource(R.plurals.timer_running_long, hours, hours),
+            leadingIcon = Icons.Outlined.Timer,
+            leadingIconTint = MaterialTheme.colorScheme.error,
+        )
+        GroupedDivider(inset = Dimens.SettingsIconInset)
+        GroupedRow(
+            title = stringResource(R.string.adjust_end_time),
+            leadingIcon = Icons.Outlined.Edit,
+            onClick = onAdjust,
+        )
+        GroupedDivider(inset = Dimens.SettingsIconInset)
+        GroupedRow(
+            title = stringResource(R.string.keep_running),
+            leadingIcon = Icons.Outlined.Snooze,
+            showChevron = false,
+            onClick = onKeepRunning,
+        )
+        GroupedDivider(inset = Dimens.SettingsIconInset)
+        GroupedRow(
+            title = stringResource(R.string.stop_now),
+            leadingIcon = Icons.Default.Stop,
+            destructive = true,
+            onClick = onStop,
+        )
     }
 }
 
@@ -1242,6 +1336,7 @@ internal fun LazyListScope.trackingHistoryItems(
     onDuplicate: ((TimeEntry) -> Unit)? = null,
     onDeleteStack: ((List<TimeEntry>) -> Unit)? = null,
     reviewIssues: Map<String, Set<EntryReviewIssue>> = emptyMap(),
+    showNoMatches: Boolean = false,
 ) {
     if (!uiState.hasLoadedTimeEntries && uiState.timeEntries.isEmpty()) {
         item(key = "history_loading_header") { HistoryLoadingHeader() }
@@ -1251,6 +1346,7 @@ internal fun LazyListScope.trackingHistoryItems(
         return
     }
 
+    val zone = uiState.zone
     items(
         items = historyItems,
         key = { it.key },
@@ -1266,28 +1362,33 @@ internal fun LazyListScope.trackingHistoryItems(
             is HistoryListItem.Week -> HistoryWeekHeader(week = historyItem)
             is HistoryListItem.Header -> HistoryDayHeader(
                 day = historyItem.day,
-                zone = uiState.zone,
+                zone = zone,
                 onClick = { onDateClick(historyItem.day.date) },
             )
             is HistoryListItem.Group -> {
                 val project = projectsById[historyItem.lead.projectId]
                 HistoryEntryCard(
                     group = historyItem,
-                    zone = uiState.zone,
+                    zone = zone,
                     project = project,
                     task = tasksById[historyItem.lead.taskId],
                     client = project?.clientId?.let(clientsById::get),
-                    syncStatusByEntryId = syncStatusByEntryId,
+                    // Only this card's statuses: a sync or review update elsewhere leaves it equal,
+                    // so it is skipped instead of every visible card redrawing.
+                    status = historyCardStatus(historyItem, syncStatusByEntryId, reviewIssues),
                     onEdit = onEdit,
                     onDelete = onDelete,
                     onDeleteStack = onDeleteStack,
-                    reviewIssues = reviewIssues,
                     onDuplicate = onDuplicate,
                     onRetrySync = onRetrySync,
                     onContinue = onContinue,
                 )
             }
         }
+    }
+
+    if (showNoMatches) {
+        item(key = "history_no_matches") { EmptyState(text = stringResource(R.string.no_results_found)) }
     }
 
     if (uiState.hasMoreTimeEntries || uiState.isLoadingMoreTimeEntries) {
@@ -1310,14 +1411,7 @@ internal fun LazyListScope.trackingHistoryItems(
     }
 
     if (uiState.timeEntries.isEmpty() && uiState.hasLoadedTimeEntries && !uiState.isLoading) {
-        item {
-            Text(
-                text = stringResource(R.string.no_time_entries),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(32.dp),
-            )
-        }
+        item(key = "history_empty") { EmptyState(text = stringResource(R.string.no_time_entries)) }
     }
 }
 
@@ -1433,74 +1527,35 @@ private fun HistoryLoadingEntry(index: Int) {
 }
 
 /**
- * Tracking controls card with timer and input fields
+ * The last entry as a start-timer shortcut: its description, then "Project · Task"; tapping starts
+ * a timer with its fields, like the favourites below it.
  */
-/**
- * "Continue last entry" button that starts tracking with the same params as the last entry.
- */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ContinueLastEntryButton(entry: TimeEntry, projects: List<Project>, onContinue: () -> Unit) {
+private fun ContinueLastEntryRow(entry: TimeEntry, projects: List<Project>, tasks: List<Task>, onContinue: () -> Unit) {
     val haptic = LocalHapticFeedback.current
-    val project = projects.find { it.id == entry.projectId }
-
-    OutlinedButton(
+    val projectName = remember(entry.projectId, projects) { projects.firstOrNull { it.id == entry.projectId }?.name }
+    val taskName = remember(entry.taskId, tasks) { tasks.firstOrNull { it.id == entry.taskId }?.name }
+    GroupedRow(
+        title = entry.description.orEmpty(),
+        subtitle = shortcutProjectTaskLabel(projectName, taskName),
+        leadingIcon = Icons.Default.PlayArrow,
+        showChevron = false,
+        singleLine = true,
+        onClickLabel = stringResource(R.string.continue_last_entry),
         onClick = {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             onContinue()
         },
-        modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.CONTINUE_BUTTON),
-        shape = RoundedCornerShape(8.dp),
-    ) {
-        Icon(
-            Icons.Default.PlayArrow,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp),
-        )
-        Spacer(Modifier.width(8.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = stringResource(R.string.continue_last_entry),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = entry.description ?: "",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            ProjectTaskLine(project = project, task = null, background = MaterialTheme.colorScheme.background)
-            if (entry.tags.isNotEmpty()) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.padding(top = 2.dp),
-                ) {
-                    entry.tags.forEach { tag ->
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                            tonalElevation = 0.dp,
-                        ) {
-                            Text(
-                                text = tag.name,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
+        modifier = Modifier.testTag(TrackingTestTags.CONTINUE_BUTTON),
+    )
+}
+
+/** "Project · Task" for a shortcut row; just the project without a task, nothing without a project. */
+@Composable
+internal fun shortcutProjectTaskLabel(projectName: String?, taskName: String?): String? = when {
+    projectName == null -> null
+    taskName == null -> projectName
+    else -> stringResource(R.string.start_timer_shortcut_project_task, projectName, taskName)
 }
 
 /**
@@ -1524,15 +1579,17 @@ internal fun DescriptionFieldWithSuggestions(
     var expanded by remember { mutableStateOf(false) }
     val descriptionLabel = stringResource(R.string.description)
 
-    // Compute last 5 unique recent entries, filtering out empty descriptions
+    // The last 5 unique recent entries with a description. History is newest first, so this stops
+    // as soon as it has them instead of sorting the whole history.
     val recentEntries = remember(timeEntries) {
         timeEntries
+            .asSequence()
             .filter { isCompletedTimeEntry(it) && !it.description.isNullOrBlank() }
-            .sortedByDescending { it.start }
             .distinctBy { entry ->
                 "${entry.description}|${entry.projectId}|${entry.taskId}|${entry.tags.map { it.id }.sorted()}"
             }
             .take(RECENT_ENTRIES_LIMIT)
+            .toList()
     }
 
     ExposedDropdownMenuBox(
@@ -1788,17 +1845,21 @@ internal fun TimeEntryFormSheet(
     onDuplicate: (() -> Unit)? = null,
     onSplit: ((String) -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
-    runningControls: (@Composable () -> Unit)? = null,
+    // The running timer's controls, given the sheet's pending fields for a Pause or Stop there.
+    runningControls: (@Composable (pendingEdits: () -> RunningEntryEdits) -> Unit)? = null,
 ) {
-    var description by remember { mutableStateOf(entry?.description ?: "") }
-    var projectId by remember { mutableStateOf(entry?.projectId) }
-    var taskId by remember { mutableStateOf(entry?.taskId) }
-    var selectedTags by remember { mutableStateOf(entry?.tags?.map { it.id } ?: emptyList<String>()) }
-    var billable by remember { mutableStateOf(entry?.billable ?: false) }
+    // Keyed on the entry: when another entry replaces the one shown (e.g. "edit the running entry"
+    // arriving while a history entry is open), its fields must not carry over.
+    val entryKey = entry?.id
+    var description by remember(entryKey) { mutableStateOf(entry?.description ?: "") }
+    var projectId by remember(entryKey) { mutableStateOf(entry?.projectId) }
+    var taskId by remember(entryKey) { mutableStateOf(entry?.taskId) }
+    var selectedTags by remember(entryKey) { mutableStateOf(entry?.tags?.map { it.id } ?: emptyList<String>()) }
+    var billable by remember(entryKey) { mutableStateOf(entry?.billable ?: false) }
     val isRunningEntry = remember(entry?.id, entry?.end, entry?.duration) {
         entry?.let(::isRunningTimeEntry) == true
     }
-    var templateMenuExpanded by remember { mutableStateOf(false) }
+    var templatePickerOpen by remember(entryKey) { mutableStateOf(false) }
     val originalStart = remember(entry?.id, zone) {
         entry?.let { ZonedDateTime.parse(it.start, DateTimeFormatter.ISO_DATE_TIME).withZoneSameInstant(zone) }
             ?: (suggestedStart ?: ZonedDateTime.now(zone).minusHours(1))
@@ -1817,25 +1878,29 @@ internal fun TimeEntryFormSheet(
     var durationMinutes by remember(entry?.id, zone) {
         mutableStateOf(java.time.Duration.between(originalStart, originalEnd).toMinutes().coerceAtLeast(1).toString())
     }
-    var editingTime by remember { mutableStateOf<TimeField?>(null) }
-    var editingDate by remember { mutableStateOf<TimeField?>(null) }
-    var showSplitPicker by remember { mutableStateOf(false) }
+    var editingTime by remember(entryKey) { mutableStateOf<TimeField?>(null) }
+    var editingDate by remember(entryKey) { mutableStateOf<TimeField?>(null) }
+    var showSplitPicker by remember(entryKey) { mutableStateOf(false) }
+    var splitOutsideEntry by remember(entryKey) { mutableStateOf(false) }
     val durationIsValid = isRunningEntry || durationMinutes.toLongOrNull()?.let { it > 0 } == true
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    val overlaps = remember(startTime, endTime, existingEntries, entry, isRunningEntry) {
-        val org = entry?.organizationId ?: existingEntries.firstOrNull()?.organizationId
-        if (isRunningEntry || org == null || existingEntries.isEmpty()) {
+    // The other entries' intervals, parsed once off the main thread; each time change then only
+    // compares instants of the entries near the new interval.
+    val overlapIndex by produceState<EntryOverlapIndex?>(null, existingEntries) {
+        value = withContext(Dispatchers.Default) { EntryOverlapIndex.of(existingEntries) }
+    }
+    val overlapOrganizationId = entry?.organizationId ?: existingEntries.firstOrNull()?.organizationId
+    val overlaps = remember(startTime, endTime, overlapIndex, entry?.id, overlapOrganizationId, isRunningEntry) {
+        if (isRunningEntry || overlapOrganizationId == null) {
             false
         } else {
-            val candidate = TimeEntry(
-                id = entry?.id ?: "",
-                userId = entry?.userId ?: "",
-                start = formatTimeEntryInstant(startTime),
-                end = formatTimeEntryInstant(endTime),
-                organizationId = org,
-            )
-            existingEntries.any { it.id != candidate.id && EntryTrustRules.overlaps(candidate, it) }
+            overlapIndex?.overlaps(
+                excludeId = entry?.id.orEmpty(),
+                organizationId = overlapOrganizationId,
+                start = startTime.toInstant(),
+                end = endTime.toInstant(),
+            ) == true
         }
     }
     val validation = remember(startTime, endTime, overlaps, preventOverlap, isRunningEntry) {
@@ -1870,7 +1935,7 @@ internal fun TimeEntryFormSheet(
         // Child date/time/split pickers use separate dialog windows. Do not let the parent sheet
         // interpret their focus change as a request to close the whole editor.
         onDismissRequest = {
-            if (canDismissTimeEntryFormSheet(editingTime != null, editingDate != null, showSplitPicker)) onDismiss()
+            if (canDismissTimeEntryFormSheet(editingTime != null, editingDate != null, showSplitPicker, templatePickerOpen)) onDismiss()
         },
         modifier = Modifier.testTag(TrackingTestTags.SHEET),
         sheetState = sheetState,
@@ -1897,7 +1962,18 @@ internal fun TimeEntryFormSheet(
                 )
             }
 
-            if (isRunningEntry) runningControls?.invoke()
+            if (isRunningEntry) {
+                runningControls?.invoke {
+                    RunningEntryEdits(
+                        description = description.ifEmpty { null },
+                        projectId = projectId,
+                        taskId = taskId,
+                        tagIds = selectedTags,
+                        billable = billable,
+                        start = formatTimeEntryInstant(startTime),
+                    )
+                }
+            }
 
             EntryDescriptionField(
                 value = description,
@@ -2001,33 +2077,11 @@ internal fun TimeEntryFormSheet(
             if (templates.isNotEmpty() || onSaveAsTemplate != null) {
                 GroupedSection {
                     if (templates.isNotEmpty()) {
-                        Box {
-                            GroupedRow(
-                                title = stringResource(R.string.templates_use_template),
-                                leadingIcon = Icons.Outlined.StarOutline,
-                                onClick = { templateMenuExpanded = true },
-                            )
-                            DropdownMenu(
-                                expanded = templateMenuExpanded,
-                                onDismissRequest = { templateMenuExpanded = false },
-                            ) {
-                                templates.forEach { template ->
-                                    val label = templateDisplayLabel(template, projects)
-                                    DropdownMenuItem(
-                                        text = { Text(label) },
-                                        onClick = {
-                                            val resolution = TemplateResolver.resolve(template, projects, tasks, tags)
-                                            description = template.description ?: ""
-                                            projectId = resolution.projectId
-                                            taskId = resolution.taskId
-                                            selectedTags = resolution.tagIds
-                                            billable = resolution.billable
-                                            templateMenuExpanded = false
-                                        },
-                                    )
-                                }
-                            }
-                        }
+                        GroupedRow(
+                            title = stringResource(R.string.templates_use_template),
+                            leadingIcon = Icons.Outlined.StarOutline,
+                            onClick = { templatePickerOpen = true },
+                        )
                     }
                     if (templates.isNotEmpty() && onSaveAsTemplate != null) {
                         GroupedDivider(inset = Dimens.SettingsIconInset)
@@ -2083,10 +2137,26 @@ internal fun TimeEntryFormSheet(
                             title = stringResource(R.string.split_entry),
                             leadingIcon = Icons.AutoMirrored.Outlined.CallSplit,
                             showChevron = false,
-                            onClick = { showSplitPicker = true },
+                            onClick = {
+                                splitOutsideEntry = false
+                                showSplitPicker = true
+                            },
                             modifier = Modifier.testTag(EditTimeEntryTestTags.SPLIT_BUTTON),
                         )
                     }
+                }
+                if (splitOutsideEntry) {
+                    // A picked time the entry does not contain; say why nothing was split.
+                    Text(
+                        text = stringResource(
+                            R.string.split_time_outside_entry,
+                            originalStart.format(hourMinuteFormatter),
+                            originalEnd.format(hourMinuteFormatter),
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = Dimens.Space32),
+                    )
                 }
             }
 
@@ -2157,16 +2227,52 @@ internal fun TimeEntryFormSheet(
             onDismiss = { showSplitPicker = false },
             onConfirm = { hour, minute ->
                 showSplitPicker = false
-                val candidate = originalStart.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
-                // Clamp into the open interval: reject boundary/out-of-range picks (half-open
-                // semantics) - the repository re-validates, this just avoids an obvious no-op.
-                if (candidate.isAfter(originalStart) && candidate.isBefore(originalEnd)) {
-                    onSplit(formatTimeEntryInstant(candidate))
+                // The clock time on whichever day the entry contains it, so an entry running past
+                // midnight can be split after midnight too. Boundary and outside picks split
+                // nothing and say so; the repository re-validates.
+                val splitAt = resolveSplitInstant(originalStart, originalEnd, hour, minute)
+                if (splitAt != null) {
+                    onSplit(formatTimeEntryInstant(splitAt))
                     onDismiss()
+                } else {
+                    splitOutsideEntry = true
                 }
             },
         )
     }
+
+    if (templatePickerOpen) {
+        OptionPickerDialog(
+            title = stringResource(R.string.templates_use_template),
+            options = templates,
+            selected = null,
+            label = { templateDisplayLabel(it, projects) },
+            onSelect = { template ->
+                val resolution = TemplateResolver.resolve(template, projects, tasks, tags)
+                description = template.description ?: ""
+                projectId = resolution.projectId
+                taskId = resolution.taskId
+                selectedTags = resolution.tagIds
+                billable = resolution.billable
+            },
+            onDismiss = { templatePickerOpen = false },
+        )
+    }
+}
+
+/**
+ * The instant to split an entry from [start] to [end] at the picked clock time: that time on the
+ * first day within the entry where it falls strictly inside, or null when it never does.
+ */
+internal fun resolveSplitInstant(start: ZonedDateTime, end: ZonedDateTime, hour: Int, minute: Int): ZonedDateTime? {
+    var day = start.toLocalDate()
+    val lastDay = end.toLocalDate()
+    while (!day.isAfter(lastDay)) {
+        val candidate = ZonedDateTime.of(day, java.time.LocalTime.of(hour, minute), start.zone)
+        if (candidate.isAfter(start) && candidate.isBefore(end)) return candidate
+        day = day.plusDays(1)
+    }
+    return null
 }
 
 private enum class TimeField { Start, End }
@@ -2189,8 +2295,12 @@ private fun EntryTimePickerDialog(
     )
 }
 
-internal fun canDismissTimeEntryFormSheet(hasTimePicker: Boolean, hasDatePicker: Boolean, hasSplitPicker: Boolean): Boolean =
-    !hasTimePicker && !hasDatePicker && !hasSplitPicker
+internal fun canDismissTimeEntryFormSheet(
+    hasTimePicker: Boolean,
+    hasDatePicker: Boolean,
+    hasSplitPicker: Boolean,
+    hasTemplatePicker: Boolean = false,
+): Boolean = !hasTimePicker && !hasDatePicker && !hasSplitPicker && !hasTemplatePicker
 
 private const val FULL_ROTATION_DEGREES = 360f
 private const val SECONDS_PER_HOUR_LONG = 3600L
@@ -2211,6 +2321,9 @@ private const val MINIMUM_DURATION_MINUTES = 1L
 private const val MAX_CROSS_MIDNIGHT_HOURS = 18L
 private const val LONG_DURATION_WARNING_HOURS = 12L
 private const val LAST_7_DAYS_OFFSET = 6L
+
+/** How long a duplicate/split waits to appear in the list before its editor is given up. */
+private const val ENTRY_TO_EDIT_WAIT_MS = 5_000L
 
 /** Clock-style duration like the iOS timer: "37:03" under an hour, "1:05:00" from an hour. */
 internal fun formatElapsedTime(seconds: Long): String {
@@ -2370,12 +2483,23 @@ internal fun formatTimeRange(
 }
 
 internal fun groupCompletedEntriesByLocalDay(entries: List<TimeEntry>, zone: ZoneId, now: Instant): Map<LocalDate, List<TimeEntry>> =
-    entries
-        .asSequence()
-        .filter(::isCompletedTimeEntry)
-        .filter(::isWorkTimeEntry)
-        .flatMap { entry -> timeEntryLocalDaySlices(entry, zone, now).asSequence().map { it.date to entry } }
-        .groupBy({ it.first }, { it.second })
-        .toSortedMap(compareByDescending { it })
+    groupEntriesByLocalDay(entries, zone, now, includeRunning = false)
+
+/**
+ * Work entries by each local day they overlap, newest day first. Running entries are left out,
+ * as the docked timer shows them, unless [includeRunning] (the "Running" search option).
+ */
+internal fun groupEntriesByLocalDay(
+    entries: List<TimeEntry>,
+    zone: ZoneId,
+    now: Instant,
+    includeRunning: Boolean,
+): Map<LocalDate, List<TimeEntry>> = entries
+    .asSequence()
+    .filter { includeRunning || isCompletedTimeEntry(it) }
+    .filter(::isWorkTimeEntry)
+    .flatMap { entry -> timeEntryLocalDaySlices(entry, zone, now).asSequence().map { it.date to entry } }
+    .groupBy({ it.first }, { it.second })
+    .toSortedMap(compareByDescending { it })
 
 /** Date-picker millis are UTC-midnight instants; resolve them back to the picked date. */

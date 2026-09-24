@@ -128,6 +128,7 @@ object EntryTrustRules {
         val taskNames = tasks.associate { it.id to it.name }
         val clientNames = clients.associate { it.id to it.name }
         val clientIdByProject = projects.associate { it.id to it.clientId }
+        val syncStatusByEntryId = if (filter.syncStatus == null) emptyMap() else worstSyncStatusByEntryId(syncOperations)
         return entries.filter { entry ->
             val searchable = buildList {
                 add(entry.description.orEmpty())
@@ -136,7 +137,9 @@ object EntryTrustRules {
                 add(clientNames[clientIdByProject[entry.projectId]].orEmpty())
                 addAll(entry.tags.map { it.name })
             }
-            val status = syncOperations.lastOrNull { it.entryId == entry.id }?.status
+            // The entry's worst change, as its card shows: a failed UPDATE behind a newer queued
+            // STOP still counts as failed.
+            val status = syncStatusByEntryId[entry.id]
             (query.isBlank() || searchable.any { it.contains(query, ignoreCase = true) }) &&
                 (filter.billable == null || entry.billable == filter.billable) &&
                 (filter.projectId == null || entry.projectId == filter.projectId) &&
@@ -159,4 +162,48 @@ object EntryTrustRules {
     }
 
     private fun String.toInstantOrNull(): Instant? = runCatching { Instant.parse(this) }.getOrNull()
+}
+
+/**
+ * The entries' intervals parsed once and sorted by start, for the entry form's overlap warning:
+ * each start/end change then compares instants only, and only with the entries that start within
+ * the longest entry's span of the new interval. Same rules as [EntryTrustRules.overlaps].
+ */
+internal class EntryOverlapIndex private constructor(private val intervals: List<Interval>, private val longest: Duration) {
+    private class Interval(val id: String, val organizationId: String, val start: Instant, val end: Instant)
+
+    fun overlaps(excludeId: String, organizationId: String, start: Instant, end: Instant): Boolean {
+        if (!end.isAfter(start) || intervals.isEmpty()) return false
+        // Nothing that starts before this can still be running at [start].
+        val earliest = start.minus(longest)
+        var index = firstStartingAtOrAfter(earliest)
+        while (index < intervals.size) {
+            val interval = intervals[index]
+            if (!interval.start.isBefore(end)) return false
+            if (interval.id != excludeId && interval.organizationId == organizationId && start < interval.end) return true
+            index++
+        }
+        return false
+    }
+
+    private fun firstStartingAtOrAfter(instant: Instant): Int {
+        var low = 0
+        var high = intervals.size
+        while (low < high) {
+            val middle = (low + high) ushr 1
+            if (intervals[middle].start < instant) low = middle + 1 else high = middle
+        }
+        return low
+    }
+
+    companion object {
+        fun of(entries: List<TimeEntry>, now: Instant = Instant.now()): EntryOverlapIndex {
+            val intervals = entries.mapNotNull { entry ->
+                if (isBreakTimeEntry(entry)) return@mapNotNull null
+                resolveTimeEntryInterval(entry, now)?.let { (start, end) -> Interval(entry.id, entry.organizationId, start, end) }
+            }.sortedBy { it.start }
+            val longest = intervals.maxOfOrNull { Duration.between(it.start, it.end) } ?: Duration.ZERO
+            return EntryOverlapIndex(intervals, longest)
+        }
+    }
 }

@@ -28,7 +28,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +55,7 @@ import dev.tricked.solidverdant.ui.calendar.DayBucket
 import dev.tricked.solidverdant.ui.calendar.MonthCalendarView
 import dev.tricked.solidverdant.ui.calendar.WeekCalendarView
 import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
+import dev.tricked.solidverdant.ui.components.SheetTitleRow
 import dev.tricked.solidverdant.ui.navigation.MainMenuHeader
 import dev.tricked.solidverdant.ui.navigation.MainMenuSheet
 import dev.tricked.solidverdant.ui.navigation.MainTopBar
@@ -370,14 +370,11 @@ class ReadmeScreenshotsTest {
                 Surface(
                     modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
                     shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    // The app sheet: page background behind grouped sections, like AppSheet.
+                    color = MaterialTheme.colorScheme.background,
                 ) {
-                    Column(Modifier.padding(top = 16.dp, bottom = 24.dp)) {
-                        Text(
-                            text = stringResource(R.string.start_timer_title),
-                            style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        )
+                    Column(Modifier.padding(top = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        SheetTitleRow(title = stringResource(R.string.start_timer_title))
                         StartTimerForm(
                             uiState = state,
                             onDescriptionChange = {},
