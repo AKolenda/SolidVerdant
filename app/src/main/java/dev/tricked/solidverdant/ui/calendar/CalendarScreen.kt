@@ -902,12 +902,8 @@ private fun CalendarSplitDialog(entry: TimeEntry, zone: java.time.ZoneId, onDism
         confirmButton = {
             Button(
                 onClick = {
-                    val candidate = selectedDate.atTime(timeState.hour, timeState.minute).atZone(zone)
-                    if (candidate.isAfter(originalStart) && candidate.isBefore(originalEnd)) {
-                        onConfirm(candidate.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
-                    } else {
-                        invalid = true
-                    }
+                    val at = calendarSplitTimestamp(selectedDate, timeState.hour, timeState.minute, zone, originalStart, originalEnd)
+                    if (at != null) onConfirm(at) else invalid = true
                 },
                 modifier = Modifier.testTag(CalendarTestTags.SPLIT_CONFIRM),
             ) {

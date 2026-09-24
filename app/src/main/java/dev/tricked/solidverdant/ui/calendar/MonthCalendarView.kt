@@ -203,8 +203,8 @@ private fun MonthCalendarGrid(
 
 @Composable
 private fun MonthCalendarGridWeeks(state: CalendarUiState, today: LocalDate, onSelectDate: (LocalDate) -> Unit, onCollapse: () -> Unit) {
-    val weeks = monthGridWeeks(state.visibleMonth, state.weekStart)
-    val maxSeconds = state.bucketsByDate.values.maxOfOrNull { it.totalSeconds } ?: 1L
+    val weeks = remember(state.visibleMonth, state.weekStart) { monthGridWeeks(state.visibleMonth, state.weekStart) }
+    val maxSeconds = remember(state.bucketsByDate) { state.bucketsByDate.values.maxOfOrNull { it.totalSeconds } ?: 0L }
     weeks.forEach { week ->
         Row(modifier = Modifier.fillMaxWidth()) {
             week.forEach { day ->
@@ -234,7 +234,7 @@ private fun RowScope.MonthCalendarDay(
     val inMonth = java.time.YearMonth.from(day) == state.visibleMonth
     val selected = day == state.selectedDate
     val isToday = day == today
-    val intensity = ((bucket?.totalSeconds ?: 0L).toFloat() / maxSeconds).coerceIn(0f, 1f)
+    val intensity = monthHeatIntensity(bucket?.totalSeconds ?: 0L, maxSeconds)
     val colors = MaterialTheme.colorScheme
     // Grey cards like the entry cards; tracked days warm toward the accent by their share of the
     // busiest day, and the selected day takes the accent itself.
@@ -504,6 +504,13 @@ fun DayTimeline(
         }
     }
 }
+
+/**
+ * A day's share of the busiest loaded day, 0..1. When no loaded day has work time (only breaks or
+ * empty days) every day is 0 rather than a NaN colour from dividing by zero.
+ */
+internal fun monthHeatIntensity(seconds: Long, maxSeconds: Long): Float =
+    if (maxSeconds <= 0L) 0f else (seconds.toFloat() / maxSeconds).coerceIn(0f, 1f)
 
 /** How far the busiest day blends from the grey card toward the accent container. */
 private const val MONTH_HEAT_MAX = 0.7f

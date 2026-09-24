@@ -29,6 +29,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.zIndex
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.domain.time.formatTimeEntryInstant
+import dev.tricked.solidverdant.domain.time.parseTimeEntryInstant
 import dev.tricked.solidverdant.ui.tracking.EntryTrustRules
 import kotlinx.coroutines.delay
 import java.time.Instant
@@ -65,7 +67,8 @@ internal fun calendarEntryDragModifier(
     onMoveEntry: (TimeEntry, String, String) -> Unit,
     onDragActiveChange: (Boolean) -> Unit = {},
 ): Modifier {
-    val canMove = entry.end != null && entryStartDate(entry, zone) == day
+    val startDate = remember(entry.start, zone) { entryStartDate(entry, zone) }
+    val canMove = entry.end != null && startDate == day
     val density = androidx.compose.ui.platform.LocalDensity.current
     val sizedModifier = modifier.height(with(density) { blockHeightPx.toDp() })
     // Running and cross-day entries are not movable, but they still need the measured timeline
@@ -112,19 +115,25 @@ internal fun calendarEntryDragModifier(
             fun dropTarget(totalDrag: Offset): Pair<Offset, CalendarEntryRange>? {
                 val targetDayIndex = (dayIndex + (totalDrag.x / columnWidthPx).roundToInt())
                     .coerceIn(0, (dayCount - 1).coerceAtLeast(0))
-                val targetDay = day.plusDays((targetDayIndex - dayIndex).toLong())
-                val targetStart = calendarTimeAtGridPosition(
-                    day = targetDay,
-                    y = baseTopPx + totalDrag.y,
+                val dayShift = targetDayIndex - dayIndex
+                val entryStart = parseTimeEntryInstant(currentEntry.start) ?: return null
+                val targetStart = calendarDragTargetStart(
+                    entryStart = entryStart,
+                    day = day,
+                    dayShift = dayShift,
+                    dragYPx = totalDrag.y,
                     gridHeightPx = gridHeightPx,
                     zone = zone,
                     settings = settings,
                 )
                 val range = calendarEntryRangeAt(currentEntry, targetStart) ?: return null
-                val grid = calendarGridBounds(targetDay, zone, settings)
-                val targetTopPx = (targetStart.toInstant().epochSecond - grid.start.epochSecond).toFloat() /
-                    grid.seconds.coerceAtLeast(1L) * gridHeightPx
-                val settled = Offset((targetDayIndex - dayIndex) * columnWidthPx, targetTopPx - baseTopPx)
+                val grid = calendarGridBounds(day.plusDays(dayShift.toLong()), zone, settings)
+                // The block is drawn clipped to the grid, so it settles on the clipped top too.
+                val targetTopPx = (
+                    (targetStart.toInstant().epochSecond - grid.start.epochSecond).toFloat() /
+                        grid.seconds.coerceAtLeast(1L)
+                    ).coerceIn(0f, 1f) * gridHeightPx
+                val settled = Offset(dayShift * columnWidthPx, targetTopPx - baseTopPx)
                 return settled to range
             }
             awaitEachGesture {
@@ -176,17 +185,22 @@ internal fun calendarMoveOverlapsExisting(
     return existingEntries.any { candidate -> EntryTrustRules.overlaps(moved, candidate, now) }
 }
 
-private fun movesEntry(entry: TimeEntry, range: CalendarEntryRange): Boolean =
-    range.start.format(ENTRY_TIME_FORMATTER) != entry.start || range.end.format(ENTRY_TIME_FORMATTER) != entry.end
+/**
+ * Whether dropping [entry] at [range] changes it. Instants are compared, not strings: the server
+ * writes `Z` timestamps and a local copy may carry an offset, so equal times can differ as text,
+ * and a hold released on the entry's own slot must not send an update.
+ */
+internal fun movesEntry(entry: TimeEntry, range: CalendarEntryRange): Boolean =
+    parseTimeEntryInstant(entry.start) != range.start.toInstant() ||
+        entry.end?.let(::parseTimeEntryInstant) != range.end.toInstant()
 
+/** Moves are written in the app's UTC `Z` shape, like every other local time-entry writer. */
 private fun dispatchMove(entry: TimeEntry, range: CalendarEntryRange, callback: (TimeEntry, String, String) -> Unit) {
-    callback(entry, range.start.format(ENTRY_TIME_FORMATTER), range.end.format(ENTRY_TIME_FORMATTER))
+    callback(entry, formatTimeEntryInstant(range.start), formatTimeEntryInstant(range.end))
 }
 
-private fun entryStartDate(entry: TimeEntry, zone: ZoneId): LocalDate? =
-    runCatching { java.time.ZonedDateTime.parse(entry.start).withZoneSameInstant(zone).toLocalDate() }.getOrNull()
+private fun entryStartDate(entry: TimeEntry, zone: ZoneId): LocalDate? = parseTimeEntryInstant(entry.start)?.atZone(zone)?.toLocalDate()
 
-private val ENTRY_TIME_FORMATTER = java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME
 private const val DRAGGED_ENTRY_ALPHA = 0.72f
 private const val DRAGGED_ENTRY_Z_INDEX = 2f
 private const val MOVE_SETTLE_TIMEOUT_MS = 1_500L

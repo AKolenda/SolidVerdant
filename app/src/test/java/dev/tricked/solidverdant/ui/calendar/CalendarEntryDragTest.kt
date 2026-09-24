@@ -47,10 +47,10 @@ class CalendarEntryDragTest {
 
     private val zone = ZoneOffset.UTC
     private val day = LocalDate.of(2026, 8, 6)
-    private val settings = CalendarGridSettings(snapMinutes = 15, startHour = 0, endHour = 24)
+    private var settings = CalendarGridSettings(snapMinutes = 15, startHour = 0, endHour = 24)
 
     // 100 px per hour.
-    private val gridHeightPx = 2_400f
+    private val gridHeightPx get() = (settings.endHour - settings.startHour) * 100f
 
     private var entry by mutableStateOf(
         TimeEntry(
@@ -63,9 +63,11 @@ class CalendarEntryDragTest {
     )
     private val moves = mutableListOf<Pair<String, String>>()
 
+    /** The drawn block's top: like the grid layout, clipped to the visible hours. */
     private fun startFraction(e: TimeEntry): Float {
-        val start = ZonedDateTime.parse(e.start)
-        return (start.hour * 60 + start.minute) / (24f * 60f)
+        val start = ZonedDateTime.parse(e.start).withZoneSameInstant(zone)
+        val minutes = (start.hour * 60 + start.minute - settings.startMinute).coerceAtLeast(0)
+        return minutes / settings.visibleMinutes.toFloat()
     }
 
     private fun setGrid(applyMoves: Boolean) {
@@ -140,6 +142,38 @@ class CalendarEntryDragTest {
             listOf("2026-08-06T10:00:00Z", "2026-08-06T10:30:00Z").map(ZonedDateTime::parse),
             moves.map { ZonedDateTime.parse(it.first) },
         )
+    }
+
+    @Test
+    fun an_entry_starting_before_the_visible_hours_moves_by_the_drag_only() {
+        // Grid from 08:00: the 07:00 entry is drawn from the grid top, an hour below its start.
+        settings = settings.copy(startHour = 8)
+        entry = entry.copy(start = "2026-08-06T07:00:00Z", end = "2026-08-06T09:00:00Z")
+        setGrid(applyMoves = false)
+
+        holdAndDrag(totalPx = 50f)
+
+        assertEquals(listOf("2026-08-06T07:30:00Z" to "2026-08-06T09:30:00Z"), moves)
+    }
+
+    @Test
+    fun moves_are_written_as_utc_timestamps() {
+        entry = entry.copy(start = "2026-08-06T11:00:00+02:00", end = "2026-08-06T12:00:00+02:00")
+        setGrid(applyMoves = false)
+
+        holdAndDrag(totalPx = 100f)
+
+        assertEquals(listOf("2026-08-06T10:00:00Z" to "2026-08-06T11:00:00Z"), moves)
+    }
+
+    @Test
+    fun a_hold_released_on_the_same_slot_sends_no_update() {
+        entry = entry.copy(start = "2026-08-06T11:00:00+02:00", end = "2026-08-06T12:00:00+02:00")
+        setGrid(applyMoves = false)
+
+        holdAndDrag(totalPx = 4f, steps = 1)
+
+        assertEquals(emptyList<Pair<String, String>>(), moves)
     }
 
     @Test
