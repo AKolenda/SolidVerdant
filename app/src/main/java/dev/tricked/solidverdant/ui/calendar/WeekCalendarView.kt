@@ -37,9 +37,13 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,12 +53,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import dev.tricked.solidverdant.R
@@ -63,13 +67,11 @@ import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
-import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository.EntrySyncStatus
 import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.ui.components.EntryBlock
 import dev.tricked.solidverdant.ui.components.LoadingState
 import dev.tricked.solidverdant.ui.localization.appLocale
-import dev.tricked.solidverdant.ui.statistics.hexToColor
 import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.ui.theme.tabular
 import dev.tricked.solidverdant.ui.tracking.formatClockDuration
@@ -82,6 +84,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
+import kotlin.math.roundToInt
 
 private const val NARROW_CALENDAR_DAYS = 3
 private const val MAX_ALL_DAY_EVENTS = 3
@@ -156,9 +159,13 @@ private fun WeekCalendarContent(
     val hasRunningEntries = remember(state.bucketsByDate, days) {
         days.any { day -> state.bucketsByDate[day]?.entries.orEmpty().any(::isRunningTimeEntry) }
     }
-    val now = rememberCalendarNow(secondPrecision = hasRunningEntries)
-    val today = now.atZone(zone).toLocalDate()
+    // Ticks every second only while a timer is visible, and only running blocks and the now line
+    // read it. Everything else here follows the minute, so a tick does not recompose the grid.
+    val clock = rememberCalendarClock(secondPrecision = hasRunningEntries)
+    val minuteNow by rememberCalendarMinute(clock)
+    val today = minuteNow.atZone(zone).toLocalDate()
     val locale = appLocale()
+    val title = remember(days, state.viewMode, locale) { periodTitle(days, state.viewMode, locale) }
 
     // Precompute the per-day layouts once per data change rather than inside the render loop.
     val timedByDay = remember(state.overlayEvents, days, settings) {
@@ -180,7 +187,7 @@ private fun WeekCalendarContent(
     Column(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
             CalendarPeriodHeader(
-                title = periodTitle(days, state.viewMode, locale),
+                title = title,
                 totalSeconds = totalSeconds,
                 onPrevious = onPrevious,
                 onNext = onNext,
@@ -238,7 +245,8 @@ private fun WeekCalendarContent(
                     onNext = onNext,
                     days = days,
                     today = today,
-                    now = now,
+                    minuteNow = minuteNow,
+                    clock = clock,
                     zone = zone,
                     settings = settings,
                     timedByDay = timedByDay,
@@ -262,7 +270,8 @@ private fun WeekGrid(
     onNext: () -> Unit,
     days: List<LocalDate>,
     today: LocalDate,
-    now: Instant,
+    minuteNow: Instant,
+    clock: State<Instant>,
     zone: ZoneId,
     settings: CalendarGridSettings,
     timedByDay: Map<LocalDate, List<EventBlock>>,
@@ -275,7 +284,7 @@ private fun WeekGrid(
     onCreateRange: (CalendarTimeRange) -> Unit,
     syncStatusByEntryId: Map<String, EntrySyncStatus>,
 ) {
-    val initialScrollHours = calendarInitialScrollHours(now, zone, settings).toFloat()
+    val initialScrollHours = calendarInitialScrollHours(minuteNow, zone, settings).toFloat()
     val initialScroll = with(LocalDensity.current) { (calendarHourHeight(settings) * initialScrollHours).roundToPx() }
     val scrollState = rememberScrollState(initial = initialScroll)
     Box(
@@ -297,14 +306,21 @@ private fun WeekGrid(
                     .padding(start = CalendarGutterWidth),
             ) {
                 days.forEachIndexed { index, day ->
+                    val entries = state.bucketsByDate[day]?.entries.orEmpty()
+                    // Laid out once per data change; a day with a running entry relays out each
+                    // minute, while its block's live height comes from the second clock.
+                    val layoutKey = calendarLayoutClockKey(entries, minuteNow)
+                    val blocks = remember(entries, day, zone, settings, layoutKey) {
+                        layoutTrackedEntries(entries, day, layoutKey ?: minuteNow, zone, settings)
+                    }
                     DayColumn(
                         day = day,
                         isToday = day == today,
-                        now = now,
+                        clock = clock,
                         zone = zone,
                         settings = settings,
                         eventBlocks = timedByDay[day].orEmpty(),
-                        entries = state.bucketsByDate[day]?.entries.orEmpty(),
+                        blocks = blocks,
                         projectsById = projectsById,
                         tasksById = tasksById,
                         clientsById = clientsById,
@@ -480,10 +496,10 @@ private fun AllDayRow(days: List<LocalDate>, allDayByDay: Map<LocalDate, List<De
 private fun DayColumn(
     day: LocalDate,
     isToday: Boolean,
-    now: Instant,
+    clock: State<Instant>,
     zone: ZoneId,
     eventBlocks: List<EventBlock>,
-    entries: List<TimeEntry>,
+    blocks: List<TrackedEntryBlock>,
     settings: CalendarGridSettings,
     projectsById: Map<String, Project>,
     tasksById: Map<String, Task>,
@@ -497,7 +513,6 @@ private fun DayColumn(
     modifier: Modifier = Modifier,
 ) {
     val untitled = stringResource(R.string.calendar_overlay_event_untitled)
-    val noDescription = stringResource(R.string.calendar_entry_untitled)
     // Later columns draw over earlier ones, so the column holding a dragged entry rises above them.
     var draggingEntries by remember(day) { mutableStateOf(0) }
     BoxWithConstraints(
@@ -552,84 +567,45 @@ private fun DayColumn(
             modifier = Modifier.fillMaxSize(),
         )
 
-        // Tracked time entries drawn on top with the shared EntryBlock treatment.
-        layoutTrackedEntries(entries, day, now, zone, settings).forEach { block ->
+        // Tracked time entries drawn on top with the shared EntryBlock treatment. Each block is
+        // keyed and skippable, so one entry changing does not recompose its neighbours.
+        blocks.forEach { block ->
             val entry = block.entry
             val slotWidth = colWidth / block.columnCount.coerceAtLeast(1)
             val project = projectsById[entry.projectId]
-            val task = tasksById[entry.taskId]
-            val client = project?.clientId?.let(clientsById::get)
-            val base = if (entry.type == TimeEntryType.BREAK) {
-                MaterialTheme.colorScheme.tertiary
-            } else {
-                project?.color
-                    ?.let { hexToColor(it) }
-                    ?: MaterialTheme.colorScheme.primary
+            key(entry.id) {
+                CalendarEntryBlockItem(
+                    block = block,
+                    day = day,
+                    zone = zone,
+                    settings = settings,
+                    clock = clock,
+                    totalHeight = totalHeight,
+                    gridHeightPx = gridHeightPx,
+                    columnWidthPx = columnPitchPx,
+                    dayIndex = dayIndex,
+                    dayCount = dayCount,
+                    project = project,
+                    task = tasksById[entry.taskId],
+                    client = project?.clientId?.let(clientsById::get),
+                    syncStatus = syncStatusByEntryId[entry.id],
+                    testTag = "week-entry-${entry.id}",
+                    showBreakSubtitle = true,
+                    formatOpenDuration = ::formatRunningDuration,
+                    onEntryClick = onEntryClick,
+                    onMoveEntry = onMoveEntry,
+                    modifier = Modifier
+                        .offset(x = slotWidth * block.column, y = totalHeight * block.startFraction)
+                        .width(slotWidth)
+                        .padding(horizontal = Dimens.Hairline),
+                    onDragActiveChange = { active -> draggingEntries = (draggingEntries + if (active) 1 else -1).coerceAtLeast(0) },
+                )
             }
-            val metadata = calendarEntryMetadata(
-                entry = entry,
-                projectName = project?.name,
-                taskName = task?.name,
-                clientName = client?.name,
-            )
-            val label = if (entry.type == TimeEntryType.BREAK) {
-                entry.description?.ifBlank { null }?.let { stringResource(R.string.calendar_break_with_description, it) }
-                    ?: stringResource(R.string.calendar_break_entry)
-            } else {
-                metadata.title ?: noDescription
-            }
-            val subtitle = metadata.subtitle
-            val duration = metadata.durationSeconds?.let(::formatDuration)
-                ?: entry.takeIf(::isRunningTimeEntry)?.let {
-                    formatRunningDuration(entryDurationSecondsOnDay(it, day, zone, now))
-                }
-            val details = listOfNotNull(subtitle, duration).joinToString(", ")
-            val a11y = if (details.isBlank()) {
-                stringResource(R.string.calendar_entry_a11y, label)
-            } else {
-                stringResource(R.string.calendar_entry_a11y_details, label, details)
-            }
-            val entryModifier = calendarEntryDragModifier(
-                modifier = Modifier
-                    .offset(
-                        x = slotWidth * block.column,
-                        y = totalHeight * block.startFraction,
-                    )
-                    .width(slotWidth)
-                    .padding(horizontal = 0.5.dp),
-                entry = entry,
-                day = day,
-                zone = zone,
-                dayIndex = dayIndex,
-                dayCount = dayCount,
-                blockStartFraction = block.startFraction,
-                blockHeightPx = with(density) {
-                    (totalHeight * block.heightFraction).coerceAtLeast(Dimens.EntryMinHeight).toPx()
-                },
-                gridHeightPx = gridHeightPx,
-                columnWidthPx = columnPitchPx,
-                settings = settings,
-                onMoveEntry = onMoveEntry,
-                onDragActiveChange = { active -> draggingEntries = (draggingEntries + if (active) 1 else -1).coerceAtLeast(0) },
-            )
-            EntryBlock(
-                color = base,
-                title = label,
-                subtitle = subtitle,
-                time = duration,
-                modifier = entryModifier
-                    .height((totalHeight * block.heightFraction).coerceAtLeast(Dimens.EntryMinHeight))
-                    // Tap opens the entry's actions; a hold lifts it for dragging.
-                    .clickable(role = Role.Button) { onEntryClick(entry) }
-                    .testTag("week-entry-${entry.id}")
-                    .semantics { contentDescription = a11y },
-                syncStatus = syncStatusByEntryId[entry.id],
-            )
         }
 
-        // Current-time indicator on today's column.
+        // Current-time indicator on today's column; it moves without recomposing the column.
         if (isToday) {
-            CurrentTimeMarker(now = now, day = day, zone = zone, settings = settings)
+            CurrentTimeMarker(clock = clock, day = day, zone = zone, settings = settings)
         }
     }
 }
@@ -702,19 +678,38 @@ internal fun CurrentTimeMarker(
     settings: CalendarGridSettings = CalendarGridSettings(),
     modifier: Modifier = Modifier,
 ) {
-    val grid = calendarGridBounds(day, zone, settings)
-    val fraction = (now.epochSecond - grid.start.epochSecond).toFloat() / grid.seconds
-    if (fraction in 0f..1f) {
-        Box(
-            modifier = modifier
-                .offset(y = calendarTotalHeight(settings) * fraction)
-                .fillMaxWidth()
-                .height(2.dp)
-                .background(MaterialTheme.colorScheme.error)
-                .testTag(CalendarTestTags.CURRENT_TIME_MARKER),
-        )
-    }
+    val clock = rememberUpdatedState(now)
+    CurrentTimeMarker(clock = clock, day = day, zone = zone, settings = settings, modifier = modifier)
 }
+
+/**
+ * The now line driven by [clock]. Only its placement reads the clock, so a tick moves the line
+ * without recomposing it or the column it sits in; it recomposes only to appear or disappear.
+ */
+@Composable
+internal fun CurrentTimeMarker(
+    clock: State<Instant>,
+    day: LocalDate,
+    zone: ZoneId,
+    settings: CalendarGridSettings = CalendarGridSettings(),
+    modifier: Modifier = Modifier,
+) {
+    val grid = remember(day, zone, settings) { calendarGridBounds(day, zone, settings) }
+    val visible by remember(clock, grid) { derivedStateOf { gridFraction(clock.value, grid) in 0f..1f } }
+    if (!visible) return
+    val totalHeight = calendarTotalHeight(settings)
+    Box(
+        modifier = modifier
+            .offset { IntOffset(0, (totalHeight.toPx() * gridFraction(clock.value, grid)).roundToInt()) }
+            .fillMaxWidth()
+            .height(Dimens.Space2)
+            .background(MaterialTheme.colorScheme.error)
+            .testTag(CalendarTestTags.CURRENT_TIME_MARKER),
+    )
+}
+
+private fun gridFraction(now: Instant, grid: CalendarGridBounds): Float =
+    (now.epochSecond - grid.start.epochSecond).toFloat() / grid.seconds.coerceAtLeast(1L)
 
 @Composable
 private fun HairLine() {
