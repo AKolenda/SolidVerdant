@@ -214,4 +214,21 @@ class ConflictSnapshotTest {
         assertTrue(a.matches(b))
         assertFalse(a.matches(c))
     }
+
+    @Test fun `a running snapshot never matches a stopped one`() {
+        val running = baseline().copy(endMs = null, endRaw = null)
+        val stopped = baseline()
+
+        assertFalse("A running base must not match a stopped server copy", running.matches(stopped))
+        assertFalse(stopped.matches(running))
+        assertTrue(running.matches(running.copy()))
+    }
+
+    @Test fun `a running snapshot never matches an unparseable end`() {
+        val running = baseline().copy(endMs = null, endRaw = null)
+        val garbled = baseline().copy(endMs = null, endRaw = "not-a-timestamp")
+
+        assertFalse(running.matches(garbled))
+        assertFalse(garbled.matches(running))
+    }
 }

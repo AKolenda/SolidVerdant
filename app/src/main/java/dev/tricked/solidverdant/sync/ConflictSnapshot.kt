@@ -46,8 +46,21 @@ data class ConflictSnapshot(
         // Sorted here (not just in [of]) so directly-constructed snapshots keep tag-order invariance.
         tagIds.sorted() == other.tagIds.sorted()
 
-    private fun instantsMatch(ms: Long?, raw: String?, otherMs: Long?, otherRaw: String?): Boolean =
-        if (ms != null && otherMs != null) ms == otherMs else raw == otherRaw
+    /**
+     * A missing timestamp (a running timer's end) is a state, not an unparseable value: it must
+     * never equal a present one. Parsed values keep only [ms] and leave [raw] null, so without the
+     * presence check a running base (null/null) matched a stopped server copy (ms/null) and an
+     * UPDATE carrying `end = null` could silently restart a timer stopped elsewhere.
+     */
+    private fun instantsMatch(ms: Long?, raw: String?, otherMs: Long?, otherRaw: String?): Boolean {
+        val present = ms != null || raw != null
+        val otherPresent = otherMs != null || otherRaw != null
+        return when {
+            present != otherPresent -> false
+            ms != null && otherMs != null -> ms == otherMs
+            else -> raw == otherRaw
+        }
+    }
 
     companion object {
         /**
