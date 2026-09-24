@@ -58,4 +58,10 @@
     </plurals>
     <string name="sweep_sync_use_server_title">サーバー版を使用しますか？</string>
     <string name="sweep_sync_use_server_message">この記録に対するこのデバイスの変更は、サーバーのコピーに置き換えられます。この操作は元に戻せません。</string>
+
+    <!-- Server configuration -->
+    <string name="sweep_config_nothing_to_paste">貼り付けるものがありません。クリップボードにサーバーアドレスやクライアントIDがありません。</string>
+    <string name="sweep_config_clipboard_empty">先にサーバーアドレスまたはクライアントIDをコピーしてください。</string>
+    <string name="sweep_config_test_passed">接続できました</string>
+    <string name="sweep_config_test_failed">接続できませんでした</string>
 </resources>

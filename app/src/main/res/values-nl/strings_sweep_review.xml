@@ -64,4 +64,10 @@
     </plurals>
     <string name="sweep_sync_use_server_title">Serverversie gebruiken?</string>
     <string name="sweep_sync_use_server_message">De wijzigingen van dit apparaat aan deze registratie worden vervangen door de versie van de server. Dit kan niet ongedaan worden gemaakt.</string>
+
+    <!-- Server configuration -->
+    <string name="sweep_config_nothing_to_paste">Niets om te plakken: het klembord bevat geen serveradres of client-ID.</string>
+    <string name="sweep_config_clipboard_empty">Kopieer eerst het serveradres of de client-ID.</string>
+    <string name="sweep_config_test_passed">Verbinding werkt</string>
+    <string name="sweep_config_test_failed">Verbinding mislukt</string>
 </resources>

@@ -66,4 +66,10 @@
     </plurals>
     <string name="sweep_sync_use_server_title">Use the server version?</string>
     <string name="sweep_sync_use_server_message">This device\'s changes to this entry are replaced by the server\'s copy. This can\'t be undone.</string>
+
+    <!-- Server configuration -->
+    <string name="sweep_config_nothing_to_paste">Nothing to paste: the clipboard has no server address or client ID.</string>
+    <string name="sweep_config_clipboard_empty">Copy the server address or client ID first.</string>
+    <string name="sweep_config_test_passed">Connection works</string>
+    <string name="sweep_config_test_failed">Connection failed</string>
 </resources>
