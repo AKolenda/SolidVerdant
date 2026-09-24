@@ -8,14 +8,11 @@ package dev.tricked.solidverdant.ui.statistics
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.automirrored.outlined.List
@@ -29,10 +26,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,9 +41,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.components.AppSheet
 import dev.tricked.solidverdant.ui.components.FilterOption
 import dev.tricked.solidverdant.ui.components.FilterRow
 import dev.tricked.solidverdant.ui.components.GroupedDivider
@@ -185,64 +180,38 @@ private fun StatFilterSheet(
     val clients = remember(catalog.clients) { catalog.clients.map { FilterOption(it.id, it.name) } }
     val tasks = remember(catalog.tasks) { catalog.tasks.map { FilterOption(it.id, it.name) } }
     val tags = remember(catalog.tags) { catalog.tags.map { FilterOption(it.id, it.name) } }
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.background,
+    AppSheet(
+        title = stringResource(R.string.stats2_filter_sheet_title),
+        onDismiss = onDismiss,
+        titleAction = {
+            TextButton(onClick = onReset, enabled = filters.isActive) {
+                Text(stringResource(R.string.stats2_reset))
+            }
+        },
+        onDone = onDismiss,
+        doneTestTag = StatisticsFilterTestTags.DONE,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = Dimens.Space24),
-            verticalArrangement = Arrangement.spacedBy(Dimens.Space16),
+        GroupedSection(
+            header = statFilterSectionLabel(StatFilterSection.BILLABLE),
+            modifier = Modifier.testTag(StatisticsFilterTestTags.section(StatFilterSection.BILLABLE)),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(start = Dimens.Space16 + Dimens.Space16, end = Dimens.Space16),
-            ) {
-                Text(
-                    stringResource(R.string.stats2_filter_sheet_title),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = onReset, enabled = filters.isActive) {
-                    Text(stringResource(R.string.stats2_reset))
-                }
-            }
+            SegmentedControl(
+                options = listOf(BillableFilter.All, BillableFilter.Billable, BillableFilter.NonBillable),
+                selected = filters.billable,
+                onSelect = { onFiltersChange(filters.copy(billable = it)) },
+                label = { billableLabel(it) },
+                modifier = Modifier.padding(horizontal = Dimens.Space8, vertical = Dimens.Space4),
+            )
+        }
 
-            GroupedSection(
-                header = statFilterSectionLabel(StatFilterSection.BILLABLE),
-                modifier = Modifier.testTag(StatisticsFilterTestTags.section(StatFilterSection.BILLABLE)),
-            ) {
-                SegmentedControl(
-                    options = listOf(BillableFilter.All, BillableFilter.Billable, BillableFilter.NonBillable),
-                    selected = filters.billable,
-                    onSelect = { onFiltersChange(filters.copy(billable = it)) },
-                    label = { billableLabel(it) },
-                    modifier = Modifier.padding(horizontal = Dimens.Space8, vertical = Dimens.Space4),
-                )
-            }
-
-            GroupedSection {
-                StatFilterRow(StatFilterSection.PROJECTS, Icons.Outlined.Folder, filters.projectIds, projects) { openSection = it }
-                GroupedDivider(inset = Dimens.SettingsIconInset)
-                StatFilterRow(StatFilterSection.CLIENTS, Icons.Outlined.Business, filters.clientIds, clients) { openSection = it }
-                GroupedDivider(inset = Dimens.SettingsIconInset)
-                StatFilterRow(StatFilterSection.TASKS, Icons.AutoMirrored.Outlined.List, filters.taskIds, tasks) { openSection = it }
-                GroupedDivider(inset = Dimens.SettingsIconInset)
-                StatFilterRow(StatFilterSection.TAGS, Icons.AutoMirrored.Outlined.Label, filters.tagIds, tags) { openSection = it }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space16),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                Button(onClick = onDismiss, modifier = Modifier.testTag(StatisticsFilterTestTags.DONE)) {
-                    Text(stringResource(R.string.done))
-                }
-            }
+        GroupedSection {
+            StatFilterRow(StatFilterSection.PROJECTS, Icons.Outlined.Folder, filters.projectIds, projects) { openSection = it }
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            StatFilterRow(StatFilterSection.CLIENTS, Icons.Outlined.Business, filters.clientIds, clients) { openSection = it }
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            StatFilterRow(StatFilterSection.TASKS, Icons.AutoMirrored.Outlined.List, filters.taskIds, tasks) { openSection = it }
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            StatFilterRow(StatFilterSection.TAGS, Icons.AutoMirrored.Outlined.Label, filters.tagIds, tags) { openSection = it }
         }
     }
 

@@ -73,11 +73,8 @@ import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.SyncProblem
 import androidx.compose.material.icons.outlined.Timer
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -105,11 +102,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TimePicker
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -162,6 +157,9 @@ import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.domain.time.isWorkTimeEntry
 import dev.tricked.solidverdant.domain.time.timeEntryLocalDaySlices
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
+import dev.tricked.solidverdant.ui.components.AppSheet
+import dev.tricked.solidverdant.ui.components.AppTimePickerDialog
+import dev.tricked.solidverdant.ui.components.ConfirmDialog
 import dev.tricked.solidverdant.ui.components.DateRangePickerDialog
 import dev.tricked.solidverdant.ui.components.DestructiveActionRow
 import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
@@ -936,174 +934,148 @@ internal fun HistoryFiltersSheet(
     val all = stringResource(R.string.filter_all)
     fun nameOf(options: List<FilterOption>, id: String?) = options.firstOrNull { it.id == id }?.name ?: all
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.background,
+    AppSheet(
+        title = stringResource(R.string.search_options),
+        onDismiss = onDismiss,
+        titleAction = {
+            if (filter.activeOptionsCount() > 0) {
+                TextButton(onClick = { onChange(HistoryFilter(query = filter.query)) }) {
+                    Text(stringResource(R.string.clear_filters))
+                }
+            }
+        },
+        onDone = onDismiss,
+        doneTestTag = TrackingTestTags.FILTER_CLOSE_BUTTON,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = Dimens.Space24),
-            verticalArrangement = Arrangement.spacedBy(Dimens.Space16),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(start = Dimens.Space16 + Dimens.Space16, end = Dimens.Space16),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = stringResource(R.string.search_options),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
-                if (filter.activeOptionsCount() > 0) {
-                    TextButton(onClick = { onChange(HistoryFilter(query = filter.query)) }) {
-                        Text(stringResource(R.string.clear_filters))
+        val dateChoice = filter.dateChoice(today)
+        GroupedSection(header = stringResource(R.string.filter_section_date)) {
+            SegmentedControl(
+                options = HistoryDateChoice.entries,
+                selected = dateChoice,
+                onSelect = { choice ->
+                    when (choice) {
+                        HistoryDateChoice.ANY -> onChange(filter.copy(startDate = null, endDate = null))
+                        HistoryDateChoice.TODAY -> onChange(filter.copy(startDate = today, endDate = today))
+                        HistoryDateChoice.WEEK -> onChange(
+                            filter.copy(startDate = today.minusDays(LAST_7_DAYS_OFFSET), endDate = today),
+                        )
+                        HistoryDateChoice.CUSTOM -> showDateRangePicker = true
                     }
-                }
-            }
-
-            val dateChoice = filter.dateChoice(today)
-            GroupedSection(header = stringResource(R.string.filter_section_date)) {
-                SegmentedControl(
-                    options = HistoryDateChoice.entries,
-                    selected = dateChoice,
-                    onSelect = { choice ->
+                },
+                label = { choice ->
+                    stringResource(
                         when (choice) {
-                            HistoryDateChoice.ANY -> onChange(filter.copy(startDate = null, endDate = null))
-                            HistoryDateChoice.TODAY -> onChange(filter.copy(startDate = today, endDate = today))
-                            HistoryDateChoice.WEEK -> onChange(
-                                filter.copy(startDate = today.minusDays(LAST_7_DAYS_OFFSET), endDate = today),
-                            )
-                            HistoryDateChoice.CUSTOM -> showDateRangePicker = true
-                        }
-                    },
-                    label = { choice ->
-                        stringResource(
-                            when (choice) {
-                                HistoryDateChoice.ANY -> R.string.filter_any_time
-                                HistoryDateChoice.TODAY -> R.string.today
-                                HistoryDateChoice.WEEK -> R.string.filter_week_short
-                                HistoryDateChoice.CUSTOM -> R.string.stats_custom
-                            },
-                        )
-                    },
-                    modifier = Modifier.padding(horizontal = Dimens.Space8, vertical = Dimens.Space4),
-                )
-                val start = filter.startDate
-                val end = filter.endDate
-                if (dateChoice == HistoryDateChoice.CUSTOM && start != null && end != null) {
-                    val locale = appLocale()
-                    val formatter = remember(locale) {
-                        DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM).withLocale(locale)
-                    }
-                    GroupedDivider()
-                    GroupedRow(
-                        title = "${start.format(formatter)} – ${end.format(formatter)}",
-                        leadingIcon = Icons.Outlined.DateRange,
-                        onClick = { showDateRangePicker = true },
+                            HistoryDateChoice.ANY -> R.string.filter_any_time
+                            HistoryDateChoice.TODAY -> R.string.today
+                            HistoryDateChoice.WEEK -> R.string.filter_week_short
+                            HistoryDateChoice.CUSTOM -> R.string.stats_custom
+                        },
                     )
+                },
+                modifier = Modifier.padding(horizontal = Dimens.Space8, vertical = Dimens.Space4),
+            )
+            val start = filter.startDate
+            val end = filter.endDate
+            if (dateChoice == HistoryDateChoice.CUSTOM && start != null && end != null) {
+                val locale = appLocale()
+                val formatter = remember(locale) {
+                    DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM).withLocale(locale)
                 }
-            }
-
-            GroupedSection(header = stringResource(R.string.filter_section_details)) {
-                FilterRow(
-                    label = stringResource(R.string.client),
-                    icon = Icons.Outlined.Business,
-                    value = nameOf(clients, filter.clientId),
-                    onClick = { openPicker = HistoryFilterPicker.CLIENT },
-                )
-                GroupedDivider(inset = Dimens.SettingsIconInset)
-                FilterRow(
-                    label = stringResource(R.string.project),
-                    icon = Icons.Outlined.Folder,
-                    value = nameOf(projects, filter.projectId),
-                    onClick = { openPicker = HistoryFilterPicker.PROJECT },
-                )
-                if (filter.projectId != null) {
-                    GroupedDivider(inset = Dimens.SettingsIconInset)
-                    FilterRow(
-                        label = stringResource(R.string.task),
-                        icon = Icons.AutoMirrored.Outlined.List,
-                        value = nameOf(tasks, filter.taskId),
-                        onClick = { openPicker = HistoryFilterPicker.TASK },
-                    )
-                }
-                GroupedDivider(inset = Dimens.SettingsIconInset)
-                FilterRow(
-                    label = stringResource(R.string.tags),
-                    icon = Icons.AutoMirrored.Outlined.Label,
-                    value = nameOf(tags, filter.tagId),
-                    onClick = { openPicker = HistoryFilterPicker.TAG },
-                )
-            }
-
-            GroupedSection(header = stringResource(R.string.filter_section_status)) {
-                val billableOptions = listOf(null, true, false)
-                SegmentedControl(
-                    options = billableOptions,
-                    selected = filter.billable,
-                    onSelect = { onChange(filter.copy(billable = it)) },
-                    label = { billable ->
-                        stringResource(
-                            when (billable) {
-                                null -> R.string.filter_all
-                                true -> R.string.billable
-                                false -> R.string.non_billable
-                            },
-                        )
-                    },
-                    modifier = Modifier.padding(horizontal = Dimens.Space8, vertical = Dimens.Space4),
-                )
                 GroupedDivider()
-                GroupedSwitchRow(
-                    title = stringResource(R.string.running_entries),
-                    leadingIcon = Icons.Outlined.Timer,
-                    checked = filter.runningOnly,
-                    onCheckedChange = { onChange(filter.copy(runningOnly = it)) },
-                )
-                GroupedDivider(inset = Dimens.SettingsIconInset)
-                GroupedSwitchRow(
-                    title = stringResource(R.string.filter_failed_sync),
-                    leadingIcon = Icons.Outlined.SyncProblem,
-                    checked = filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED,
-                    onCheckedChange = { failed ->
-                        onChange(filter.copy(syncStatus = TimeEntryRepository.EntrySyncStatus.FAILED.takeIf { failed }))
-                    },
-                )
-                GroupedDivider(inset = Dimens.SettingsIconInset)
-                GroupedSwitchRow(
-                    title = stringResource(R.string.needs_categorization),
-                    leadingIcon = Icons.Outlined.Category,
-                    checked = filter.needsCategorization,
-                    onCheckedChange = { onChange(filter.copy(needsCategorization = it)) },
-                )
-                GroupedDivider(inset = Dimens.SettingsIconInset)
-                GroupedSwitchRow(
-                    title = stringResource(R.string.without_project),
-                    leadingIcon = Icons.Outlined.FolderOff,
-                    checked = filter.missingProjectOnly,
-                    onCheckedChange = { onChange(filter.copy(missingProjectOnly = it)) },
-                )
-                GroupedDivider(inset = Dimens.SettingsIconInset)
-                GroupedSwitchRow(
-                    title = stringResource(R.string.without_description),
-                    leadingIcon = Icons.AutoMirrored.Outlined.Notes,
-                    checked = filter.missingDescriptionOnly,
-                    onCheckedChange = { onChange(filter.copy(missingDescriptionOnly = it)) },
+                GroupedRow(
+                    title = "${start.format(formatter)} – ${end.format(formatter)}",
+                    leadingIcon = Icons.Outlined.DateRange,
+                    onClick = { showDateRangePicker = true },
                 )
             }
+        }
 
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space16),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                Button(onClick = onDismiss, modifier = Modifier.testTag(TrackingTestTags.FILTER_CLOSE_BUTTON)) {
-                    Text(stringResource(R.string.done))
-                }
+        GroupedSection(header = stringResource(R.string.filter_section_details)) {
+            FilterRow(
+                label = stringResource(R.string.client),
+                icon = Icons.Outlined.Business,
+                value = nameOf(clients, filter.clientId),
+                onClick = { openPicker = HistoryFilterPicker.CLIENT },
+            )
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            FilterRow(
+                label = stringResource(R.string.project),
+                icon = Icons.Outlined.Folder,
+                value = nameOf(projects, filter.projectId),
+                onClick = { openPicker = HistoryFilterPicker.PROJECT },
+            )
+            if (filter.projectId != null) {
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                FilterRow(
+                    label = stringResource(R.string.task),
+                    icon = Icons.AutoMirrored.Outlined.List,
+                    value = nameOf(tasks, filter.taskId),
+                    onClick = { openPicker = HistoryFilterPicker.TASK },
+                )
             }
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            FilterRow(
+                label = stringResource(R.string.tags),
+                icon = Icons.AutoMirrored.Outlined.Label,
+                value = nameOf(tags, filter.tagId),
+                onClick = { openPicker = HistoryFilterPicker.TAG },
+            )
+        }
+
+        GroupedSection(header = stringResource(R.string.filter_section_status)) {
+            val billableOptions = listOf(null, true, false)
+            SegmentedControl(
+                options = billableOptions,
+                selected = filter.billable,
+                onSelect = { onChange(filter.copy(billable = it)) },
+                label = { billable ->
+                    stringResource(
+                        when (billable) {
+                            null -> R.string.filter_all
+                            true -> R.string.billable
+                            false -> R.string.non_billable
+                        },
+                    )
+                },
+                modifier = Modifier.padding(horizontal = Dimens.Space8, vertical = Dimens.Space4),
+            )
+            GroupedDivider()
+            GroupedSwitchRow(
+                title = stringResource(R.string.running_entries),
+                leadingIcon = Icons.Outlined.Timer,
+                checked = filter.runningOnly,
+                onCheckedChange = { onChange(filter.copy(runningOnly = it)) },
+            )
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            GroupedSwitchRow(
+                title = stringResource(R.string.filter_failed_sync),
+                leadingIcon = Icons.Outlined.SyncProblem,
+                checked = filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED,
+                onCheckedChange = { failed ->
+                    onChange(filter.copy(syncStatus = TimeEntryRepository.EntrySyncStatus.FAILED.takeIf { failed }))
+                },
+            )
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            GroupedSwitchRow(
+                title = stringResource(R.string.needs_categorization),
+                leadingIcon = Icons.Outlined.Category,
+                checked = filter.needsCategorization,
+                onCheckedChange = { onChange(filter.copy(needsCategorization = it)) },
+            )
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            GroupedSwitchRow(
+                title = stringResource(R.string.without_project),
+                leadingIcon = Icons.Outlined.FolderOff,
+                checked = filter.missingProjectOnly,
+                onCheckedChange = { onChange(filter.copy(missingProjectOnly = it)) },
+            )
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            GroupedSwitchRow(
+                title = stringResource(R.string.without_description),
+                leadingIcon = Icons.AutoMirrored.Outlined.Notes,
+                checked = filter.missingDescriptionOnly,
+                onCheckedChange = { onChange(filter.copy(missingDescriptionOnly = it)) },
+            )
         }
     }
 
@@ -1724,35 +1696,19 @@ internal fun ProjectTaskDropdown(
 /** Confirms deleting one history entry, or every entry of a stack ([count] > 1). */
 @Composable
 private fun DeleteEntriesDialog(count: Int, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                if (count > 1) {
-                    pluralStringResource(R.plurals.history_delete_stack_title, count, count)
-                } else {
-                    stringResource(R.string.calendar_delete_entry_title)
-                },
-            )
+    ConfirmDialog(
+        title = if (count > 1) {
+            pluralStringResource(R.plurals.history_delete_stack_title, count, count)
+        } else {
+            stringResource(R.string.calendar_delete_entry_title)
         },
-        text = {
-            Text(stringResource(if (count > 1) R.string.history_delete_stack_message else R.string.calendar_delete_entry_message))
-        },
-        confirmButton = {
-            Button(
-                onClick = onConfirm,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error,
-                    contentColor = MaterialTheme.colorScheme.onError,
-                ),
-                modifier = Modifier.testTag(TrackingTestTags.DELETE_CONFIRM),
-            ) { Text(stringResource(R.string.delete)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.testTag(TrackingTestTags.DELETE_CANCEL)) {
-                Text(stringResource(R.string.cancel))
-            }
-        },
+        message = stringResource(if (count > 1) R.string.history_delete_stack_message else R.string.calendar_delete_entry_message),
+        confirmLabel = stringResource(R.string.delete),
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
+        destructive = true,
+        confirmTestTag = TrackingTestTags.DELETE_CONFIRM,
+        dismissTestTag = TrackingTestTags.DELETE_CANCEL,
     )
 }
 
@@ -2215,7 +2171,6 @@ internal fun TimeEntryFormSheet(
 
 private enum class TimeField { Start, End }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EntryTimePickerDialog(
     title: String,
@@ -2224,23 +2179,13 @@ private fun EntryTimePickerDialog(
     onDismiss: () -> Unit,
     onConfirm: (Int, Int) -> Unit,
 ) {
-    val state = rememberTimePickerState(initialHour = initial.hour, initialMinute = initial.minute, is24Hour = true)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            TimePicker(
-                state = state,
-                modifier = testTag?.let(Modifier::testTag) ?: Modifier,
-            )
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(state.hour, state.minute) },
-                modifier = Modifier.testTag(EditTimeEntryTestTags.TIME_PICKER_CONFIRM),
-            ) { Text(stringResource(R.string.done)) }
-        },
-        dismissButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    AppTimePickerDialog(
+        title = title,
+        initialHour = initial.hour,
+        initialMinute = initial.minute,
+        onDismiss = onDismiss,
+        onConfirm = onConfirm,
+        pickerModifier = testTag?.let(Modifier::testTag) ?: Modifier,
     )
 }
 

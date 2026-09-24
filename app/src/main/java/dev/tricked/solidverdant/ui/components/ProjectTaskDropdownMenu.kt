@@ -285,10 +285,10 @@ private fun GroupedSelectorRow(
     }
 }
 
-/** Leading icon for grouped selector rows, tinted like iOS settings glyphs. */
+/** Leading icon for grouped selector rows, tinted like [GroupedRow]'s icons so a section reads as one. */
 @Composable
 internal fun GroupedRowIcon(icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(Dimens.IconSmall))
+    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(Dimens.IconSmall))
 }
 
 /** A project's colour for its name in the picker, blended until legible on the dialog surface. */
@@ -496,15 +496,11 @@ internal fun PickerDialog(
                         Modifier.fillMaxWidth()
                     },
                 ) {
+                    // Close, then the title: the same header as the full-screen date-range picker.
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(start = Dimens.Space24, end = Dimens.Space8, top = Dimens.Space8),
+                        modifier = Modifier.fillMaxWidth().padding(start = Dimens.Space4, end = Dimens.Space8, top = Dimens.Space4),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.weight(1f),
-                        )
                         IconButton(
                             onClick = onClose,
                             modifier = Modifier
@@ -513,6 +509,11 @@ internal fun PickerDialog(
                         ) {
                             Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close))
                         }
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.weight(1f),
+                        )
                     }
                     OutlinedTextField(
                         value = searchQuery,
