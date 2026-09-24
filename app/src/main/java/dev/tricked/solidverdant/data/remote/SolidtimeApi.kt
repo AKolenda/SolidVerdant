@@ -32,6 +32,7 @@ import retrofit2.http.DELETE
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
@@ -79,6 +80,13 @@ interface SolidtimeApi {
      */
     @GET("api/v1/users/me")
     suspend fun getCurrentUser(): UserResponse
+
+    /**
+     * Identify the account behind freshly exchanged tokens before they are persisted, so cached
+     * data owned by a different account is cleared before any new-session request can touch it.
+     */
+    @GET("api/v1/users/me")
+    suspend fun getCurrentUserWithToken(@Header("Authorization") authorization: String): UserResponse
 
     /**
      * Get all memberships (organizations) for the current user

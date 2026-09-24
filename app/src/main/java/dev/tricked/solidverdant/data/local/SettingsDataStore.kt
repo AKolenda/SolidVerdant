@@ -84,6 +84,8 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         private const val USER_JSON = "user_json"
         private const val MEMBERSHIPS_JSON = "memberships_json"
         private const val CURRENT_MEMBERSHIP_ID = "current_membership_id"
+        private const val DATA_OWNER_USER_ID = "data_owner_user_id"
+        private const val DATA_OWNER_ENDPOINT = "data_owner_endpoint"
         private const val CACHED_APP_THEME = "app_theme"
         private const val CACHED_AUTO_CLEAR_ENTRY_FIELDS_AFTER_STOP = "auto_clear_entry_fields_after_stop"
         private const val CACHED_CLEAR_DESCRIPTION_AFTER_STOP = "clear_description_after_stop"
@@ -181,6 +183,25 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
      * (via [cacheAuth]/[clearCachedData]). The read is synchronous by design (first-frame pattern).
      */
     fun observeCachedAuth(): Flow<CachedAuth?> = authCacheChanges.map { getCachedAuth() }
+
+    /**
+     * The account (endpoint + user) that owns the cached Room data and outbox. Lives in the
+     * immediate cache so explicit logout ([clearCachedData]) forgets it together with the data,
+     * while an expired session keeps it to recognise the same account signing in again.
+     */
+    data class DataOwner(val endpoint: String?, val userId: String)
+
+    fun getDataOwner(): DataOwner? {
+        val userId = immediateCache.getString(DATA_OWNER_USER_ID, null) ?: return null
+        return DataOwner(immediateCache.getString(DATA_OWNER_ENDPOINT, null), userId)
+    }
+
+    fun setDataOwner(owner: DataOwner) {
+        immediateCache.edit()
+            .putString(DATA_OWNER_USER_ID, owner.userId)
+            .apply { if (owner.endpoint == null) remove(DATA_OWNER_ENDPOINT) else putString(DATA_OWNER_ENDPOINT, owner.endpoint) }
+            .apply()
+    }
 
     fun cacheCurrentMembership(id: String) {
         immediateCache.edit().putString(CURRENT_MEMBERSHIP_ID, id).apply()
