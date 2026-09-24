@@ -22,9 +22,18 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
+/**
+ * The app's date picker: Cancel as a text button and the confirm as a filled button. [confirmLabel]
+ * names what confirming does, e.g. "Go to date" for the history jump.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EntryDatePickerDialog(initialDate: LocalDate, onDismiss: () -> Unit, onConfirm: (LocalDate) -> Unit) {
+fun EntryDatePickerDialog(
+    initialDate: LocalDate,
+    onDismiss: () -> Unit,
+    onConfirm: (LocalDate) -> Unit,
+    confirmLabel: String = stringResource(R.string.save),
+) {
     val state = rememberDatePickerState(
         initialSelectedDateMillis = initialDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
     )
@@ -39,7 +48,7 @@ fun EntryDatePickerDialog(initialDate: LocalDate, onDismiss: () -> Unit, onConfi
                 },
                 modifier = Modifier.testTag(EditTimeEntryTestTags.DATE_PICKER_CONFIRM),
             ) {
-                Text(stringResource(R.string.save))
+                Text(confirmLabel)
             }
         },
         dismissButton = {

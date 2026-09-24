@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,6 +87,9 @@ fun GroupedDivider(inset: Dp = Dimens.Space16) {
 /**
  * One row of a [GroupedSection]. With [onClick] the row is a button and shows a chevron; [value]
  * renders right-aligned secondary text; [trailing] replaces both for custom controls.
+ * [leadingIconTint] colours a status icon (for example a sync failure); [onClickLabel] tells
+ * TalkBack what the tap does when the title alone does not; [singleLine] ellipsizes the title and
+ * subtitle, for rows showing user data such as an entry's description.
  */
 @Composable
 fun GroupedRow(
@@ -97,17 +101,27 @@ fun GroupedRow(
     destructive: Boolean = false,
     showChevron: Boolean = true,
     onClick: (() -> Unit)? = null,
+    leadingIconTint: Color? = null,
+    onClickLabel: String? = null,
+    singleLine: Boolean = false,
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val titleColor = when {
         destructive -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.onSurface
     }
+    val maxLines = if (singleLine) 1 else Int.MAX_VALUE
     Row(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = Dimens.MinTouchTarget)
-            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(role = Role.Button, onClickLabel = onClickLabel, onClick = onClick)
+                } else {
+                    Modifier
+                },
+            )
             .padding(horizontal = Dimens.Space16, vertical = Dimens.Space12),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Dimens.Space12),
@@ -116,17 +130,26 @@ fun GroupedRow(
             Icon(
                 imageVector = leadingIcon,
                 contentDescription = null,
-                tint = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                tint = leadingIconTint
+                    ?: if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(Dimens.IconSmall),
             )
         }
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, style = MaterialTheme.typography.bodyLarge, color = titleColor)
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = titleColor,
+                maxLines = maxLines,
+                overflow = TextOverflow.Ellipsis,
+            )
             if (subtitle != null) {
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = maxLines,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

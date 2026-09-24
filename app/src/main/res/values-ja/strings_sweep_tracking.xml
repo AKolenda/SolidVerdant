@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="start_timer_shortcuts">ショートカット</string>
+    <string name="start_timer_shortcut_project_task">%1$s · %2$s</string>
+    <string name="running_entry_ended_start_after_end">このタイマーはすでに停止しています。終了より前の開始時刻を選んでください。</string>
+    <string name="edit_active_entry_no_timer">実行中のタイマーはありません。</string>
+    <string name="split_time_outside_entry">%1$s から %2$s の間の時刻を選んでください。</string>
+</resources>
