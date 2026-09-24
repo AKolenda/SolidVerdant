@@ -44,7 +44,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.time.DayOfWeek
-import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -210,6 +209,14 @@ class InboxViewModel @Inject constructor(
                     tags = data.tags,
                     horizonChosen = data.settings.horizonChosen,
                     horizonStartMs = data.settings.horizonStartMs,
+                    horizonOption = matchHorizonOption(
+                        chosen = data.settings.horizonChosen,
+                        startMs = data.settings.horizonStartMs,
+                        nowMs = now,
+                        zone = zone,
+                        firstDayOfWeek = currentPolicy.firstDayOfWeek,
+                    ),
+                    firstDayOfWeek = currentPolicy.firstDayOfWeek,
                 )
             }
         }
@@ -442,17 +449,7 @@ class InboxViewModel @Inject constructor(
      */
     fun chooseHorizon(option: HorizonOption) {
         val policy = currentPolicy
-        val startMs: Long? = when (option) {
-            HorizonOption.TODAY ->
-                LocalDate.now(policy.zone).atStartOfDay(policy.zone).toInstant().toEpochMilli()
-            HorizonOption.THIS_WEEK -> {
-                val today = LocalDate.now(policy.zone)
-                val daysBack = ((today.dayOfWeek.value - policy.firstDayOfWeek.value) + DAYS_PER_WEEK) % DAYS_PER_WEEK
-                today.minusDays(daysBack.toLong()).atStartOfDay(policy.zone).toInstant().toEpochMilli()
-            }
-            HorizonOption.LAST_30_DAYS -> clock.nowMs() - TimeUnit.DAYS.toMillis(LAST_N_DAYS.toLong())
-            HorizonOption.EVERYTHING -> null
-        }
+        val startMs = horizonStartFor(option, clock.nowMs(), policy.zone, policy.firstDayOfWeek)
         viewModelScope.launch { inboxSettingsDataStore.setHorizonStart(startMs) }
     }
 
@@ -506,5 +503,3 @@ private const val MIN_GAP_MINUTES = 1
 private const val MAX_GAP_MINUTES = 24 * 60
 private const val MIN_DURATION_HOURS = 1
 private const val MAX_DURATION_HOURS = 24
-private const val DAYS_PER_WEEK = 7
-private const val LAST_N_DAYS = 30

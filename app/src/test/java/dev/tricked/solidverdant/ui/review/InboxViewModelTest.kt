@@ -163,10 +163,13 @@ class InboxViewModelTest {
 
         // Assert through uiState: the pipeline re-reads the store and unlocks the list, surfacing the
         // persisted bound. (The raw store round-trip is covered by InboxSettingsHorizonTest.)
-        val startOfToday = LocalDate.now(zone).atStartOfDay(zone).toInstant().toEpochMilli()
+        // "Today" is the start of the ViewModel clock's day in the account zone, not the host's.
+        val startOfToday = java.time.Instant.ofEpochMilli(NOW_MS).atZone(zone).toLocalDate()
+            .atStartOfDay(zone).toInstant().toEpochMilli()
         val state = vm.awaitState { it.horizonChosen }
         assertTrue("choosing unlocks the list", state.horizonChosen)
         assertEquals(startOfToday, state.horizonStartMs)
+        assertEquals("the settings show the choice selected", HorizonOption.TODAY, state.horizonOption)
     }
 
     @Test
@@ -180,6 +183,7 @@ class InboxViewModelTest {
         val state = vm.awaitState { it.horizonChosen }
         assertTrue(state.horizonChosen)
         assertNull("Everything clears the stored bound", state.horizonStartMs)
+        assertEquals(HorizonOption.EVERYTHING, state.horizonOption)
     }
 
     @Test

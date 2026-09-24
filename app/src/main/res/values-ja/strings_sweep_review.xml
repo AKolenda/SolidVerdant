@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ This Source Code Form is subject to the terms of the Mozilla Public
+  ~ License, v. 2.0. If a copy of the MPL was not distributed with this
+  ~ file, You can obtain one at https://mozilla.org/MPL/2.0/.
+  -->
+<resources>
+    <!-- Shared steppers -->
+    <string name="sweep_stepper_decrease">%1$sを減らす</string>
+    <string name="sweep_stepper_increase">%1$sを増やす</string>
+
+    <!-- Inbox settings -->
+    <string name="sweep_inbox_horizon_short_today">今日</string>
+    <string name="sweep_inbox_horizon_short_week">今週</string>
+    <string name="sweep_inbox_horizon_short_30_days">30日</string>
+    <string name="sweep_inbox_horizon_short_all">すべて</string>
+    <string name="sweep_inbox_thresholds">しきい値</string>
+    <string name="sweep_inbox_work_start_title">勤務開始時刻</string>
+    <string name="sweep_inbox_work_end_title">勤務終了時刻</string>
+    <string name="sweep_inbox_work_window_invalid">勤務終了は開始より後にしてください。変更は保存されていません。</string>
+    <string name="sweep_inbox_work_days_none">なし</string>
+    <string name="sweep_inbox_work_days_every">毎日</string>
+    <string name="sweep_inbox_work_days_range">%1$s〜%2$s</string>
+</resources>

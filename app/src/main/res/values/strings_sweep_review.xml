@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ This Source Code Form is subject to the terms of the Mozilla Public
+  ~ License, v. 2.0. If a copy of the MPL was not distributed with this
+  ~ file, You can obtain one at https://mozilla.org/MPL/2.0/.
+  -->
+<resources>
+    <!-- Review, settings sub-screens, sync, privacy, server config and tile: grouped-list sweep. -->
+
+    <!-- Shared steppers -->
+    <string name="sweep_stepper_decrease">Decrease %1$s</string>
+    <string name="sweep_stepper_increase">Increase %1$s</string>
+
+    <!-- Inbox settings -->
+    <string name="sweep_inbox_horizon_short_today">Today</string>
+    <string name="sweep_inbox_horizon_short_week">Week</string>
+    <string name="sweep_inbox_horizon_short_30_days">30 days</string>
+    <string name="sweep_inbox_horizon_short_all">All</string>
+    <string name="sweep_inbox_thresholds">Thresholds</string>
+    <string name="sweep_inbox_work_start_title">Working day starts</string>
+    <string name="sweep_inbox_work_end_title">Working day ends</string>
+    <string name="sweep_inbox_work_window_invalid">The working day must end after it starts. Nothing was changed.</string>
+    <string name="sweep_inbox_work_days_none">None</string>
+    <string name="sweep_inbox_work_days_every">Every day</string>
+    <string name="sweep_inbox_work_days_range">%1$s–%2$s</string>
+</resources>
