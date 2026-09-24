@@ -626,7 +626,8 @@ class TrackingViewModel @Inject constructor(
                 isRefreshing = userInitiated,
                 error = null,
             )
-            val refreshResult = timeEntryRepository.refreshAll(organizationId, memberId)
+            // Pull-to-refresh also refetches the catalogue; automatic refreshes reuse a fresh one.
+            val refreshResult = timeEntryRepository.refreshAll(organizationId, memberId, forceCatalog = userInitiated)
             // Refresh implementations and test doubles may finish after cancellation. Do not let
             // that stale completion start a monitor or clear a newer screen's refresh state.
             currentCoroutineContext().ensureActive()
@@ -1705,6 +1706,7 @@ class TrackingViewModel @Inject constructor(
                     taskId = _uiState.value.editingTaskId,
                     description = _uiState.value.editingDescription,
                     tagIds = _uiState.value.editingTags,
+                    billable = _uiState.value.editingBillable,
                 )
                 // startEntry returns the row that was committed to Room. Project that durable
                 // value before notification/widget side effects so a fresh-login Stop action
@@ -1987,6 +1989,7 @@ class TrackingViewModel @Inject constructor(
                     taskId = _uiState.value.editingTaskId,
                     description = _uiState.value.editingDescription,
                     tagIds = _uiState.value.editingTags,
+                    billable = _uiState.value.editingBillable,
                 )
                 syncTrigger.requestSync()
 

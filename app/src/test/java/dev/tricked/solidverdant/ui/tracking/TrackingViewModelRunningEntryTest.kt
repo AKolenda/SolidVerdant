@@ -247,7 +247,8 @@ class TrackingViewModelRunningEntryTest {
         dispatcher.scheduler.runCurrent()
 
         coVerify(exactly = 1) {
-            repository.startEntry("org", "member", "user", "project-2", null, "Typed in details", listOf("tag-1"))
+            // The resumed timer keeps the details' billable choice too.
+            repository.startEntry("org", "member", "user", "project-2", null, "Typed in details", listOf("tag-1"), billable = true)
         }
         dispose(viewModel)
     }
