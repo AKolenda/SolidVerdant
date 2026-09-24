@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="start_timer_shortcuts">Snelkoppelingen</string>
+    <string name="start_timer_shortcut_project_task">%1$s · %2$s</string>
+    <string name="running_entry_ended_start_after_end">Deze timer is al gestopt. Kies een begintijd vóór het einde.</string>
+    <string name="edit_active_entry_no_timer">Er loopt geen timer.</string>
+    <string name="split_time_outside_entry">Kies een tijd tussen %1$s en %2$s.</string>
+</resources>

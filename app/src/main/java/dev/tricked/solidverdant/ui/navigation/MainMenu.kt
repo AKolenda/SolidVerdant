@@ -22,12 +22,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.Timer
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -59,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Membership
+import dev.tricked.solidverdant.ui.components.OptionPickerDialog
 import dev.tricked.solidverdant.ui.theme.Dimens
 
 /** Opens the side menu from a destination's ☰ button. */
@@ -216,63 +214,61 @@ private fun OrganizationSwitcher(
     canSwitch: Boolean,
     onMembershipChange: (Membership) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var pickerOpen by remember { mutableStateOf(false) }
     val switchDescription = stringResource(R.string.switch_organization)
-    Box {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = Dimens.MinTouchTarget)
-                .testTag(MAIN_MENU_ORGANIZATION_TAG)
-                .then(
-                    if (canSwitch) {
-                        Modifier
-                            .clickable { expanded = true }
-                            .semantics {
-                                role = Role.Button
-                                contentDescription = switchDescription
-                            }
-                    } else {
-                        Modifier
-                    },
-                ),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = organizationName,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = Dimens.MinTouchTarget)
+            .testTag(MAIN_MENU_ORGANIZATION_TAG)
+            .then(
+                if (canSwitch) {
+                    Modifier
+                        .clickable { pickerOpen = true }
+                        .semantics {
+                            role = Role.Button
+                            contentDescription = switchDescription
+                        }
+                } else {
+                    Modifier
+                },
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = organizationName,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (canSwitch) {
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (canSwitch) {
-                Icon(
-                    imageVector = Icons.Default.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            memberships.forEach { membership ->
-                DropdownMenuItem(
-                    text = { Text(membership.organization.name) },
-                    onClick = {
-                        expanded = false
-                        onMembershipChange(membership)
-                    },
-                    trailingIcon = if (membership.id == currentMembershipId) {
-                        { Icon(imageVector = Icons.Default.Done, contentDescription = null) }
-                    } else {
-                        null
-                    },
-                )
-            }
         }
     }
+    // The same single-choice picker as Settings → Organization. It closes if switching becomes
+    // unavailable meanwhile, e.g. a timer starts.
+    if (pickerOpen && canSwitch) {
+        OptionPickerDialog(
+            title = switchDescription,
+            options = memberships,
+            selected = memberships.firstOrNull { it.id == currentMembershipId },
+            label = { it.organization.name },
+            onSelect = onMembershipChange,
+            onDismiss = { pickerOpen = false },
+            optionTag = { mainMenuOrganizationOptionTag(it.id) },
+        )
+    }
 }
+
+/** Test tag of one organization in the side-menu organization picker. */
+fun mainMenuOrganizationOptionTag(membershipId: String): String = "${MAIN_MENU_ORGANIZATION_TAG}_$membershipId"
 
 /** Up to two initials for the avatar, e.g. "Ada Lovelace" -> "AL". */
 internal fun initialsOf(name: String): String = name.trim()

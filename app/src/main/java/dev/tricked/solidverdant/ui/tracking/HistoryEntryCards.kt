@@ -173,28 +173,23 @@ internal fun HistoryEntryCard(
     project: Project?,
     task: Task?,
     client: Client?,
-    syncStatusByEntryId: Map<String, TimeEntryRepository.EntrySyncStatus>,
+    status: HistoryCardStatus,
     onEdit: (TimeEntry) -> Unit,
     onDelete: (TimeEntry) -> Unit,
     onDuplicate: ((TimeEntry) -> Unit)?,
     onRetrySync: (TimeEntry) -> Unit,
     onContinue: ((TimeEntry) -> Unit)?,
     onDeleteStack: ((List<TimeEntry>) -> Unit)? = null,
-    reviewIssues: Map<String, Set<EntryReviewIssue>> = emptyMap(),
 ) {
     val lead = group.lead
-    val groupIssues = remember(group.entries, reviewIssues) {
-        group.entries.flatMapTo(sortedSetOf()) { reviewIssues[it.id].orEmpty() }
-    }
+    val groupIssues = status.reviewIssues
     val stacked = group.entries.size > 1
     var expanded by rememberSaveable(group.key) { mutableStateOf(false) }
     val shape = MaterialTheme.shapes.large
-    val groupSyncStatus = remember(group.entries, syncStatusByEntryId) {
-        worstSyncStatus(group.entries.mapNotNull { syncStatusByEntryId[it.id] })
-    }
+    val groupSyncStatus = status.groupSyncStatus
     val retryGroup = {
         group.entries
-            .filter { entry -> syncStatusByEntryId[entry.id]?.let(::canRetrySync) == true }
+            .filterIndexed { index, _ -> status.entrySyncStatuses.getOrNull(index)?.let(::canRetrySync) == true }
             .forEach(onRetrySync)
     }
     val toggleLabel = if (expanded) {
@@ -284,7 +279,7 @@ internal fun HistoryEntryCard(
                             entry = entry,
                             seconds = group.entrySeconds[index],
                             zone = zone,
-                            syncStatus = syncStatusByEntryId[entry.id],
+                            syncStatus = status.entrySyncStatuses.getOrNull(index),
                             onEdit = onEdit,
                             onDelete = onDelete,
                             onDuplicate = onDuplicate,

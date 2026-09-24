@@ -19,10 +19,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Pause
@@ -31,18 +29,15 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.RestartAlt
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -58,14 +53,16 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.graphics.toColorInt
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
+import dev.tricked.solidverdant.ui.components.AppSheet
 import dev.tricked.solidverdant.ui.components.GroupedDivider
 import dev.tricked.solidverdant.ui.components.GroupedRow
+import dev.tricked.solidverdant.ui.components.GroupedSection
 import dev.tricked.solidverdant.ui.components.GroupedSwitchRow
 import dev.tricked.solidverdant.ui.components.SelectorStyle
 import dev.tricked.solidverdant.ui.components.TagsSelector
@@ -73,15 +70,38 @@ import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.ui.theme.readableOn
 import dev.tricked.solidverdant.ui.theme.tabular
 
-/**
- * The running timer, docked at the bottom of Time Tracker: description and
- * "Project: Task" on the left, then the elapsed time, pause or resume, and the orange-red stop
- * button. Tapping the details or swiping the bar up opens the running entry's full details.
- */
+/** [ActiveTimerBar] with a fixed elapsed time, for previews and screenshots. */
 @Composable
 internal fun ActiveTimerBar(
     uiState: TrackingUiState,
     elapsedSeconds: Long,
+    onStop: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onEditActiveEntry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ActiveTimerBar(
+        uiState = uiState,
+        elapsedSeconds = { elapsedSeconds },
+        onStop = onStop,
+        onPause = onPause,
+        onResume = onResume,
+        onEditActiveEntry = onEditActiveEntry,
+        modifier = modifier,
+    )
+}
+
+/**
+ * The running timer, docked at the bottom of Time Tracker: description and
+ * "Project: Task" on the left, then the elapsed time, pause or resume, and the orange-red stop
+ * button. Tapping the details or swiping the bar up opens the running entry's full details.
+ * [elapsedSeconds] is read only by the clock text, so the per-second tick redraws just that text.
+ */
+@Composable
+internal fun ActiveTimerBar(
+    uiState: TrackingUiState,
+    elapsedSeconds: () -> Long,
     onStop: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
@@ -140,7 +160,7 @@ internal fun ActiveTimerBar(
 @Composable
 private fun ActiveTimerRow(
     uiState: TrackingUiState,
-    elapsedSeconds: Long,
+    elapsedSeconds: () -> Long,
     canEdit: Boolean,
     barColor: Color,
     onStop: () -> Unit,
@@ -198,10 +218,9 @@ private fun ActiveTimerRow(
             ProjectTaskLine(project = project, task = task, background = barColor)
         }
         if (uiState.isTracking) {
-            Text(
-                text = formatElapsedTime(elapsedSeconds),
+            ElapsedText(
+                elapsedSeconds = elapsedSeconds,
                 style = MaterialTheme.typography.titleMedium.tabular(),
-                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.testTag(TrackingTestTags.ELAPSED_TIMER),
             )
             FilledTonalIconButton(
@@ -243,13 +262,35 @@ private fun ActiveTimerRow(
     }
 }
 
+/** [RunningTimerControls] with a fixed elapsed time, for previews and tests. */
+@Composable
+internal fun RunningTimerControls(
+    elapsedSeconds: Long,
+    isPaused: Boolean,
+    enabled: Boolean,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    RunningTimerControls(
+        elapsedSeconds = { elapsedSeconds },
+        isPaused = isPaused,
+        enabled = enabled,
+        onPause = onPause,
+        onResume = onResume,
+        onStop = onStop,
+        modifier = modifier,
+    )
+}
+
 /**
  * Top of the running entry's details: the live elapsed time with pause or resume and stop, so the
  * timer stays controllable while its description, project, tags and start are edited below.
  */
 @Composable
 internal fun RunningTimerControls(
-    elapsedSeconds: Long,
+    elapsedSeconds: () -> Long,
     isPaused: Boolean,
     enabled: Boolean,
     onPause: () -> Unit,
@@ -272,11 +313,7 @@ internal fun RunningTimerControls(
                 style = MaterialTheme.typography.labelMedium,
                 color = if (isPaused) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
             )
-            Text(
-                text = formatElapsedTime(elapsedSeconds),
-                style = MaterialTheme.typography.displaySmall.tabular(),
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+            ElapsedText(elapsedSeconds = elapsedSeconds, style = MaterialTheme.typography.displaySmall.tabular())
         }
         if (isPaused) {
             FilledIconButton(
@@ -316,6 +353,17 @@ internal fun RunningTimerControls(
             Icon(Icons.Default.Stop, contentDescription = stringResource(R.string.stop))
         }
     }
+}
+
+/** The ticking clock; it alone reads [elapsedSeconds], so each second recomposes only this text. */
+@Composable
+private fun ElapsedText(elapsedSeconds: () -> Long, style: TextStyle, modifier: Modifier = Modifier) {
+    Text(
+        text = formatElapsedTime(elapsedSeconds()),
+        style = style,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = modifier,
+    )
 }
 
 private const val HANDLE_ALPHA = 0.4f
@@ -410,36 +458,24 @@ private fun FabOption(label: String, button: @Composable () -> Unit) {
 }
 
 /**
- * Start-timer sheet opened from the new-entry button: the next entry's fields, then [shortcuts]
- * (continue the last entry, favourites) for starting in one tap.
+ * Start-timer sheet opened from the new-entry button, in the app's sheet layout: the next entry's
+ * fields, then the shortcuts (continue the last entry, favourites) for starting in one tap.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun StartTimerSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = Dimens.Space24)
-                .testTag(TrackingTestTags.START_TIMER_SHEET),
-        ) {
-            Text(
-                text = stringResource(R.string.start_timer_title),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = Dimens.Space16, vertical = Dimens.Space8),
-            )
-            content()
-        }
-    }
+    AppSheet(
+        title = stringResource(R.string.start_timer_title),
+        onDismiss = onDismiss,
+        modifier = Modifier.testTag(TrackingTestTags.START_TIMER_SHEET),
+        content = content,
+    )
 }
 
 /**
- * The next entry's fields: a borderless "what are you working on" field with the play button,
- * then grouped project, task, tag and billable rows, and a reset row when fields were kept after
- * the last stop.
+ * The next entry's fields in grouped sections, like the entry form: a borderless "what are you
+ * working on" field with the play button, then project, task, tag and billable rows, and a reset
+ * row when fields were kept after the last stop. [draft] carries the typed fields; the Time
+ * Tracker passes it separately from [uiState] so typing recomposes only this form.
  */
 @Composable
 internal fun StartTimerForm(
@@ -452,84 +488,86 @@ internal fun StartTimerForm(
     onTagsChange: (List<String>) -> Unit,
     onBillableChange: (Boolean) -> Unit,
     onStart: () -> Unit,
+    draft: EntryDraft = uiState.entryDraft(),
 ) {
     val haptic = LocalHapticFeedback.current
     val enabled = !uiState.isMutating
-    Column(Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = Dimens.Space4, end = Dimens.Space12),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(Modifier.weight(1f)) {
-                DescriptionFieldWithSuggestions(
-                    description = uiState.editingDescription,
-                    onDescriptionChange = onDescriptionChange,
-                    timeEntries = uiState.timeEntries,
-                    projects = uiState.projects,
-                    tags = uiState.tags,
-                    enabled = enabled,
-                    borderless = true,
-                    onEntryCopied = { entry ->
-                        onDescriptionChange(entry.description ?: "")
-                        onProjectChange(entry.projectId)
-                        onTaskChange(entry.taskId)
-                        onTagsChange(entry.tags.map { it.id })
-                        onBillableChange(entry.billable)
-                    },
-                )
-            }
-            FilledIconButton(
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onStart()
-                },
-                enabled = enabled,
-                modifier = Modifier.size(Dimens.MinTouchTarget).testTag(TrackingTestTags.START_BUTTON),
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Dimens.Space16)) {
+        GroupedSection {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(end = Dimens.Space8),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.start))
+                Box(Modifier.weight(1f)) {
+                    DescriptionFieldWithSuggestions(
+                        description = draft.description,
+                        onDescriptionChange = onDescriptionChange,
+                        timeEntries = uiState.timeEntries,
+                        projects = uiState.projects,
+                        tags = uiState.tags,
+                        enabled = enabled,
+                        borderless = true,
+                        onEntryCopied = { entry ->
+                            onDescriptionChange(entry.description ?: "")
+                            onProjectChange(entry.projectId)
+                            onTaskChange(entry.taskId)
+                            onTagsChange(entry.tags.map { it.id })
+                            onBillableChange(entry.billable)
+                        },
+                    )
+                }
+                FilledIconButton(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onStart()
+                    },
+                    enabled = enabled,
+                    modifier = Modifier.size(Dimens.MinTouchTarget).testTag(TrackingTestTags.START_BUTTON),
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.start))
+                }
             }
         }
-        GroupedDivider()
-        ProjectTaskDropdown(
-            selectedProjectId = uiState.editingProjectId,
-            selectedTaskId = uiState.editingTaskId,
-            projects = uiState.projects,
-            tasks = uiState.tasks,
-            onSelectionChanged = { projectId, taskId ->
-                onProjectChange(projectId)
-                onTaskChange(taskId)
-            },
-            enabled = enabled,
-            style = SelectorStyle.Grouped,
-        )
-        GroupedDivider(inset = Dimens.SettingsIconInset)
-        TagsSelector(
-            selectedTagIds = uiState.editingTags,
-            availableTags = uiState.tags,
-            onTagsChanged = onTagsChange,
-            enabled = enabled,
-            style = SelectorStyle.Grouped,
-        )
-        GroupedDivider(inset = Dimens.SettingsIconInset)
-        GroupedSwitchRow(
-            title = stringResource(R.string.billable),
-            leadingIcon = Icons.Outlined.AttachMoney,
-            checked = uiState.editingBillable,
-            onCheckedChange = onBillableChange,
-            enabled = enabled,
-        )
-        val hasRetainedFields = uiState.editingDescription.isNotEmpty() ||
-            uiState.editingProjectId != null ||
-            uiState.editingTaskId != null
-        if (!autoClearEntryFieldsAfterStop && hasRetainedFields) {
-            GroupedDivider(inset = Dimens.SettingsIconInset)
-            GroupedRow(
-                title = stringResource(R.string.reset_entry_fields),
-                leadingIcon = Icons.Outlined.RestartAlt,
-                onClick = if (enabled) onResetEntryFields else null,
-                showChevron = false,
-                modifier = Modifier.testTag(TrackingTestTags.RESET_FIELDS_BUTTON),
+        GroupedSection {
+            ProjectTaskDropdown(
+                selectedProjectId = draft.projectId,
+                selectedTaskId = draft.taskId,
+                projects = uiState.projects,
+                tasks = uiState.tasks,
+                onSelectionChanged = { projectId, taskId ->
+                    onProjectChange(projectId)
+                    onTaskChange(taskId)
+                },
+                enabled = enabled,
+                style = SelectorStyle.Grouped,
             )
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            TagsSelector(
+                selectedTagIds = draft.tags,
+                availableTags = uiState.tags,
+                onTagsChanged = onTagsChange,
+                enabled = enabled,
+                style = SelectorStyle.Grouped,
+            )
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            GroupedSwitchRow(
+                title = stringResource(R.string.billable),
+                leadingIcon = Icons.Outlined.AttachMoney,
+                checked = draft.billable,
+                onCheckedChange = onBillableChange,
+                enabled = enabled,
+            )
+            val hasRetainedFields = draft.description.isNotEmpty() || draft.projectId != null || draft.taskId != null
+            if (!autoClearEntryFieldsAfterStop && hasRetainedFields) {
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedRow(
+                    title = stringResource(R.string.reset_entry_fields),
+                    leadingIcon = Icons.Outlined.RestartAlt,
+                    onClick = if (enabled) onResetEntryFields else null,
+                    showChevron = false,
+                    modifier = Modifier.testTag(TrackingTestTags.RESET_FIELDS_BUTTON),
+                )
+            }
         }
     }
 }
