@@ -181,8 +181,20 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     /**
      * Emits the current [getCachedAuth] immediately and re-emits whenever the cached auth changes
      * (via [cacheAuth]/[clearCachedData]). The read is synchronous by design (first-frame pattern).
+     *
+     * Every screen's temporal policy and org scope subscribes here, and each subscriber used to
+     * decode the user and membership JSON again on every change. The decode now happens once per
+     * change and is shared; unchanged values are not re-emitted.
      */
-    fun observeCachedAuth(): Flow<CachedAuth?> = authCacheChanges.map { getCachedAuth() }
+    fun observeCachedAuth(): Flow<CachedAuth?> = authCacheChanges.map(::cachedAuthFor).distinctUntilChanged()
+
+    /** The decoded auth cache for one [authCacheChanges] version. */
+    @Volatile private var decodedAuth: Pair<Int, CachedAuth?>? = null
+
+    private fun cachedAuthFor(version: Int): CachedAuth? {
+        decodedAuth?.let { (decodedVersion, auth) -> if (decodedVersion == version) return auth }
+        return getCachedAuth().also { decodedAuth = version to it }
+    }
 
     /**
      * The account (endpoint + user) that owns the cached Room data and outbox. Lives in the
@@ -205,6 +217,8 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
 
     fun cacheCurrentMembership(id: String) {
         immediateCache.edit().putString(CURRENT_MEMBERSHIP_ID, id).apply()
+        // Part of CachedAuth: observers (and the shared decode) must see the new selection.
+        authCacheChanges.value += 1
     }
 
     fun getCachedAppTheme(): AppThemeMode = immediateCache.getString(CACHED_APP_THEME, null)
