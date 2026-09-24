@@ -79,7 +79,6 @@ import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -102,6 +101,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Project
@@ -171,7 +171,7 @@ fun CalendarScreen(
             onInitialDateConsumed()
         }
     }
-    val state by viewModel.uiState.collectAsState()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
     val syncOperationByEntryId = remember(state.syncOperations) { worstSyncOperationsByEntryId(state.syncOperations) }
     var editing by remember { mutableStateOf<TimeEntry?>(null) }
     var creatingRange by remember { mutableStateOf<CalendarTimeRange?>(null) }
@@ -748,7 +748,7 @@ private fun CalendarEntryActionButton(
 
 @Composable
 private fun CalendarRunningTimerCard(entry: TimeEntry, elapsedSeconds: StateFlow<Long>?, onEdit: () -> Unit) {
-    val elapsedState = elapsedSeconds?.collectAsState()
+    val elapsedState = elapsedSeconds?.collectAsStateWithLifecycle()
     val liveElapsedSeconds = elapsedState?.value ?: run {
         val now = rememberCalendarNow(secondPrecision = true)
         entryDurationSeconds(entry, now)

@@ -26,17 +26,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -103,9 +106,11 @@ class CalendarViewModel @Inject constructor(
 
     private var organizationId: String? = null
     private var memberId: String? = null
-    private var entriesJob: Job? = null
-    private var syncOperationsJob: Job? = null
     private var visibleLoadJob: Job? = null
+
+    // The organization whose Room entries and sync state the calendar shows. The Room streams are
+    // only collected while the screen observes [uiState] (see there), not for the ViewModel's life.
+    private val organizationInput = MutableStateFlow<String?>(null)
 
     // When each month last finished loading, per organization and zone. Navigating within the
     // same weeks (the day view pages often) reuses the Room copy instead of re-downloading it.
@@ -125,6 +130,8 @@ class CalendarViewModel @Inject constructor(
     private fun nowInstant(): Instant = Instant.ofEpochMilli(clock.nowMs())
     private fun today(): LocalDate = nowInstant().atZone(zone).toLocalDate()
 
+    // Navigation, settings and overlay state. The Room-backed entries and sync operations are
+    // joined onto it in [uiState].
     private val _uiState = MutableStateFlow(
         CalendarUiState(
             zone = currentPolicy.zone,
@@ -134,7 +141,28 @@ class CalendarViewModel @Inject constructor(
             weekAnchor = today(),
         ),
     )
-    val uiState: StateFlow<CalendarUiState> = _uiState.asStateFlow()
+
+    private data class EntrySnapshot(
+        val organizationId: String?,
+        val buckets: Map<LocalDate, DayBucket> = emptyMap(),
+        val syncOperations: List<TimeEntryRepository.SyncOperation> = emptyList(),
+    )
+
+    // Day buckets are rebuilt when Room changes or the account zone moves the day boundaries.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val entrySnapshots: Flow<EntrySnapshot> =
+        combine(organizationInput, _uiState.map { it.zone }.distinctUntilChanged()) { org, bucketZone -> org to bucketZone }
+            .distinctUntilChanged()
+            .flatMapLatest { (org, bucketZone) ->
+                if (org == null) {
+                    flowOf(EntrySnapshot(organizationId = null))
+                } else {
+                    combine(
+                        reader.observeTimeEntries(org).map { entries -> buildDayBuckets(entries, bucketZone, nowInstant()) },
+                        reader.observeSyncOperations(org),
+                    ) { buckets, operations -> EntrySnapshot(org, buckets, operations) }
+                }
+            }
 
     // Overlay query inputs kept as flows so event queries react without recollecting time entries.
     // Opens on a single day; Week and Month are in the overflow menu.
@@ -237,56 +265,35 @@ class CalendarViewModel @Inject constructor(
         viewModelScope.launch { observeOverlayEvents() }
     }
 
+    /**
+     * What the calendar shows. The Room entry and sync-state streams behind it are collected only
+     * while the screen observes this (plus a short grace period for configuration changes), so
+     * after one visit the calendar no longer rebuilds its day buckets on every database write while
+     * another tab is open. Data from a previous organization is never shown under the new one.
+     */
+    val uiState: StateFlow<CalendarUiState> =
+        combine(_uiState, organizationInput, entrySnapshots) { control, org, snapshot ->
+            val data = snapshot.takeIf { it.organizationId == org }
+            val buckets = data?.buckets.orEmpty()
+            control.copy(
+                bucketsByDate = buckets,
+                syncOperations = data?.syncOperations.orEmpty(),
+                // A failed refresh over cached days keeps them visible with a notice.
+                isStale = control.loadError && buckets.isNotEmpty(),
+            )
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STATE_STOP_TIMEOUT_MS), _uiState.value)
+
     fun setOrganization(organizationId: String, memberId: String = "") {
-        if (this.organizationId == organizationId && this.memberId == memberId && entriesJob?.isActive == true) {
+        if (this.organizationId == organizationId && this.memberId == memberId) {
+            // The screen came back: refresh only the months that went stale while it was away.
+            loadForVisibleDays()
             return
         }
-        val organizationChanged = this.organizationId != organizationId || this.memberId != memberId
         this.organizationId = organizationId
         this.memberId = memberId
-        entriesJob?.cancel()
-        syncOperationsJob?.cancel()
-        if (organizationChanged) {
-            visibleLoadJob?.cancel()
-            _uiState.update {
-                it.copy(
-                    bucketsByDate = emptyMap(),
-                    syncOperations = emptyList(),
-                    isLoading = true,
-                    loadError = false,
-                    isStale = false,
-                )
-            }
-        }
-        entriesJob = viewModelScope.launch {
-            reader.observeTimeEntries(organizationId).collect { entries ->
-                // Aggregate off the main thread: a large month can hold thousands of entries and
-                // groupBy/sumOf here would otherwise jank or ANR the UI thread.
-                val buckets = withContext(Dispatchers.Default) {
-                    val now = nowInstant()
-                    entries
-                        .flatMap { entry -> entryDaySlices(entry, zone, now).map { slice -> slice to entry } }
-                        .groupBy({ it.first.date }, { it })
-                        .mapValues { (date, daySlices) ->
-                            DayBucket(
-                                date = date,
-                                entries = daySlices.map { it.second }.sortedByDescending { it.start },
-                                totalSeconds = daySlices
-                                    .filter { (_, entry) -> isWorkTimeEntry(entry) }
-                                    .sumOf { it.first.seconds },
-                            )
-                        }
-                }
-                _uiState.update { it.copy(bucketsByDate = buckets) }
-            }
-        }
-        syncOperationsJob = viewModelScope.launch {
-            reader.observeSyncOperations(organizationId).collect { operations ->
-                if (this@CalendarViewModel.organizationId == organizationId) {
-                    _uiState.update { it.copy(syncOperations = operations) }
-                }
-            }
-        }
+        visibleLoadJob?.cancel()
+        _uiState.update { it.copy(isLoading = true, loadError = false, isStale = false) }
+        organizationInput.value = organizationId
         loadForVisibleDays()
     }
 
@@ -375,11 +382,12 @@ class CalendarViewModel @Inject constructor(
     fun previousMonth() = moveMonth(-1)
 
     private fun moveMonth(delta: Long) {
+        val loadedDays = uiState.value.bucketsByDate.keys
         _uiState.update { state ->
             val month = state.visibleMonth.plusMonths(delta)
             val preferredDay = state.selectedDate.dayOfMonth.coerceAtMost(month.lengthOfMonth())
             val preferredDate = month.atDay(preferredDay)
-            val dateWithEntries = state.bucketsByDate.keys
+            val dateWithEntries = loadedDays
                 .filter { YearMonth.from(it) == month }
                 .minByOrNull { kotlin.math.abs(it.dayOfMonth - preferredDay) }
             val selected = dateWithEntries ?: preferredDate
@@ -567,19 +575,18 @@ class CalendarViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 if (requestGeneration == visibleLoadGeneration && this@CalendarViewModel.organizationId == org) {
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            loadError = true,
-                            isStale = it.bucketsByDate.isNotEmpty(),
-                        )
-                    }
+                    // uiState marks the page stale when cached days are still on screen.
+                    _uiState.update { it.copy(isLoading = false, loadError = true) }
                 }
                 return@launch
             }
             if (requestGeneration == visibleLoadGeneration && this@CalendarViewModel.organizationId == org) {
                 _uiState.update { it.copy(isLoading = false, loadError = false, isStale = false) }
             }
+            // The neighbours wait until the visible page has loaded and had a moment to render, so
+            // their Room writes do not rebuild the page the user is looking at, and quick paging
+            // (which cancels this job) does not start downloads for months it passes through.
+            if (stalePrefetch.isNotEmpty()) delay(PREFETCH_SETTLE_MS)
             stalePrefetch.forEach { month ->
                 try {
                     reader.loadMonth(org, member, month, state.zone)
@@ -595,7 +602,7 @@ class CalendarViewModel @Inject constructor(
         }
     }
 
-    fun entriesForSelectedDay(): List<TimeEntry> = _uiState.value.bucketsByDate[_uiState.value.selectedDate]?.entries ?: emptyList()
+    fun entriesForSelectedDay(): List<TimeEntry> = uiState.value.let { it.bucketsByDate[it.selectedDate]?.entries } ?: emptyList()
 
     /** Cancel Main-bound collectors so JVM tests can reset their test dispatcher safely. */
     @VisibleForTesting
@@ -608,9 +615,39 @@ class CalendarViewModel @Inject constructor(
 
 private const val FULL_WEEK_DAYS = 7
 
-/** A month loaded this recently is served from Room when navigating; Retry always reloads it. */
-private const val MONTH_FRESH_MS = 60_000L
+/**
+ * A month loaded this recently is served from Room when navigating; Retry always reloads it, and
+ * local edits reach Room directly, so the calendar does not need to re-download a month it has.
+ */
+private const val MONTH_FRESH_MS = 5 * 60_000L
+
+/** How long the visible page settles before the neighbouring months are prefetched. */
+private const val PREFETCH_SETTLE_MS = 500L
+
+/** Keep the Room streams through a configuration change, then stop them off screen. */
+private const val STATE_STOP_TIMEOUT_MS = 5_000L
 private const val MIN_VISIBLE_DAYS = 1
+
+/**
+ * Groups [entries] into local-day buckets for [zone]; a multi-day entry appears in every day it
+ * covers with only that day's seconds counted. Runs off the main thread: a large month can hold
+ * thousands of entries and grouping them on the UI thread would jank or ANR.
+ */
+internal suspend fun buildDayBuckets(entries: List<TimeEntry>, zone: ZoneId, now: Instant): Map<LocalDate, DayBucket> =
+    withContext(Dispatchers.Default) {
+        entries
+            .flatMap { entry -> entryDaySlices(entry, zone, now).map { slice -> slice to entry } }
+            .groupBy({ it.first.date }, { it })
+            .mapValues { (date, daySlices) ->
+                DayBucket(
+                    date = date,
+                    entries = daySlices.map { it.second }.sortedByDescending { it.start },
+                    totalSeconds = daySlices
+                        .filter { (_, entry) -> isWorkTimeEntry(entry) }
+                        .sumOf { it.first.seconds },
+                )
+            }
+    }
 
 internal fun monthsWithAdjacentPeriods(visibleMonths: List<YearMonth>): List<YearMonth> {
     if (visibleMonths.isEmpty()) return emptyList()

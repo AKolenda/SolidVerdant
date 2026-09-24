@@ -17,19 +17,25 @@ import dev.tricked.solidverdant.data.repository.TimeEntryReader
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.time.TemporalPolicy
 import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
+import dev.tricked.solidverdant.util.Clock
 import dev.tricked.solidverdant.util.SystemClock
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -49,15 +55,22 @@ class CalendarViewModelTest {
 
     private val viewModels = mutableListOf<CalendarViewModel>()
 
+    // uiState only collects Room while observed, so most tests observe it like the screen does.
+    private val screenObservers = mutableListOf<Job>()
+
     @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
 
     @After
     fun tearDown() {
+        screenObservers.forEach { it.cancel() }
+        screenObservers.clear()
         val jobs = viewModels.mapNotNull { it.cancelScopeForTest() }
         viewModels.clear()
         runBlocking { jobs.forEach { it.join() } }
         Dispatchers.resetMain()
     }
+
+    private fun observe(model: CalendarViewModel): Job = CoroutineScope(Dispatchers.Main).launch { model.uiState.collect {} }
 
     private class FakeReader(
         private val entries: List<TimeEntry>,
@@ -144,6 +157,10 @@ class CalendarViewModelTest {
         }
     }
 
+    private class MutableClock(var nowMs: Long) : Clock {
+        override fun nowMs(): Long = nowMs
+    }
+
     private fun entry(id: String, start: String, dur: Int) = TimeEntry(
         id = id,
         userId = "u",
@@ -172,7 +189,12 @@ class CalendarViewModelTest {
         source: CalendarEventSource = FakeEventSource(),
         settings: CalendarOverlaySettings = FakeOverlaySettings(),
         temporalPolicyProvider: TemporalPolicyProvider = policyProvider(),
-    ) = CalendarViewModel(reader, source, settings, temporalPolicyProvider, SystemClock()).also { viewModels += it }
+        observed: Boolean = true,
+        clock: Clock = SystemClock(),
+    ) = CalendarViewModel(reader, source, settings, temporalPolicyProvider, clock).also { model ->
+        viewModels += model
+        if (observed) screenObservers += observe(model)
+    }
 
     @Test
     fun buildsBucketsAndTotalsPerDay() = runTest {
@@ -347,18 +369,76 @@ class CalendarViewModelTest {
         val model = vm(reader)
         model.selectDate(LocalDate.of(2026, 7, 8))
         model.setOrganization("org1")
+        advanceUntilIdle()
         val firstLoads = reader.loadCalls
         assertEquals("the visible month and both neighbours", 3, firstLoads)
 
         // Other days of the same weeks: every month they need was just loaded.
         model.selectDate(LocalDate.of(2026, 7, 10))
         model.pageForward()
+        advanceUntilIdle()
         assertEquals(firstLoads, reader.loadCalls)
         assertFalse(model.uiState.value.isLoading)
 
         // A page into August only fetches the month that is not fresh yet.
         model.selectDate(LocalDate.of(2026, 8, 20))
+        advanceUntilIdle()
         assertEquals(listOf(YearMonth.of(2026, 9)), reader.loadedMonths.drop(firstLoads))
+    }
+
+    @Test
+    fun loaded_months_stay_fresh_for_five_minutes_when_the_screen_returns() = runTest {
+        val clock = MutableClock(1_000_000L)
+        val reader = FakeReader(emptyList())
+        val model = vm(reader, clock = clock)
+        model.selectDate(LocalDate.of(2026, 7, 8))
+        model.setOrganization("org1")
+        advanceUntilIdle()
+        val firstLoads = reader.loadCalls
+
+        // Coming back to the calendar within five minutes serves Room.
+        clock.nowMs += 4 * 60_000L
+        model.setOrganization("org1")
+        advanceUntilIdle()
+        assertEquals(firstLoads, reader.loadCalls)
+
+        // Later, the months it shows are refreshed without a Retry.
+        clock.nowMs += 2 * 60_000L
+        model.setOrganization("org1")
+        advanceUntilIdle()
+        assertEquals(firstLoads * 2, reader.loadCalls)
+    }
+
+    @Test
+    fun neighbours_are_prefetched_only_after_the_visible_month_has_loaded() = runTest {
+        val reader = FakeReader(emptyList())
+        val visibleLoad = CompletableDeferred<Unit>()
+        reader.loadGates += visibleLoad
+        val model = vm(reader)
+        model.selectDate(LocalDate.of(2026, 7, 15))
+        model.setOrganization("org1")
+        advanceUntilIdle()
+        assertEquals(listOf(YearMonth.of(2026, 7)), reader.loadedMonths)
+
+        visibleLoad.complete(Unit)
+        assertFalse(model.uiState.value.isLoading)
+        assertEquals("the neighbours wait for the page to settle", 1, reader.loadCalls)
+
+        advanceUntilIdle()
+        assertEquals(listOf(YearMonth.of(2026, 7), YearMonth.of(2026, 6), YearMonth.of(2026, 8)), reader.loadedMonths)
+    }
+
+    @Test
+    fun a_failed_visible_load_does_not_prefetch_neighbours() = runTest {
+        val reader = FakeReader(emptyList()).apply { loadFailure = IllegalStateException("offline") }
+        val model = vm(reader)
+        model.selectDate(LocalDate.of(2026, 7, 15))
+
+        model.setOrganization("org1")
+        advanceUntilIdle()
+
+        assertTrue(model.uiState.value.loadError)
+        assertEquals(listOf(YearMonth.of(2026, 7)), reader.loadedMonths)
     }
 
     @Test
@@ -367,11 +447,59 @@ class CalendarViewModelTest {
         val model = vm(reader)
         model.selectDate(LocalDate.of(2026, 7, 8))
         model.setOrganization("org1")
+        advanceUntilIdle()
         val firstLoads = reader.loadCalls
 
         model.retryLoad()
+        advanceUntilIdle()
 
         assertEquals(firstLoads * 2, reader.loadCalls)
+    }
+
+    @Test
+    fun room_is_only_collected_while_the_calendar_is_observed() = runTest {
+        val roomEntries = MutableStateFlow(listOf(entry("a", "2026-07-06T09:00:00Z", 3600)))
+        val reader = FakeReader(emptyList(), entriesFlow = roomEntries)
+        val model = vm(reader, observed = false)
+        model.setOrganization("org1")
+        advanceUntilIdle()
+        assertEquals("Nothing observes the calendar yet", 0, roomEntries.subscriptionCount.value)
+
+        val screen = observe(model)
+        assertEquals(1, roomEntries.subscriptionCount.value)
+        model.uiState.first { state -> state.entryIds() == setOf("a") }
+
+        // Leaving the tab keeps collecting briefly (a rotation), then stops.
+        screen.cancel()
+        advanceTimeBy(4_000L)
+        assertEquals(1, roomEntries.subscriptionCount.value)
+        advanceTimeBy(2_000L)
+        assertEquals("Writes on other tabs no longer rebuild the calendar", 0, roomEntries.subscriptionCount.value)
+
+        // Coming back shows what changed meanwhile.
+        roomEntries.value = listOf(entry("b", "2026-07-07T09:00:00Z", 600))
+        screenObservers += observe(model)
+        model.uiState.first { state -> state.entryIds() == setOf("b") }
+    }
+
+    private fun CalendarUiState.entryIds(): Set<String> = bucketsByDate.values.flatMap { it.entries }.map { it.id }.toSet()
+
+    @Test
+    fun switching_organization_never_shows_the_previous_organizations_entries() = runTest {
+        val entriesByOrg = mapOf(
+            "org1" to MutableStateFlow(listOf(entry("mine", "2026-07-06T09:00:00Z", 3600))),
+            "org2" to MutableStateFlow<List<TimeEntry>>(emptyList()),
+        )
+        val reader = object : TimeEntryReader {
+            override fun observeTimeEntries(organizationId: String): Flow<List<TimeEntry>> = entriesByOrg.getValue(organizationId)
+        }
+        val model = vm(reader)
+        model.setOrganization("org1")
+        model.uiState.first { it.bucketsByDate.isNotEmpty() }
+
+        model.setOrganization("org2")
+
+        assertTrue(model.uiState.value.bucketsByDate.isEmpty())
     }
 
     @Test
@@ -383,6 +511,7 @@ class CalendarViewModelTest {
         model.selectDate(LocalDate.of(2026, 7, 15))
 
         model.setOrganization("org1")
+        advanceUntilIdle()
 
         val visible = model.uiState.value.visibleMonth
         assertEquals(YearMonth.of(2026, 7), visible)
