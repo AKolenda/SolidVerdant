@@ -1045,15 +1045,26 @@ class TimeEntryRepository @Inject constructor(
         if (!canResolve) return false
         val server = conflict.server
         return if (server == null) {
-            timeEntryDao.clearTagRefs(current.id)
-            timeEntryDao.deleteById(current.id)
+            database.withTransaction {
+                timeEntryDao.clearTagRefs(current.id)
+                timeEntryDao.deleteById(current.id)
+                outboxDao.deleteByTimeEntryId(current.id)
+            }
             true
         } else {
             val now = clock.nowMs()
             database.withTransaction {
-                timeEntryDao.upsert(server.toEntity(updatedAt = now, syncState = SyncState.SYNCED))
+                // Choosing the server's metadata never cancels a stop the user already made: a
+                // still-queued STOP keeps the local end and stays queued so the timer really ends.
+                val stopQueued = server.end == null && current.end != null && outboxDao.hasStopForEntry(current.id)
+                val adopted = if (stopQueued) {
+                    server.toEntity(updatedAt = now, syncState = SyncState.PENDING).copy(end = current.end, duration = current.duration)
+                } else {
+                    server.toEntity(updatedAt = now, syncState = SyncState.SYNCED)
+                }
+                timeEntryDao.upsert(adopted)
                 timeEntryDao.replaceTagRefs(server.id, server.tags.map { it.id })
-                outboxDao.deleteByTimeEntryId(current.id)
+                if (stopQueued) outboxDao.deleteNonStopByTimeEntryId(current.id) else outboxDao.deleteByTimeEntryId(current.id)
             }
             true
         }
@@ -1125,11 +1136,12 @@ class TimeEntryRepository @Inject constructor(
                 serverJsonByEntry = serverJsonByEntry,
                 pullStartedAtMs = pullStartedAtMs,
             )
-            // Pull-side conflicts no longer have a meaningful queued write. Clear them in the
-            // same transaction so Review immediately becomes the sole recovery surface.
+            // Pull-side conflicts no longer have a meaningful queued content write. Clear them in
+            // the same transaction so Review immediately becomes the sole recovery surface. A
+            // queued STOP survives: dropping it would leave the server timer running.
             entries.forEach { entity ->
                 if (timeEntryDao.getById(entity.id)?.syncState == SyncState.CONFLICT) {
-                    outboxDao.deleteByTimeEntryId(entity.id)
+                    outboxDao.deleteNonStopByTimeEntryId(entity.id)
                 }
             }
         }

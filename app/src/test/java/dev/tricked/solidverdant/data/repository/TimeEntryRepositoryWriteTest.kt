@@ -698,6 +698,44 @@ class TimeEntryRepositoryWriteTest {
         assertTrue(stored?.conflictServerJson?.contains("changed on web") == true)
     }
 
+    @Test fun refresh_conflict_keeps_a_queued_stop_and_keep_theirs_still_stops_the_timer() = runTest {
+        val running = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = null,
+            description = "before",
+        )
+        val fake = FakeRemoteDataSource(entries = listOf(running.copy(description = "changed on web")))
+        val repo2 = TimeEntryRepository(
+            db.timeEntryDao(),
+            db.catalogDao(),
+            db.outboxDao(),
+            db.syncMetaDao(),
+            fake,
+            clock,
+            testJson,
+            db,
+        )
+        db.timeEntryDao().upsert(running.toEntity(1L, SyncState.SYNCED))
+        repo2.stopEntryWithEdits(running, "u", running.copy(description = "mine"), emptyList())
+
+        repo2.refreshAll("org1", "member")
+
+        val conflicted = requireNotNull(db.timeEntryDao().getById(running.id))
+        assertEquals(SyncState.CONFLICT, conflicted.syncState)
+        assertEquals("Only the metadata write is dropped", listOf(OutboxOpType.STOP), db.outboxDao().peekAll().map { it.opType })
+
+        assertTrue(repo2.resolveKeepTheirs(running.id))
+
+        val resolved = requireNotNull(db.timeEntryDao().getById(running.id))
+        assertEquals("changed on web", resolved.description)
+        assertEquals("The user's stop survives choosing the server's metadata", conflicted.end, resolved.end)
+        assertEquals(SyncState.PENDING, resolved.syncState)
+        assertEquals(listOf(OutboxOpType.STOP), db.outboxDao().peekAll().map { it.opType })
+    }
+
     @Test fun refresh_keeps_pending_edit_when_server_still_matches_base() = runTest {
         val server = TimeEntry(
             id = "server-1",

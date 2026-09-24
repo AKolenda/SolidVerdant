@@ -41,6 +41,8 @@ class FakeRemoteDataSource(
     var timeEntriesQueryValidator: ((TimeEntriesQuery) -> Throwable?)? = null
     var lastTimeEntriesQuery: TimeEntriesQuery? = null
     val deleted = mutableListOf<String>()
+    val stopped = mutableListOf<String>()
+    val updated = mutableListOf<TimeEntry>()
 
     override suspend fun getTimeEntries(query: TimeEntriesQuery): Result<TimeEntriesResponse> {
         lastTimeEntriesQuery = query
@@ -70,22 +72,23 @@ class FakeRemoteDataSource(
         if (failNextWrite) return Result.failure(java.io.IOException("offline"))
         started += Triple(description, projectId, taskId)
         lastStartTime = startTime
-        return Result.success(
-            startResult(
-                TimeEntry(
-                    id = "server-1",
-                    description = description,
-                    userId = userId,
-                    // Echo the capture-time start the caller sent, so a test can assert the offline
-                    // START timestamp is preserved rather than fabricated at sync time (SV-017).
-                    start = startTime.ifBlank { "2026-01-01T09:00:00Z" },
-                    end = null,
-                    projectId = projectId,
-                    taskId = taskId,
-                    organizationId = organizationId,
-                ),
+        val entry = startResult(
+            TimeEntry(
+                id = "server-1",
+                description = description,
+                userId = userId,
+                // Echo the capture-time start the caller sent, so a test can assert the offline
+                // START timestamp is preserved rather than fabricated at sync time (SV-017).
+                start = startTime.ifBlank { "2026-01-01T09:00:00Z" },
+                end = null,
+                projectId = projectId,
+                taskId = taskId,
+                organizationId = organizationId,
             ),
         )
+        // Like the server, a started timer becomes the account's active entry.
+        if (entry.end == null) active = entry
+        return Result.success(entry)
     }
     override suspend fun createTimeEntry(
         organizationId: String,
@@ -105,6 +108,8 @@ class FakeRemoteDataSource(
                 Result.failure(java.io.IOException("offline"))
             } else {
                 lastEndTime = endTime
+                stopped += timeEntryId
+                if (active?.id == timeEntryId) active = null
                 Result.success(
                     stopResult(
                         TimeEntry(
@@ -121,7 +126,12 @@ class FakeRemoteDataSource(
     override suspend fun updateTimeEntry(organizationId: String, timeEntry: TimeEntry, tags: List<String>) =
         updateError?.let { Result.failure(it) }
             ?: writeError?.let { Result.failure(it) }
-            ?: if (failNextWrite) Result.failure(java.io.IOException("offline")) else Result.success(updateResult(timeEntry))
+            ?: if (failNextWrite) {
+                Result.failure(java.io.IOException("offline"))
+            } else {
+                updated += timeEntry
+                Result.success(updateResult(timeEntry))
+            }
     override suspend fun deleteTimeEntry(organizationId: String, timeEntryId: String): Result<Unit> {
         writeError?.let { return Result.failure(it) }
         if (failNextWrite) return Result.failure(java.io.IOException("offline"))
