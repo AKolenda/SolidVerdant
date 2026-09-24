@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ This Source Code Form is subject to the terms of the Mozilla Public
+  ~ License, v. 2.0. If a copy of the MPL was not distributed with this
+  ~ file, You can obtain one at https://mozilla.org/MPL/2.0/.
+  -->
+<resources>
+    <!-- Review, settings sub-screens, sync, privacy, server config and tile: grouped-list sweep. -->
+
+    <!-- Shared steppers -->
+    <string name="sweep_stepper_decrease">Decrease %1$s</string>
+    <string name="sweep_stepper_increase">Increase %1$s</string>
+
+    <!-- Inbox settings -->
+    <string name="sweep_inbox_horizon_short_today">Today</string>
+    <string name="sweep_inbox_horizon_short_week">Week</string>
+    <string name="sweep_inbox_horizon_short_30_days">30 days</string>
+    <string name="sweep_inbox_horizon_short_all">All</string>
+    <string name="sweep_inbox_thresholds">Thresholds</string>
+    <string name="sweep_inbox_work_start_title">Working day starts</string>
+    <string name="sweep_inbox_work_end_title">Working day ends</string>
+    <string name="sweep_inbox_work_window_invalid">The working day must end after it starts. Nothing was changed.</string>
+    <string name="sweep_inbox_work_days_none">None</string>
+    <string name="sweep_inbox_work_days_every">Every day</string>
+    <string name="sweep_inbox_work_days_range">%1$s–%2$s</string>
+
+    <!-- Review day -->
+    <string name="sweep_review_skip_failed_title">Stop syncing this change?</string>
+    <string name="sweep_review_skip_failed_message">The change stays on this device but is never sent to the server. This can\'t be undone.</string>
+    <string name="sweep_review_skip_failed_confirm">Stop syncing</string>
+
+    <!-- Logout -->
+    <string name="sweep_logout_title">Log out?</string>
+    <string name="sweep_logout_synced_message">Everything on this device has reached the server. You\'ll need to sign in again; favourites stay on this device.</string>
+    <plurals name="sweep_logout_unsynced_title">
+        <item quantity="one">Log out and lose %1$d change?</item>
+        <item quantity="other">Log out and lose %1$d changes?</item>
+    </plurals>
+    <plurals name="sweep_logout_unsynced_message">
+        <item quantity="one">%1$d change on this device hasn\'t reached the server. Logging out deletes it for good. Stay logged in, connect to the internet and let it sync (or check Sync &amp; recovery) first.</item>
+        <item quantity="other">%1$d changes on this device haven\'t reached the server. Logging out deletes them for good. Stay logged in, connect to the internet and let them sync (or check Sync &amp; recovery) first.</item>
+    </plurals>
+    <string name="sweep_logout_confirm">Log out</string>
+    <string name="sweep_logout_confirm_anyway">Log out anyway</string>
+
+    <!-- Privacy: clearing the cache -->
+    <string name="sweep_privacy_cleared">Cached data cleared</string>
+    <string name="sweep_privacy_clear_failed">Couldn\'t clear the cached data. Please try again.</string>
+    <plurals name="sweep_privacy_clear_blocked_title">
+        <item quantity="one">%1$d change is waiting to sync</item>
+        <item quantity="other">%1$d changes are waiting to sync</item>
+    </plurals>
+    <plurals name="sweep_privacy_clear_blocked_message">
+        <item quantity="one">Clearing the cache now would delete it. Send it to the server first, then clear the cache once Sync &amp; recovery shows nothing waiting.</item>
+        <item quantity="other">Clearing the cache now would delete them. Send them to the server first, then clear the cache once Sync &amp; recovery shows nothing waiting.</item>
+    </plurals>
+
+    <!-- Sync & recovery -->
+    <plurals name="sweep_sync_discard_title">
+        <item quantity="one">Discard %1$d failed change?</item>
+        <item quantity="other">Discard %1$d failed changes?</item>
+    </plurals>
+    <plurals name="sweep_sync_discard_message">
+        <item quantity="one">The failed change to this entry (%2$s) is removed from the upload queue and never reaches the server. This can\'t be undone.</item>
+        <item quantity="other">All %1$d failed changes to this entry (%2$s) are removed from the upload queue and never reach the server. This can\'t be undone.</item>
+    </plurals>
+    <string name="sweep_sync_use_server_title">Use the server version?</string>
+    <string name="sweep_sync_use_server_message">This device\'s changes to this entry are replaced by the server\'s copy. This can\'t be undone.</string>
+
+    <!-- Server configuration -->
+    <string name="sweep_config_nothing_to_paste">Nothing to paste: the clipboard has no server address or client ID.</string>
+    <string name="sweep_config_clipboard_empty">Copy the server address or client ID first.</string>
+    <string name="sweep_config_test_passed">Connection works</string>
+    <string name="sweep_config_test_failed">Connection failed</string>
+</resources>

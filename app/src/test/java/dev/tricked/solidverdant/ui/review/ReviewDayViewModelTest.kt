@@ -175,6 +175,61 @@ class ReviewDayViewModelTest {
         assertEquals(item.id, state.currentItem?.id)
     }
 
+    @Test
+    fun adjustingAnOvernightTimerEndsItTheEveningItStarted() = runTest {
+        val running = TimeEntry(id = "run-1", userId = "u1", organizationId = "org1", start = "2025-07-11T20:00:00Z")
+        entries.value = listOf(running)
+        val viewModel = buildViewModel()
+        backgroundScope.keepStateHot(viewModel)
+        viewModel.uiState.first { it.runningEntry != null }
+
+        // The picker opens at the account clock's time, which is what the end is saved in.
+        assertEquals(java.time.LocalTime.of(6, 0), viewModel.suggestedEndTime())
+
+        viewModel.adjustEndTime(23, 0).join()
+
+        coVerify { repository.updateEntry(running.copy(end = "2025-07-11T23:00:00Z"), emptyList()) }
+        assertEquals(dev.tricked.solidverdant.R.string.review_msg_end_adjusted, viewModel.message.value)
+    }
+
+    @Test
+    fun anEndStillInTheFutureIsRefused() = runTest {
+        val running = TimeEntry(id = "run-1", userId = "u1", organizationId = "org1", start = "2025-07-11T20:00:00Z")
+        entries.value = listOf(running)
+        val viewModel = buildViewModel()
+        backgroundScope.keepStateHot(viewModel)
+        viewModel.uiState.first { it.runningEntry != null }
+
+        // 09:00 after a 20:00 start is tomorrow morning, three hours from now.
+        viewModel.adjustEndTime(9, 0).join()
+
+        coVerify(exactly = 0) { repository.updateEntry(any(), any()) }
+        assertEquals(dev.tricked.solidverdant.R.string.review_msg_invalid_end, viewModel.message.value)
+    }
+
+    @Test
+    fun breaksAreNeitherTrackedTimeNorUncategorized() = runTest {
+        entries.value = listOf(
+            uncategorized("work-1", start = "2025-07-12T01:00:00Z"),
+            TimeEntry(
+                id = "break-1",
+                userId = "u1",
+                organizationId = "org1",
+                start = "2025-07-12T02:00:00Z",
+                end = "2025-07-12T02:30:00Z",
+                type = dev.tricked.solidverdant.data.model.TimeEntryType.BREAK,
+            ),
+        )
+        val viewModel = buildViewModel()
+        backgroundScope.keepStateHot(viewModel)
+
+        val state = viewModel.uiState.first { !it.loading }
+        assertEquals("only the work entry is tracked", 3600L, state.totalTrackedSeconds)
+        assertEquals(1, state.entryCount)
+        assertEquals(1, state.uncategorizedCount)
+        assertTrue(state.items.none { it.entryId == "break-1" })
+    }
+
     private companion object {
         const val NOW_MS = 1_752_300_000_000L // 2025-07-12T06:00Z
         const val START_ISO = "2025-07-12T01:00:00Z"

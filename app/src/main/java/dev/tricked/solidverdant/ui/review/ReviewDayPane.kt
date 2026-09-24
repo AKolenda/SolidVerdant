@@ -4,63 +4,68 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-
 package dev.tricked.solidverdant.ui.review
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
+import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.DoneAll
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.FolderOff
 import androidx.compose.material.icons.outlined.HourglassEmpty
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
+import androidx.compose.material.icons.outlined.PlayCircle
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Replay
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.StopCircle
+import androidx.compose.material.icons.outlined.SyncProblem
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.components.ConfirmDialog
+import dev.tricked.solidverdant.ui.components.EmptyState
+import dev.tricked.solidverdant.ui.components.GroupedDivider
+import dev.tricked.solidverdant.ui.components.GroupedRow
+import dev.tricked.solidverdant.ui.components.GroupedSection
+import dev.tricked.solidverdant.ui.components.LoadingState
 import dev.tricked.solidverdant.ui.localization.appLocale
-import kotlinx.coroutines.delay
+import dev.tricked.solidverdant.ui.theme.Dimens
+import java.time.Instant
 import java.time.LocalDate
-import java.time.LocalTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
-import java.util.Locale
 
 /**
  * The compact, guided end-of-day review (gap analysis #18). Shows the day's facts (tracked time,
@@ -72,50 +77,51 @@ import java.util.Locale
 @Composable
 fun ReviewDayPane() {
     val viewModel: ReviewDayViewModel = hiltViewModel()
-    val state by viewModel.uiState.collectAsState()
-    val message by viewModel.message.collectAsState()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val message by viewModel.message.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var showAdjustDialog by remember { mutableStateOf(false) }
     var projectPickerFor by remember { mutableStateOf<ReviewItem?>(null) }
+    var confirmSkipFailed by remember { mutableStateOf<ReviewItem?>(null) }
 
     LaunchedEffect(message) {
-        if (message != null) {
-            delay(MESSAGE_DISMISS_DELAY_MS)
-            viewModel.consumeMessage()
-        }
+        val messageRes = message ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(context.getString(messageRes))
+        viewModel.consumeMessage()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         when {
-            state.loading -> LoadingState()
-            !state.hasOrganization -> CenteredMessage(
-                icon = { Icon(Icons.Outlined.HourglassEmpty, contentDescription = null) },
-                text = stringResource(R.string.review_no_org),
-            )
+            state.loading -> LoadingState(modifier = Modifier.fillMaxSize())
+            !state.hasOrganization -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                EmptyState(text = stringResource(R.string.review_no_org), icon = Icons.Outlined.HourglassEmpty)
+            }
             else -> ReviewContent(
                 state = state,
                 onStop = viewModel::stopRunningTimer,
                 onKeepRunning = viewModel::keepRunning,
                 onAdjustEnd = { showAdjustDialog = true },
                 onRetry = viewModel::retryFailedSync,
-                onKeepAsIs = viewModel::keepAsIs,
+                onKeepAsIs = { item ->
+                    // Keeping a failed change as it is stops it from ever syncing; confirm that.
+                    if (item.type == ReviewItemType.FAILED_SYNC) confirmSkipFailed = item else viewModel.keepAsIs(item)
+                },
                 onAssign = { item -> projectPickerFor = item },
                 onReviewAgain = viewModel::reviewAgain,
             )
         }
 
-        message?.let { messageRes ->
-            MessageBanner(
-                text = stringResource(messageRes),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(16.dp),
-            )
-        }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
     }
 
     if (showAdjustDialog) {
-        val now = remember { LocalTime.now() }
+        // The account's clock, the same one the chosen end is saved in.
+        val now = remember { viewModel.suggestedEndTime() }
         ReviewTimePickerDialog(
             title = stringResource(R.string.review_adjust_end_dialog_title),
             initialHour = now.hour,
@@ -138,6 +144,20 @@ fun ReviewDayPane() {
             onDismiss = { projectPickerFor = null },
         )
     }
+
+    confirmSkipFailed?.let { item ->
+        ConfirmDialog(
+            title = stringResource(R.string.sweep_review_skip_failed_title),
+            message = stringResource(R.string.sweep_review_skip_failed_message),
+            confirmLabel = stringResource(R.string.sweep_review_skip_failed_confirm),
+            onConfirm = {
+                confirmSkipFailed = null
+                viewModel.keepAsIs(item)
+            },
+            onDismiss = { confirmSkipFailed = null },
+            destructive = true,
+        )
+    }
 }
 
 @Composable
@@ -155,16 +175,16 @@ internal fun ReviewContent(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(top = Dimens.Space8, bottom = Dimens.Space24),
+        verticalArrangement = Arrangement.spacedBy(Dimens.Space24),
     ) {
-        SummaryCard(state)
+        SummarySection(state)
 
         val current = state.currentItem
         when {
-            current != null -> {
+            current != null -> Column(verticalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
                 ProgressHeader(state)
-                ReviewItemCard(
+                ReviewItemSection(
                     item = current,
                     zone = state.zone,
                     onStop = onStop,
@@ -176,19 +196,19 @@ internal fun ReviewContent(
                 )
             }
 
-            state.allCaughtUp -> CompletionCard(
+            state.allCaughtUp -> CompletionSection(
                 title = stringResource(R.string.review_all_caught_up_title),
                 body = stringResource(R.string.review_all_caught_up_body),
                 onReviewAgain = onReviewAgain,
             )
 
-            state.nothingTracked -> CompletionCard(
+            state.nothingTracked -> CompletionSection(
                 title = stringResource(R.string.review_nothing_tracked_title),
                 body = stringResource(R.string.review_nothing_tracked_body),
                 onReviewAgain = null,
             )
 
-            else -> CompletionCard(
+            else -> CompletionSection(
                 title = stringResource(R.string.review_all_caught_up_title),
                 body = stringResource(R.string.review_all_caught_up_body),
                 onReviewAgain = null,
@@ -197,64 +217,43 @@ internal fun ReviewContent(
     }
 }
 
+/** The day's facts as value rows under the date, like the Settings rows. */
 @Composable
-private fun SummaryCard(state: ReviewDayUiState) {
+private fun SummarySection(state: ReviewDayUiState) {
     val date = remember(state.dateEpochDay) { LocalDate.ofEpochDay(state.dateEpochDay) }
     val locale = appLocale()
     val dateLabel = remember(date, locale) {
         date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(locale))
     }
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(text = dateLabel, style = MaterialTheme.typography.titleMedium)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SummaryStat(
-                    label = stringResource(R.string.review_summary_tracked_label),
-                    value = formatDuration(state.totalTrackedSeconds),
-                )
-                SummaryStat(
-                    label = stringResource(R.string.review_summary_billable_label),
-                    value = state.billablePercent?.let { stringResource(R.string.review_percent, it) }
-                        ?: stringResource(R.string.review_value_none),
-                )
-                SummaryStat(
-                    label = stringResource(R.string.review_summary_entries_label),
-                    value = state.entryCount.toString(),
-                )
-                if (state.largestGapSeconds > 0) {
-                    SummaryStat(
-                        label = stringResource(R.string.review_summary_gap_label),
-                        value = formatDuration(state.largestGapSeconds),
-                    )
-                }
-                if (state.uncategorizedCount > 0) {
-                    SummaryStat(
-                        label = stringResource(R.string.review_summary_uncategorized_label),
-                        value = state.uncategorizedCount.toString(),
-                    )
-                }
-                if (state.failedSyncCount > 0) {
-                    SummaryStat(
-                        label = stringResource(R.string.review_summary_failed_label),
-                        value = state.failedSyncCount.toString(),
-                    )
-                }
-            }
+    val rows = buildList {
+        add(SummaryRow(R.string.review_summary_tracked_label, Icons.Outlined.Timer, formatDuration(state.totalTrackedSeconds)))
+        add(
+            SummaryRow(
+                R.string.review_summary_billable_label,
+                Icons.Outlined.AttachMoney,
+                state.billablePercent?.let { stringResource(R.string.review_percent, it) } ?: stringResource(R.string.review_value_none),
+            ),
+        )
+        add(SummaryRow(R.string.review_summary_entries_label, Icons.AutoMirrored.Outlined.FormatListBulleted, state.entryCount.toString()))
+        if (state.largestGapSeconds > 0) {
+            add(SummaryRow(R.string.review_summary_gap_label, Icons.Outlined.HourglassEmpty, formatDuration(state.largestGapSeconds)))
+        }
+        if (state.uncategorizedCount > 0) {
+            add(SummaryRow(R.string.review_summary_uncategorized_label, Icons.Outlined.FolderOff, state.uncategorizedCount.toString()))
+        }
+        if (state.failedSyncCount > 0) {
+            add(SummaryRow(R.string.review_summary_failed_label, Icons.Outlined.SyncProblem, state.failedSyncCount.toString()))
+        }
+    }
+    GroupedSection(header = dateLabel) {
+        rows.forEachIndexed { index, row ->
+            if (index > 0) GroupedDivider(inset = Dimens.SettingsIconInset)
+            GroupedRow(title = stringResource(row.labelRes), leadingIcon = row.icon, value = row.value)
         }
     }
 }
 
-@Composable
-private fun SummaryStat(label: String, value: String) {
-    Column {
-        Text(text = value, style = MaterialTheme.typography.titleLarge)
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
+private data class SummaryRow(val labelRes: Int, val icon: ImageVector, val value: String)
 
 @Composable
 private fun ProgressHeader(state: ReviewDayUiState) {
@@ -262,12 +261,13 @@ private fun ProgressHeader(state: ReviewDayUiState) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = Dimens.Space32)
             .semantics { liveRegion = LiveRegionMode.Polite },
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(Dimens.Space8),
     ) {
         Text(
             text = stringResource(R.string.review_progress_step, progress.position, progress.total),
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         LinearProgressIndicator(
@@ -277,8 +277,10 @@ private fun ProgressHeader(state: ReviewDayUiState) {
     }
 }
 
+/** One correction: what it is about, then its choices as grouped action rows. */
 @Composable
-private fun ReviewItemCard(
+@Suppress("LongMethod")
+private fun ReviewItemSection(
     item: ReviewItem,
     zone: ZoneId,
     onStop: () -> Unit,
@@ -288,65 +290,88 @@ private fun ReviewItemCard(
     onKeepAsIs: (ReviewItem) -> Unit,
     onAssign: (ReviewItem) -> Unit,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    GroupedSection {
+        Column(
+            modifier = Modifier.padding(Dimens.Space16),
+            verticalArrangement = Arrangement.spacedBy(Dimens.Space4),
+        ) {
             when (item.type) {
                 ReviewItemType.RUNNING_TIMER -> {
-                    Text(stringResource(R.string.review_item_running_title), style = MaterialTheme.typography.titleMedium)
-                    Text(stringResource(R.string.review_item_running_body), style = MaterialTheme.typography.bodyMedium)
+                    ItemTitle(stringResource(R.string.review_item_running_title), stringResource(R.string.review_item_running_body))
                     EntryDescription(item.description)
                     item.startIso?.let { StartedAt(it, zone) }
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = onStop, modifier = Modifier.heightIn(min = 48.dp)) {
-                            Text(stringResource(R.string.review_action_stop))
-                        }
-                        OutlinedButton(onClick = onAdjustEnd, modifier = Modifier.heightIn(min = 48.dp)) {
-                            Text(stringResource(R.string.review_action_adjust_end))
-                        }
-                        TextButton(onClick = onKeepRunning, modifier = Modifier.heightIn(min = 48.dp)) {
-                            Text(stringResource(R.string.review_action_keep_running))
-                        }
-                    }
                 }
-
                 ReviewItemType.FAILED_SYNC -> {
-                    Text(stringResource(R.string.review_item_failed_title), style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        text = item.detail ?: stringResource(R.string.review_item_failed_body),
-                        style = MaterialTheme.typography.bodyMedium,
+                    ItemTitle(
+                        stringResource(R.string.review_item_failed_title),
+                        item.detail ?: stringResource(R.string.review_item_failed_body),
                     )
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { onRetry(item) }, modifier = Modifier.heightIn(min = 48.dp)) {
-                            Text(stringResource(R.string.review_action_retry))
-                        }
-                        TextButton(onClick = { onKeepAsIs(item) }, modifier = Modifier.heightIn(min = 48.dp)) {
-                            Text(stringResource(R.string.review_action_skip))
-                        }
-                    }
                 }
-
                 ReviewItemType.UNCATEGORIZED -> {
-                    Text(stringResource(R.string.review_item_uncategorized_title), style = MaterialTheme.typography.titleMedium)
-                    Text(stringResource(R.string.review_item_uncategorized_body), style = MaterialTheme.typography.bodyMedium)
+                    ItemTitle(
+                        stringResource(R.string.review_item_uncategorized_title),
+                        stringResource(R.string.review_item_uncategorized_body),
+                    )
                     EntryDescription(item.description)
                     TimeRange(item.startIso, item.endIso, zone)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { onAssign(item) }, modifier = Modifier.heightIn(min = 48.dp)) {
-                            Text(stringResource(R.string.review_action_assign_project))
-                        }
-                        TextButton(onClick = { onKeepAsIs(item) }, modifier = Modifier.heightIn(min = 48.dp)) {
-                            Text(stringResource(R.string.review_action_skip))
-                        }
-                    }
                 }
             }
         }
+        GroupedDivider()
+        when (item.type) {
+            ReviewItemType.RUNNING_TIMER -> {
+                ActionRow(R.string.review_action_stop, Icons.Outlined.StopCircle, ReviewTestTags.REVIEW_ACTION_STOP, onClick = onStop)
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                ActionRow(
+                    R.string.review_action_adjust_end,
+                    Icons.Outlined.Schedule,
+                    ReviewTestTags.REVIEW_ACTION_ADJUST_END,
+                    opensPicker = true,
+                    onClick = onAdjustEnd,
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                ActionRow(
+                    R.string.review_action_keep_running,
+                    Icons.Outlined.PlayCircle,
+                    ReviewTestTags.REVIEW_ACTION_KEEP_RUNNING,
+                    onClick = onKeepRunning,
+                )
+            }
+            ReviewItemType.FAILED_SYNC -> {
+                ActionRow(R.string.review_action_retry, Icons.Outlined.Refresh, ReviewTestTags.REVIEW_ACTION_RETRY) { onRetry(item) }
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                ActionRow(R.string.review_action_skip, Icons.Outlined.DoneAll, ReviewTestTags.REVIEW_ACTION_SKIP) { onKeepAsIs(item) }
+            }
+            ReviewItemType.UNCATEGORIZED -> {
+                ActionRow(
+                    R.string.review_action_assign_project,
+                    Icons.Outlined.Folder,
+                    ReviewTestTags.REVIEW_ACTION_ASSIGN,
+                    opensPicker = true,
+                ) { onAssign(item) }
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                ActionRow(R.string.review_action_skip, Icons.Outlined.DoneAll, ReviewTestTags.REVIEW_ACTION_SKIP) { onKeepAsIs(item) }
+            }
+        }
     }
+}
+
+/** A choice for the current step; only choices that open a picker show the chevron. */
+@Composable
+private fun ActionRow(labelRes: Int, icon: ImageVector, testTag: String, opensPicker: Boolean = false, onClick: () -> Unit) {
+    GroupedRow(
+        title = stringResource(labelRes),
+        leadingIcon = icon,
+        onClick = onClick,
+        showChevron = opensPicker,
+        modifier = Modifier.testTag(testTag),
+    )
+}
+
+@Composable
+private fun ItemTitle(title: String, body: String) {
+    Text(title, style = MaterialTheme.typography.titleMedium)
+    Text(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
@@ -359,14 +384,14 @@ private fun EntryDescription(description: String?) {
     Text(
         text = text,
         style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = Dimens.Space4),
     )
 }
 
 @Composable
 private fun StartedAt(startIso: String, zone: ZoneId) {
-    val locale = appLocale()
-    val time = remember(startIso, zone, locale) { formatClock(startIso, zone, locale) }
+    val formatter = rememberTimeOfDayFormatter()
+    val time = remember(startIso, zone, formatter) { formatClock(startIso, zone, formatter) }
     if (time != null) {
         Text(
             text = stringResource(R.string.review_started_at, time),
@@ -378,9 +403,9 @@ private fun StartedAt(startIso: String, zone: ZoneId) {
 
 @Composable
 private fun TimeRange(startIso: String?, endIso: String?, zone: ZoneId) {
-    val locale = appLocale()
-    val start = remember(startIso, zone, locale) { startIso?.let { formatClock(it, zone, locale) } }
-    val end = remember(endIso, zone, locale) { endIso?.let { formatClock(it, zone, locale) } }
+    val formatter = rememberTimeOfDayFormatter()
+    val start = remember(startIso, zone, formatter) { startIso?.let { formatClock(it, zone, formatter) } }
+    val end = remember(endIso, zone, formatter) { endIso?.let { formatClock(it, zone, formatter) } }
     if (start != null && end != null) {
         Text(
             text = stringResource(R.string.review_time_range, start, end),
@@ -390,78 +415,20 @@ private fun TimeRange(startIso: String?, endIso: String?, zone: ZoneId) {
     }
 }
 
+/** Done (or nothing to do): the shared empty state on a grouped surface, with "Review again". */
 @Composable
-private fun CompletionCard(title: String, body: String, onReviewAgain: (() -> Unit)?) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.CheckCircle,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+private fun CompletionSection(title: String, body: String, onReviewAgain: (() -> Unit)?) {
+    GroupedSection {
+        EmptyState(text = "$title\n$body", icon = Icons.Outlined.CheckCircle)
+        if (onReviewAgain != null) {
+            GroupedDivider()
+            GroupedRow(
+                title = stringResource(R.string.review_again),
+                leadingIcon = Icons.Outlined.Replay,
+                onClick = onReviewAgain,
+                showChevron = false,
+                modifier = Modifier.testTag(ReviewTestTags.REVIEW_AGAIN),
             )
-            Text(text = title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
-            Text(
-                text = body,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-            if (onReviewAgain != null) {
-                OutlinedButton(onClick = onReviewAgain, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text(stringResource(R.string.review_again))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LoadingState() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator()
-    }
-}
-
-@Composable
-private fun CenteredMessage(icon: @Composable () -> Unit, text: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        icon()
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 12.dp),
-        )
-    }
-}
-
-@Composable
-private fun MessageBanner(text: String, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .semantics { liveRegion = LiveRegionMode.Polite },
-        color = MaterialTheme.colorScheme.inverseSurface,
-        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-        shape = MaterialTheme.shapes.medium,
-        tonalElevation = 6.dp,
-    ) {
-        Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Text(text = text, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -477,15 +444,12 @@ private fun formatDuration(seconds: Long): String {
     }
 }
 
-private const val MESSAGE_DISMISS_DELAY_MS = 3500L
 private const val SECONDS_PER_HOUR = 3600
 private const val SECONDS_PER_MINUTE = 60
 
-/** Format an ISO instant string as a local wall-clock time, or null if it cannot be parsed. */
-private fun formatClock(iso: String, zone: ZoneId, locale: Locale): String? = runCatching {
-    OffsetDateTime.parse(iso).atZoneSameInstant(zone).toLocalTime()
-        .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
+/** Format an ISO instant string as a wall-clock time in [zone], or null if it cannot be parsed. */
+private fun formatClock(iso: String, zone: ZoneId, formatter: DateTimeFormatter): String? = runCatching {
+    OffsetDateTime.parse(iso).atZoneSameInstant(zone).toLocalTime().format(formatter)
 }.recoverCatching {
-    java.time.Instant.parse(iso).atZone(zone).toLocalTime()
-        .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
+    Instant.parse(iso).atZone(zone).toLocalTime().format(formatter)
 }.getOrNull()

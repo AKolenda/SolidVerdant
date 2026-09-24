@@ -153,8 +153,11 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         firstNodeWithTag(TestTags.SETTINGS_LIVE_UPDATE_SWITCH).performScrollTo().assertIsDisplayed()
     }
 
+    /** Logout asks first (it deletes this device's data), so confirm the prompt. */
     fun logout(): TrackRobot = apply {
         firstNodeWithTag(TestTags.SETTINGS_LOGOUT_BUTTON).performScrollTo().performClick()
+        waitUntilEnabledTagExists(TestTags.SETTINGS_LOGOUT_CONFIRM)
+        firstEnabledNodeWithTag(TestTags.SETTINGS_LOGOUT_CONFIRM).performClick()
     }
 
     fun assertLoginVisible(): TrackRobot = apply {

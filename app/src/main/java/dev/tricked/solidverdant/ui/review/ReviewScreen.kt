@@ -8,7 +8,6 @@ package dev.tricked.solidverdant.ui.review
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -19,9 +18,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,10 +28,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.components.SegmentedControl
 import dev.tricked.solidverdant.ui.navigation.MainMenuButton
 import dev.tricked.solidverdant.ui.navigation.MainTopBar
+import dev.tricked.solidverdant.ui.theme.Dimens
 
 /**
  * Container for the review-loop home, a side-menu destination. Hosts a segmented control that
@@ -113,26 +110,21 @@ fun ReviewScreen(
             },
         )
 
-        SingleChoiceSegmentedButtonRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-        ) {
-            SegmentedButton(
-                selected = segment == ReviewSegment.Inbox,
-                onClick = { segment = ReviewSegment.Inbox },
-                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-            ) {
-                Text(stringResource(R.string.review_segment_inbox))
-            }
-            SegmentedButton(
-                selected = segment == ReviewSegment.ReviewDay,
-                onClick = { segment = ReviewSegment.ReviewDay },
-                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-            ) {
-                Text(stringResource(R.string.review_segment_review_day))
-            }
-        }
+        SegmentedControl(
+            options = ReviewSegment.entries,
+            selected = segment,
+            onSelect = { segment = it },
+            label = { option ->
+                stringResource(
+                    when (option) {
+                        ReviewSegment.Inbox -> R.string.review_segment_inbox
+                        ReviewSegment.ReviewDay -> R.string.review_segment_review_day
+                    },
+                )
+            },
+            modifier = Modifier.padding(horizontal = Dimens.Space16, vertical = Dimens.Space8),
+            optionTestTag = ReviewTestTags::segment,
+        )
 
         when (segment) {
             ReviewSegment.Inbox -> InboxPane()
@@ -147,7 +139,7 @@ internal fun ReviewPlaceholder(textRes: Int) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
+            .padding(Dimens.Space24),
     ) {
         Text(
             text = stringResource(textRes),

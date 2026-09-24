@@ -59,6 +59,8 @@ import dev.tricked.solidverdant.ui.theme.Dimens
 object SettingsTestTags {
     const val SCREEN = "settings_screen"
     const val LOGOUT_BUTTON = "settings_logout_button"
+    const val LOGOUT_CONFIRM = "settings_logout_confirm"
+    const val LOGOUT_CANCEL = "settings_logout_cancel"
     const val THEME_ROW = "settings_theme_row"
     const val REVIEW_ROW = "settings_review_row"
     const val REMINDERS_ROW = "settings_reminders_row"

@@ -6,294 +6,251 @@
 
 package dev.tricked.solidverdant.ui.review
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SuggestionChip
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TimePicker
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.material.icons.automirrored.outlined.Label
+import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.automirrored.outlined.Notes
+import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.FolderOff
+import androidx.compose.material.icons.outlined.HourglassEmpty
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.NightsStay
+import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalLocale
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
-import dev.tricked.solidverdant.domain.inbox.InboxCheckConfig
 import dev.tricked.solidverdant.domain.inbox.InboxSettingsDataStore.InboxCheck
-import java.time.DayOfWeek
-import java.time.format.TextStyle
+import dev.tricked.solidverdant.ui.components.AppSheet
+import dev.tricked.solidverdant.ui.components.AppTimePickerDialog
+import dev.tricked.solidverdant.ui.components.GroupedDivider
+import dev.tricked.solidverdant.ui.components.GroupedRow
+import dev.tricked.solidverdant.ui.components.GroupedSection
+import dev.tricked.solidverdant.ui.components.GroupedSwitchRow
+import dev.tricked.solidverdant.ui.components.SegmentedControl
+import dev.tricked.solidverdant.ui.localization.appLocale
+import dev.tricked.solidverdant.ui.theme.Dimens
+import java.time.Instant
+import java.time.format.DateTimeFormatter
 
 /**
- * Bottom sheet for the local Time Inbox configuration (gap analysis #17): working days/hours, the
- * minimum gap, the long-entry threshold, and which checks are active. All writes go straight to the
- * ViewModel, which persists them; the sheet reads back the effective [InboxCheckConfig] from state.
+ * The local Time Inbox configuration (gap analysis #17) in the app's sheet layout: how far back to
+ * review as a segmented control, working days and hours as value rows that open pickers, the
+ * thresholds as steppers, and each check as a switch. Every change is written straight through the
+ * ViewModel, which persists it; the sheet reads the effective values back from [state].
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 @Suppress("LongMethod")
 fun InboxSettingsSheet(state: InboxUiState, viewModel: InboxViewModel, onDismiss: () -> Unit) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val config = state.config
-    val locale = LocalLocale.current.platformLocale
+    val locale = appLocale()
+    val timeFormatter = rememberTimeOfDayFormatter()
     var editingWindow by remember { mutableStateOf<WorkField?>(null) }
+    var showWorkDays by remember { mutableStateOf(false) }
+    var windowInvalid by remember { mutableStateOf(false) }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+    AppSheet(
+        title = stringResource(R.string.inbox_settings_title),
+        onDismiss = onDismiss,
+        onDone = onDismiss,
+        doneTestTag = ReviewTestTags.INBOX_SETTINGS_DONE,
+        // The pickers open in their own windows; their focus change must not close the sheet.
+        dismissible = { editingWindow == null && !showWorkDays },
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .navigationBarsPadding()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+        GroupedSection(
+            header = stringResource(R.string.inbox_settings_horizon),
+            footer = horizonFooter(state.horizonStartMs, state.zone, locale),
         ) {
-            Text(
-                text = stringResource(R.string.inbox_settings_title),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
+            SegmentedControl<HorizonOption?>(
+                options = HorizonOption.entries,
+                selected = state.horizonOption,
+                onSelect = { option -> option?.let(viewModel::chooseHorizon) },
+                label = { option -> option?.let { horizonShortLabel(it) }.orEmpty() },
+                modifier = Modifier.padding(horizontal = Dimens.Space8, vertical = Dimens.Space4),
+                optionTestTag = { option -> option?.let(ReviewTestTags::horizonSegment) },
             )
+        }
 
-            // Review horizon (SV-005)
-            SectionLabel(stringResource(R.string.inbox_settings_horizon))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                HorizonChoiceChip(stringResource(R.string.inbox_horizon_today)) { viewModel.chooseHorizon(HorizonOption.TODAY) }
-                HorizonChoiceChip(stringResource(R.string.inbox_horizon_this_week)) { viewModel.chooseHorizon(HorizonOption.THIS_WEEK) }
-                HorizonChoiceChip(stringResource(R.string.inbox_horizon_last_30_days)) {
-                    viewModel.chooseHorizon(HorizonOption.LAST_30_DAYS)
-                }
-                HorizonChoiceChip(stringResource(R.string.inbox_horizon_everything)) { viewModel.chooseHorizon(HorizonOption.EVERYTHING) }
-            }
+        GroupedSection(
+            header = stringResource(R.string.inbox_settings_working_hours),
+            footer = if (windowInvalid) stringResource(R.string.sweep_inbox_work_window_invalid) else null,
+        ) {
+            GroupedRow(
+                title = stringResource(R.string.inbox_settings_work_days),
+                leadingIcon = Icons.Outlined.DateRange,
+                value = workDaysSummary(
+                    days = config.workDays,
+                    firstDayOfWeek = state.firstDayOfWeek,
+                    locale = locale,
+                    none = stringResource(R.string.sweep_inbox_work_days_none),
+                    every = stringResource(R.string.sweep_inbox_work_days_every),
+                    rangeFormat = stringResource(R.string.sweep_inbox_work_days_range),
+                ),
+                onClick = { showWorkDays = true },
+                modifier = Modifier.testTag(ReviewTestTags.INBOX_WORK_DAYS),
+            )
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            GroupedTimeRow(
+                label = stringResource(R.string.inbox_settings_work_start),
+                icon = Icons.Outlined.WbSunny,
+                time = formatMinuteOfDay(config.workStartMinute, timeFormatter),
+                onClick = { editingWindow = WorkField.START },
+                testTag = ReviewTestTags.INBOX_WORK_START,
+            )
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            GroupedTimeRow(
+                label = stringResource(R.string.inbox_settings_work_end),
+                icon = Icons.Outlined.NightsStay,
+                time = formatMinuteOfDay(config.workEndMinute, timeFormatter),
+                onClick = { editingWindow = WorkField.END },
+                testTag = ReviewTestTags.INBOX_WORK_END,
+            )
+        }
 
-            // Working days
-            SectionLabel(stringResource(R.string.inbox_settings_work_days))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                DayOfWeek.values().forEach { day ->
-                    val selected = day in config.workDays
-                    FilterChip(
-                        selected = selected,
-                        onClick = {
-                            val updated = if (selected) config.workDays - day else config.workDays + day
-                            viewModel.setWorkDays(updated)
-                        },
-                        label = { Text(day.getDisplayName(TextStyle.SHORT, locale)) },
-                    )
-                }
-            }
-
-            // Working hours
-            SectionLabel(stringResource(R.string.inbox_settings_working_hours))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                OutlinedButton(
-                    onClick = { editingWindow = WorkField.START },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(stringResource(R.string.inbox_settings_work_start) + ": " + minuteText(config.workStartMinute))
-                }
-                OutlinedButton(
-                    onClick = { editingWindow = WorkField.END },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(stringResource(R.string.inbox_settings_work_end) + ": " + minuteText(config.workEndMinute))
-                }
-            }
-
-            // Minimum gap
-            Stepper(
-                label = stringResource(R.string.inbox_settings_min_gap),
+        GroupedSection(header = stringResource(R.string.sweep_inbox_thresholds)) {
+            GroupedStepperRow(
+                title = stringResource(R.string.inbox_settings_min_gap),
                 value = stringResource(R.string.inbox_minutes_value, config.minGapMinutes),
-                onDecrease = { viewModel.setMinGapMinutes((config.minGapMinutes - MIN_GAP_STEP_MINUTES).coerceAtLeast(MIN_GAP_MINUTES)) },
-                onIncrease = { viewModel.setMinGapMinutes(config.minGapMinutes + MIN_GAP_STEP_MINUTES) },
-                decreaseCd = stringResource(R.string.inbox_settings_decrease),
-                increaseCd = stringResource(R.string.inbox_settings_increase),
+                leadingIcon = Icons.Outlined.HourglassEmpty,
+                onDecrease = { viewModel.setMinGapMinutes(steppedMinGap(config.minGapMinutes, up = false)) },
+                onIncrease = { viewModel.setMinGapMinutes(steppedMinGap(config.minGapMinutes, up = true)) },
+                decreaseEnabled = config.minGapMinutes > MIN_GAP_MINUTES,
+                increaseEnabled = config.minGapMinutes < MAX_GAP_MINUTES,
+                testTag = ReviewTestTags.INBOX_MIN_GAP,
             )
-
-            // Long-entry threshold
-            Stepper(
-                label = stringResource(R.string.inbox_settings_max_duration),
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            GroupedStepperRow(
+                title = stringResource(R.string.inbox_settings_max_duration),
                 value = stringResource(R.string.inbox_hours_value, config.maxDurationHours),
-                onDecrease = {
-                    viewModel.setMaxDurationHours(
-                        (config.maxDurationHours - MIN_DURATION_HOURS).coerceAtLeast(MIN_DURATION_HOURS),
-                    )
-                },
-                onIncrease = {
-                    viewModel.setMaxDurationHours(
-                        (config.maxDurationHours + MIN_DURATION_HOURS).coerceAtMost(MAX_DURATION_HOURS),
-                    )
-                },
-                decreaseCd = stringResource(R.string.inbox_settings_decrease),
-                increaseCd = stringResource(R.string.inbox_settings_increase),
+                leadingIcon = Icons.Outlined.Timer,
+                onDecrease = { viewModel.setMaxDurationHours(steppedDuration(config.maxDurationHours, up = false)) },
+                onIncrease = { viewModel.setMaxDurationHours(steppedDuration(config.maxDurationHours, up = true)) },
+                decreaseEnabled = config.maxDurationHours > MIN_DURATION_HOURS,
+                increaseEnabled = config.maxDurationHours < MAX_DURATION_HOURS,
+                testTag = ReviewTestTags.INBOX_MAX_DURATION,
             )
+        }
 
-            // Checks
-            SectionLabel(stringResource(R.string.inbox_settings_checks))
-            CheckToggle(stringResource(R.string.inbox_settings_check_gaps), config.checkGaps) {
-                viewModel.setCheckEnabled(InboxCheck.GAPS, it)
-            }
-            CheckToggle(stringResource(R.string.inbox_settings_check_overlaps), config.checkOverlaps) {
-                viewModel.setCheckEnabled(InboxCheck.OVERLAPS, it)
-            }
-            CheckToggle(stringResource(R.string.inbox_settings_check_missing_project), config.checkMissingProject) {
-                viewModel.setCheckEnabled(InboxCheck.MISSING_PROJECT, it)
-            }
-            CheckToggle(stringResource(R.string.inbox_settings_check_missing_task), config.checkMissingTask) {
-                viewModel.setCheckEnabled(InboxCheck.MISSING_TASK, it)
-            }
-            CheckToggle(stringResource(R.string.inbox_settings_check_missing_description), config.checkMissingDescription) {
-                viewModel.setCheckEnabled(InboxCheck.MISSING_DESCRIPTION, it)
-            }
-            CheckToggle(stringResource(R.string.inbox_settings_check_missing_tags), config.checkMissingTags) {
-                viewModel.setCheckEnabled(InboxCheck.MISSING_TAGS, it)
-            }
-            CheckToggle(stringResource(R.string.inbox_settings_check_long), config.checkLongDuration) {
-                viewModel.setCheckEnabled(InboxCheck.LONG_DURATION, it)
-            }
-
-            Button(
-                onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.inbox_settings_done))
+        val checks = listOf(
+            CheckRow(InboxCheck.GAPS, R.string.inbox_settings_check_gaps, Icons.Outlined.HourglassEmpty, config.checkGaps),
+            CheckRow(InboxCheck.OVERLAPS, R.string.inbox_settings_check_overlaps, Icons.Outlined.Layers, config.checkOverlaps),
+            CheckRow(
+                InboxCheck.MISSING_PROJECT,
+                R.string.inbox_settings_check_missing_project,
+                Icons.Outlined.FolderOff,
+                config.checkMissingProject,
+            ),
+            CheckRow(
+                InboxCheck.MISSING_TASK,
+                R.string.inbox_settings_check_missing_task,
+                Icons.AutoMirrored.Outlined.List,
+                config.checkMissingTask,
+            ),
+            CheckRow(
+                InboxCheck.MISSING_DESCRIPTION,
+                R.string.inbox_settings_check_missing_description,
+                Icons.AutoMirrored.Outlined.Notes,
+                config.checkMissingDescription,
+            ),
+            CheckRow(
+                InboxCheck.MISSING_TAGS,
+                R.string.inbox_settings_check_missing_tags,
+                Icons.AutoMirrored.Outlined.Label,
+                config.checkMissingTags,
+            ),
+            CheckRow(InboxCheck.LONG_DURATION, R.string.inbox_settings_check_long, Icons.Outlined.Timer, config.checkLongDuration),
+        )
+        GroupedSection(header = stringResource(R.string.inbox_settings_checks)) {
+            checks.forEachIndexed { index, check ->
+                if (index > 0) GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedSwitchRow(
+                    title = stringResource(check.titleRes),
+                    leadingIcon = check.icon,
+                    checked = check.checked,
+                    onCheckedChange = { viewModel.setCheckEnabled(check.check, it) },
+                    modifier = Modifier.testTag(ReviewTestTags.inboxCheck(check.check.name)),
+                )
             }
         }
     }
 
     editingWindow?.let { field ->
-        val initialMinute = if (field == WorkField.START) config.workStartMinute else config.workEndMinute
-        WorkTimePickerDialog(
-            initialMinute = initialMinute,
+        val initial = (if (field == WorkField.START) config.workStartMinute else config.workEndMinute)
+            .coerceIn(0, LAST_MINUTE_OF_DAY)
+        AppTimePickerDialog(
+            title = stringResource(
+                if (field == WorkField.START) R.string.sweep_inbox_work_start_title else R.string.sweep_inbox_work_end_title,
+            ),
+            initialHour = initial / MINUTES_PER_HOUR,
+            initialMinute = initial % MINUTES_PER_HOUR,
             onDismiss = { editingWindow = null },
-            onConfirm = { minute ->
-                if (field == WorkField.START) {
-                    viewModel.setWorkWindow(minute, config.workEndMinute)
-                } else {
-                    viewModel.setWorkWindow(config.workStartMinute, minute)
-                }
+            onConfirm = { hour, minute ->
+                val picked = hour * MINUTES_PER_HOUR + minute
+                val start = if (field == WorkField.START) picked else config.workStartMinute
+                val end = if (field == WorkField.END) picked else config.workEndMinute
+                // Say why nothing changed instead of silently keeping an empty working day.
+                windowInvalid = end <= start
+                if (!windowInvalid) viewModel.setWorkWindow(start, end)
                 editingWindow = null
             },
+            confirmTestTag = ReviewTestTags.INBOX_TIME_CONFIRM,
+        )
+    }
+
+    if (showWorkDays) {
+        WorkDaysPickerDialog(
+            selected = config.workDays,
+            firstDayOfWeek = state.firstDayOfWeek,
+            onChange = viewModel::setWorkDays,
+            onDismiss = { showWorkDays = false },
         )
     }
 }
 
 private enum class WorkField { START, END }
 
-@Composable
-private fun HorizonChoiceChip(label: String, onClick: () -> Unit) {
-    SuggestionChip(onClick = onClick, label = { Text(label) })
-}
+private data class CheckRow(val check: InboxCheck, val titleRes: Int, val icon: ImageVector, val checked: Boolean)
 
 @Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-}
+private fun horizonShortLabel(option: HorizonOption): String = stringResource(
+    when (option) {
+        HorizonOption.TODAY -> R.string.sweep_inbox_horizon_short_today
+        HorizonOption.THIS_WEEK -> R.string.sweep_inbox_horizon_short_week
+        HorizonOption.LAST_30_DAYS -> R.string.sweep_inbox_horizon_short_30_days
+        HorizonOption.EVERYTHING -> R.string.sweep_inbox_horizon_short_all
+    },
+)
 
+/** "Since 3 Jul" under the horizon choices, so a bound that no longer matches a choice is still visible. */
 @Composable
-private fun Stepper(label: String, value: String, onDecrease: () -> Unit, onIncrease: () -> Unit, decreaseCd: String, increaseCd: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.bodyMedium)
-            Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        FilledTonalIconButton(onClick = onDecrease, modifier = Modifier.size(48.dp)) {
-            Icon(Icons.Filled.Remove, contentDescription = decreaseCd)
-        }
-        androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
-        FilledTonalIconButton(onClick = onIncrease, modifier = Modifier.size(48.dp)) {
-            Icon(Icons.Filled.Add, contentDescription = increaseCd)
-        }
+private fun horizonFooter(horizonStartMs: Long?, zone: java.time.ZoneId, locale: java.util.Locale): String? {
+    if (horizonStartMs == null) return null
+    val date = remember(horizonStartMs, zone, locale) {
+        Instant.ofEpochMilli(horizonStartMs).atZone(zone)
+            .format(DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM).withLocale(locale))
     }
+    return stringResource(R.string.inbox_horizon_chip_since, date)
 }
 
-@Composable
-private fun CheckToggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onChange)
-    }
-}
+private fun steppedMinGap(value: Int, up: Boolean) = steppedValue(value, MIN_GAP_STEP_MINUTES, MIN_GAP_MINUTES, MAX_GAP_MINUTES, up)
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun WorkTimePickerDialog(initialMinute: Int, onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
-    val state = rememberTimePickerState(
-        initialHour = (initialMinute / MINUTES_PER_HOUR).coerceIn(MIN_HOUR, MAX_HOUR),
-        initialMinute = initialMinute % MINUTES_PER_HOUR,
-        is24Hour = true,
-    )
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            Button(onClick = { onConfirm(state.hour * MINUTES_PER_HOUR + state.minute) }) {
-                Text(stringResource(R.string.inbox_settings_done))
-            }
-        },
-        dismissButton = {
-            OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.inbox_dismiss)) }
-        },
-        text = { TimePicker(state = state) },
-    )
-}
-
-private fun minuteText(minuteOfDay: Int): String {
-    val clamped = minuteOfDay.coerceIn(MINUTE_OF_DAY_START, MINUTE_OF_DAY_END)
-    val h = clamped / MINUTES_PER_HOUR
-    val m = clamped % MINUTES_PER_HOUR
-    return "%02d:%02d".format(h, m)
-}
+private fun steppedDuration(value: Int, up: Boolean) = steppedValue(value, DURATION_STEP_HOURS, MIN_DURATION_HOURS, MAX_DURATION_HOURS, up)
 
 private const val MIN_GAP_STEP_MINUTES = 5
 private const val MIN_GAP_MINUTES = 1
+
+// The same bound the ViewModel accepts: a gap as long as a whole day.
+private const val MAX_GAP_MINUTES = 24 * 60
+private const val DURATION_STEP_HOURS = 1
 private const val MIN_DURATION_HOURS = 1
 private const val MAX_DURATION_HOURS = 24
 private const val MINUTES_PER_HOUR = 60
-private const val MIN_HOUR = 0
-private const val MAX_HOUR = 23
-private const val MINUTE_OF_DAY_START = 0
-private const val MINUTE_OF_DAY_END = 1440
+private const val LAST_MINUTE_OF_DAY = 1439
