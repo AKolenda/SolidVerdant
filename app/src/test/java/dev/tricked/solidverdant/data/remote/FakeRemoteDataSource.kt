@@ -44,8 +44,12 @@ class FakeRemoteDataSource(
     val stopped = mutableListOf<String>()
     val updated = mutableListOf<TimeEntry>()
 
+    val timeEntriesQueries = mutableListOf<TimeEntriesQuery>()
+    var membershipRequests = 0
+
     override suspend fun getTimeEntries(query: TimeEntriesQuery): Result<TimeEntriesResponse> {
         lastTimeEntriesQuery = query
+        timeEntriesQueries += query
         timeEntriesQueryValidator?.invoke(query)?.let { return Result.failure(it) }
         return Result.success(TimeEntriesResponse(data = entries))
     }
@@ -57,7 +61,10 @@ class FakeRemoteDataSource(
     override suspend fun getTasks(organizationId: String) = Result.success(tasks)
     override suspend fun getTags(organizationId: String) = Result.success(tags)
     override suspend fun getActiveTimeEntry() = Result.success(active)
-    override suspend fun getMyMemberships() = Result.success(memberships)
+    override suspend fun getMyMemberships(): Result<List<Membership>> {
+        membershipRequests += 1
+        return Result.success(memberships)
+    }
 
     override suspend fun startTimeEntry(
         organizationId: String,

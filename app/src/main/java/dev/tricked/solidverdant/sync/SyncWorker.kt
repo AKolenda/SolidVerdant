@@ -527,32 +527,12 @@ class SyncWorker @AssistedInject constructor(
             // other organizations would only fail the same way (and keep the window closed).
             halted?.let { return@mapValues it }
             runCatching {
-                val memberId = memberIdFor(organizationId, organizationOps)
-                val bounds = conflictWindow(organizationOps)
-                val entries = mutableListOf<TimeEntry>()
-                var offset = 0
-                while (offset < MAX_PAGE_SCAN) {
-                    val response = remote.getTimeEntries(
-                        TimeEntriesQuery(
-                            organizationId = organizationId,
-                            memberId = memberId,
-                            limit = PAGE_SIZE,
-                            offset = offset,
-                            onlyFullDates = false,
-                            start = bounds.first,
-                            end = bounds.second,
-                        ),
-                    ).getOrThrow()
-                    entries += response.data
-                    if (response.data.isEmpty() ||
-                        response.data.size < PAGE_SIZE ||
-                        offset + response.data.size >= (response.meta?.total ?: Int.MAX_VALUE)
-                    ) {
-                        break
-                    }
-                    offset += response.data.size
+                val memberId = memberIdFor(organizationId, ops.filter { it.organizationId == organizationId })
+                val entries = mutableMapOf<String, TimeEntry>()
+                conflictWindows(organizationOps).forEach { (start, end) ->
+                    fetchCompleteWindow(organizationId, memberId, start, end).associateByTo(entries) { it.id }
                 }
-                ConflictIndex.Ready(entries.associateByTo(mutableMapOf()) { it.id })
+                ConflictIndex.Ready(entries)
             }.getOrElse { error ->
                 if (error is CancellationException) throw error
                 Timber.w(error, "Could not fetch conflict comparison data")
@@ -566,6 +546,44 @@ class SyncWorker @AssistedInject constructor(
         }
     }
 
+    /**
+     * Every server entry in one window, or an exception. "Missing from the result" is read as
+     * "deleted on the server", so a scan that stopped at the safety cap must never be trusted as
+     * complete: it would mark older entries deleted and Keep mine would re-create duplicates.
+     */
+    private suspend fun fetchCompleteWindow(organizationId: String, memberId: String, start: String?, end: String?): List<TimeEntry> {
+        val entries = mutableListOf<TimeEntry>()
+        var offset = 0
+        while (offset < MAX_PAGE_SCAN) {
+            val response = remote.getTimeEntries(
+                TimeEntriesQuery(
+                    organizationId = organizationId,
+                    memberId = memberId,
+                    limit = PAGE_SIZE,
+                    offset = offset,
+                    onlyFullDates = false,
+                    start = start,
+                    end = end,
+                ),
+            ).getOrThrow()
+            entries += response.data
+            if (response.data.isEmpty() ||
+                response.data.size < PAGE_SIZE ||
+                offset + response.data.size >= (response.meta?.total ?: Int.MAX_VALUE)
+            ) {
+                return entries
+            }
+            offset += response.data.size
+        }
+        throw IOException("Conflict comparison window exceeded the scan limit")
+    }
+
+    /**
+     * The organization's member id, needed by the history filter. Queued START/CREATE payloads
+     * carry it; otherwise the Room membership cache (refreshed by pulls, cleared with the
+     * account) answers. Only a cold cache pays for the 1 + N membership/organization requests,
+     * and their result is cached for the next run.
+     */
     private suspend fun memberIdFor(organizationId: String, ops: List<OutboxEntity>): String {
         val payloadMember = ops.firstNotNullOfOrNull { op ->
             when (op.opType) {
@@ -579,31 +597,51 @@ class SyncWorker @AssistedInject constructor(
             }
         }
         if (!payloadMember.isNullOrBlank()) return payloadMember
-        return remote.getMyMemberships().getOrThrow().firstOrNull { it.organizationId == organizationId }?.id
+        database.catalogDao().getMembershipForOrganization(organizationId)?.let { return it.id }
+        val memberships = remote.getMyMemberships().getOrThrow()
+        database.catalogDao().upsertMemberships(memberships.map { it.toEntity() })
+        return memberships.firstOrNull { it.organizationId == organizationId }?.id
             ?: throw IOException("No membership available for queued sync")
     }
 
-    private suspend fun conflictWindow(ops: List<OutboxEntity>): Pair<String?, String?> {
-        val instants = buildList {
+    /**
+     * Windows of +/- one day around each queued entry (its last server-acked start and its local
+     * start), merged where they overlap. Solidtime filters both bounds by start time, so this
+     * finds the entries unless another client moved them by more than a day. The previous single
+     * window stretched to "now" and re-downloaded the whole history since the oldest edit.
+     */
+    private suspend fun conflictWindows(ops: List<OutboxEntity>): List<Pair<String?, String?>> {
+        val padding = Duration.ofDays(1).toMillis()
+        var unknownPosition = false
+        val ranges = buildList {
             ops.forEach { op ->
-                val base = runCatching { json.decodeFromString<ConflictSnapshot>(op.baseSnapshotJson!!) }.getOrNull()
-                base?.startMs?.let(::add)
-                timeEntryDao.getById(op.timeEntryId)?.start?.let { raw ->
-                    runCatching { Instant.parse(raw).toEpochMilli() }.getOrNull()?.let(::add)
+                val instants = buildList {
+                    runCatching { json.decodeFromString<ConflictSnapshot>(op.baseSnapshotJson!!) }.getOrNull()?.startMs?.let(::add)
+                    timeEntryDao.getById(op.timeEntryId)?.start?.let(::parseTimeEntryInstant)?.toEpochMilli()?.let(::add)
                 }
+                if (instants.isEmpty()) unknownPosition = true
+                instants.forEach { add(it - padding to it + padding) }
             }
         }
-        if (instants.isEmpty()) return null to null
-        val padding = Duration.ofDays(1).toMillis()
+        // Without any timestamp the only complete answer is the unbounded history.
+        if (unknownPosition || ranges.isEmpty()) return listOf(null to null)
+        val merged = mutableListOf<Pair<Long, Long>>()
+        ranges.sortedBy { it.first }.forEach { range ->
+            val last = merged.lastOrNull()
+            if (last != null && range.first <= last.second) {
+                merged[merged.lastIndex] = last.first to maxOf(last.second, range.second)
+            } else {
+                merged += range
+            }
+        }
 
         // Solidtime's time-entry filters require `Y-m-dTH:i:sZ` exactly. Instant.toString()
         // includes a fractional component whenever the device clock has non-zero milliseconds,
-        // causing the conflict preflight GET to fail validation before STOP/UPDATE/DELETE can run.
+        // causing the conflict preflight GET to fail validation before UPDATE/DELETE can run.
         fun wholeSecondUtc(epochMs: Long) = Instant.ofEpochMilli(epochMs)
             .truncatedTo(ChronoUnit.SECONDS)
             .toString()
-        return wholeSecondUtc(instants.min() - padding) to
-            wholeSecondUtc(maxOf(instants.max() + padding, clock.nowMs() + padding))
+        return merged.map { (start, end) -> wholeSecondUtc(start) to wholeSecondUtc(end) }
     }
 
     /** Return every server entry that could be this CREATE, scanning the bounded timestamp window. */

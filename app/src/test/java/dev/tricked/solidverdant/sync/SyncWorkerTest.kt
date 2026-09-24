@@ -1977,6 +1977,73 @@ class SyncWorkerTest {
         )
     }
 
+    private suspend fun queueEditWithBase(id: String, start: String, end: String) {
+        val entry = TimeEntry(id = id, userId = "u1", organizationId = "org1", start = start, end = end, description = "before")
+        db.timeEntryDao().upsert(entry.copy(description = "mine").toEntity(updatedAt = 1L, syncState = SyncState.PENDING))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = id,
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(UpdatePayload("u1", start, end, "mine", null, null, false, emptyList())),
+                baseSnapshotJson = json.encodeToString(ConflictSnapshot.of(start, end, "before", null, null, false, emptyList())),
+            ),
+        )
+    }
+
+    @Test fun conflict_check_fetches_narrow_windows_around_queued_entries_not_up_to_now() = runTest {
+        nowMs = java.time.Instant.parse("2026-09-01T10:00:00Z").toEpochMilli()
+        queueEditWithBase("server-a", "2026-07-01T08:00:00Z", "2026-07-01T09:00:00Z")
+        queueEditWithBase("server-b", "2026-07-01T12:00:00Z", "2026-07-01T13:00:00Z")
+        queueEditWithBase("server-c", "2026-07-20T08:00:00Z", "2026-07-20T09:00:00Z")
+        remote.memberships = listOf(Membership("m1", "member", Organization("org1", "Org", "USD")))
+        remote.entries = listOf(
+            TimeEntry("server-a", "before", "u1", "2026-07-01T08:00:00Z", "2026-07-01T09:00:00Z", organizationId = "org1"),
+            TimeEntry("server-b", "before", "u1", "2026-07-01T12:00:00Z", "2026-07-01T13:00:00Z", organizationId = "org1"),
+            TimeEntry("server-c", "before", "u1", "2026-07-20T08:00:00Z", "2026-07-20T09:00:00Z", organizationId = "org1"),
+        )
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        assertEquals(
+            listOf(
+                "2026-06-30T08:00:00Z" to "2026-07-02T12:00:00Z",
+                "2026-07-19T08:00:00Z" to "2026-07-21T08:00:00Z",
+            ),
+            remote.timeEntriesQueries.map { it.start to it.end },
+        )
+        assertEquals(3, remote.updated.size)
+    }
+
+    @Test fun truncated_conflict_scan_retries_instead_of_calling_entries_deleted() = runTest {
+        queueEditWithBase("server-old", "2026-07-01T08:00:00Z", "2026-07-01T09:00:00Z")
+        remote.memberships = listOf(Membership("m1", "member", Organization("org1", "Org", "USD")))
+        // A window that never ends (every page full, no total): the scan hits its safety cap.
+        remote.entries = List(250) { index ->
+            TimeEntry("other-$index", "x", "u1", "2026-07-01T08:00:00Z", "2026-07-01T09:00:00Z", organizationId = "org1")
+        }
+
+        assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+
+        val row = db.timeEntryDao().getById("server-old")
+        assertEquals("An incomplete scan is not evidence of a server deletion", SyncState.PENDING, row?.syncState)
+        assertEquals(1, db.outboxDao().peekAll().single().attemptCount)
+        assertTrue(remote.updated.isEmpty())
+    }
+
+    @Test fun member_id_is_resolved_once_and_cached_for_later_runs() = runTest {
+        queueEditWithBase("server-a", "2026-07-01T08:00:00Z", "2026-07-01T09:00:00Z")
+        remote.memberships = listOf(Membership("m1", "member", Organization("org1", "Org", "USD")))
+        remote.failNextWrite = true
+
+        buildWorker().doWork()
+        buildWorker().doWork()
+
+        assertEquals(1, remote.membershipRequests)
+        assertTrue(remote.timeEntriesQueries.all { it.memberId == "m1" })
+    }
+
     @Test fun rate_limit_records_marker_and_retry_after_without_spending_an_attempt() = runTest {
         val body = """{"message":"Too Many Attempts."}""".toResponseBody()
         val raw = okhttp3.Response.Builder()

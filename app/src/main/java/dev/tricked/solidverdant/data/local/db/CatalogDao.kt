@@ -40,6 +40,10 @@ interface CatalogDao {
     @Query("SELECT * FROM memberships")
     fun observeMemberships(): Flow<List<MembershipEntity>>
 
+    /** The signed-in account's membership in [orgId] (the cache is cleared with the account). */
+    @Query("SELECT * FROM memberships WHERE organizationId = :orgId LIMIT 1")
+    suspend fun getMembershipForOrganization(orgId: String): MembershipEntity?
+
     @Query("DELETE FROM projects")
     suspend fun clearProjects()
 
