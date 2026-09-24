@@ -21,58 +21,95 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Logout
-import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.AdminPanelSettings
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.DataUsage
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Dns
-import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.FolderZip
+import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Storage
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.components.ConfirmDialog
+import dev.tricked.solidverdant.ui.components.GroupedDivider
+import dev.tricked.solidverdant.ui.components.GroupedRow
+import dev.tricked.solidverdant.ui.components.GroupedSection
+import dev.tricked.solidverdant.ui.settings.LogoutConfirmDialog
+import dev.tricked.solidverdant.ui.theme.Dimens
+
+/** Stable tags for the privacy and data screen. */
+object PrivacyTestTags {
+    const val EXPORT_ROW = "privacy_export_row"
+    const val CLEAR_CACHE_ROW = "privacy_clear_cache_row"
+    const val LOGOUT_ROW = "privacy_logout_row"
+    const val CLEAR_CONFIRM = "privacy_clear_confirm"
+    const val SYNC_FIRST_CONFIRM = "privacy_sync_first_confirm"
+}
+
+private enum class PrivacyDialog { CLEAR, SYNC_FIRST, LOGOUT }
 
 /**
  * Privacy & data-management screen (roadmap #48). Explains what the app stores locally, what leaves
  * the device, how credentials are protected, and which optional permissions do what — then offers
  * the three data controls: export diagnostics (#49), clear the re-syncable cache, and log out /
- * revoke the local session. Destructive actions confirm first. Status is communicated with text and
- * icons, never color alone.
+ * revoke the local session. Destructive actions are red and confirm first; clearing the cache is
+ * refused while changes are still waiting to sync. Status is communicated with text and icons,
+ * never color alone.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 @Suppress("LongMethod")
 fun PrivacyScreen(onBack: () -> Unit = {}, onLogout: () -> Unit = {}) {
     val viewModel: PrivacyViewModel = hiltViewModel()
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    var dialog by rememberSaveable { mutableStateOf<PrivacyDialog?>(null) }
 
-    var showClearDialog by remember { mutableStateOf(false) }
-    var showLogoutDialog by remember { mutableStateOf(false) }
+    LaunchedEffect(state.clearOutcome) {
+        when (state.clearOutcome) {
+            PrivacyViewModel.ClearOutcome.CLEARED ->
+                snackbarHostState.showSnackbar(context.getString(R.string.sweep_privacy_cleared))
+            PrivacyViewModel.ClearOutcome.FAILED ->
+                snackbarHostState.showSnackbar(context.getString(R.string.sweep_privacy_clear_failed))
+            // Changes arrived while the confirmation was open: explain instead of clearing.
+            PrivacyViewModel.ClearOutcome.BLOCKED -> dialog = PrivacyDialog.SYNC_FIRST
+            null -> return@LaunchedEffect
+        }
+        viewModel.consumeClearOutcome()
+    }
 
     Scaffold(
         topBar = {
@@ -88,52 +125,50 @@ fun PrivacyScreen(onBack: () -> Unit = {}, onLogout: () -> Unit = {}) {
                 },
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(top = Dimens.Space8, bottom = Dimens.Space24),
+            verticalArrangement = Arrangement.spacedBy(Dimens.Space24),
         ) {
-            SectionCard(
-                icon = Icons.Outlined.Storage,
-                title = stringResource(R.string.privacy_stored_title),
+            GroupedSection(
+                header = stringResource(R.string.privacy_stored_title),
+                footer = stringResource(R.string.privacy_source_legend),
             ) {
-                Body(stringResource(R.string.privacy_stored_solidtime))
-                Body(stringResource(R.string.privacy_stored_local))
-                Body(stringResource(R.string.privacy_stored_tokens))
-                Body(stringResource(R.string.privacy_source_legend))
+                InfoRow(Icons.Outlined.CloudDownload, stringResource(R.string.privacy_stored_solidtime))
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                InfoRow(Icons.Outlined.PhoneAndroid, stringResource(R.string.privacy_stored_local))
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                InfoRow(Icons.Outlined.Key, stringResource(R.string.privacy_stored_tokens))
             }
 
-            SectionCard(
-                icon = Icons.Outlined.CloudUpload,
-                title = stringResource(R.string.privacy_sent_title),
+            GroupedSection(
+                header = stringResource(R.string.privacy_sent_title),
+                footer = stringResource(R.string.privacy_sent_body),
             ) {
-                Body(stringResource(R.string.privacy_sent_endpoint_label))
-                Text(
-                    text = state.serverHost.ifBlank { stringResource(R.string.privacy_sent_endpoint_unknown) },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                GroupedRow(
+                    title = stringResource(R.string.privacy_sent_endpoint_label),
+                    leadingIcon = Icons.Outlined.Dns,
+                    value = state.serverHost.ifBlank { stringResource(R.string.privacy_sent_endpoint_unknown) },
                 )
-                Body(stringResource(R.string.privacy_sent_body))
             }
 
-            SectionCard(
-                icon = Icons.Outlined.Lock,
-                title = stringResource(R.string.privacy_tokens_title),
-            ) {
-                Body(stringResource(R.string.privacy_tokens_body))
+            GroupedSection(header = stringResource(R.string.privacy_tokens_title)) {
+                InfoRow(Icons.Outlined.Lock, stringResource(R.string.privacy_tokens_body))
             }
 
-            SectionCard(
-                icon = Icons.Outlined.Notifications,
-                title = stringResource(R.string.privacy_permissions_title),
-            ) {
-                Body(stringResource(R.string.privacy_permissions_notifications))
-                Body(stringResource(R.string.privacy_permissions_calendar))
-                OutlinedButton(
+            GroupedSection(header = stringResource(R.string.privacy_permissions_title)) {
+                InfoRow(Icons.Outlined.Notifications, stringResource(R.string.privacy_permissions_notifications))
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                InfoRow(Icons.Outlined.CalendarMonth, stringResource(R.string.privacy_permissions_calendar))
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedRow(
+                    title = stringResource(R.string.privacy_permissions_open_settings),
+                    leadingIcon = Icons.Outlined.AdminPanelSettings,
                     onClick = {
                         val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                             .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
@@ -147,160 +182,135 @@ fun PrivacyScreen(onBack: () -> Unit = {}, onLogout: () -> Unit = {}) {
                                 }
                             }
                     },
-                    modifier = Modifier.heightIn(min = 48.dp),
-                ) {
-                    Text(stringResource(R.string.privacy_permissions_open_settings))
-                }
+                )
             }
 
-            SectionCard(
-                icon = Icons.Outlined.Info,
-                title = stringResource(R.string.privacy_storage_title),
+            GroupedSection(
+                header = stringResource(R.string.privacy_storage_title),
+                footer = stringResource(R.string.privacy_storage_note),
             ) {
-                if (state.computingStorage) {
-                    Body(stringResource(R.string.privacy_storage_computing))
-                } else {
-                    StorageRow(
-                        label = stringResource(R.string.privacy_storage_database),
-                        value = ByteSizeFormatter.format(state.dbBytes),
-                    )
-                    StorageRow(
-                        label = stringResource(R.string.privacy_storage_cache),
-                        value = ByteSizeFormatter.format(state.cacheBytes),
-                    )
-                    StorageRow(
-                        label = stringResource(R.string.privacy_storage_total),
-                        value = ByteSizeFormatter.format(state.totalBytes),
-                        emphasize = true,
-                    )
-                }
-                Body(stringResource(R.string.privacy_storage_note))
+                val computing = stringResource(R.string.privacy_storage_computing)
+                GroupedRow(
+                    title = stringResource(R.string.privacy_storage_database),
+                    leadingIcon = Icons.Outlined.Storage,
+                    value = if (state.computingStorage) computing else ByteSizeFormatter.format(state.dbBytes),
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedRow(
+                    title = stringResource(R.string.privacy_storage_cache),
+                    leadingIcon = Icons.Outlined.FolderZip,
+                    value = if (state.computingStorage) computing else ByteSizeFormatter.format(state.cacheBytes),
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedRow(
+                    title = stringResource(R.string.privacy_storage_total),
+                    leadingIcon = Icons.Outlined.DataUsage,
+                    value = if (state.computingStorage) computing else ByteSizeFormatter.format(state.totalBytes),
+                )
             }
 
-            SectionCard(
-                icon = Icons.Outlined.DeleteSweep,
-                title = stringResource(R.string.privacy_actions_title),
-            ) {
-                OutlinedButton(
-                    onClick = {
-                        viewModel.exportDiagnostics { uri ->
-                            runCatching { context.startActivity(viewModel.shareIntentFor(uri)) }
+            GroupedSection(header = stringResource(R.string.privacy_actions_title)) {
+                GroupedRow(
+                    title = stringResource(R.string.privacy_action_export),
+                    subtitle = stringResource(R.string.privacy_action_export_note),
+                    leadingIcon = Icons.Outlined.IosShare,
+                    onClick = if (state.exporting) {
+                        null
+                    } else {
+                        {
+                            viewModel.exportDiagnostics { uri ->
+                                runCatching { context.startActivity(viewModel.shareIntentFor(uri)) }
+                            }
                         }
                     },
-                    enabled = !state.exporting,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                ) {
-                    Icon(Icons.Outlined.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text(stringResource(R.string.privacy_action_export), modifier = Modifier.padding(start = 8.dp))
-                }
-                Body(stringResource(R.string.privacy_action_export_note))
-
-                OutlinedButton(
-                    onClick = { showClearDialog = true },
-                    enabled = !state.clearingCache,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                ) {
-                    Icon(Icons.Outlined.DeleteSweep, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text(stringResource(R.string.privacy_action_clear_cache), modifier = Modifier.padding(start = 8.dp))
-                }
-                Body(stringResource(R.string.privacy_action_clear_cache_note))
-
-                OutlinedButton(
-                    onClick = { showLogoutDialog = true },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                ) {
-                    Icon(Icons.AutoMirrored.Outlined.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text(stringResource(R.string.privacy_action_logout), modifier = Modifier.padding(start = 8.dp))
-                }
-                Body(stringResource(R.string.privacy_action_logout_note))
+                    showChevron = false,
+                    trailing = if (state.exporting) ({ RowProgress() }) else null,
+                    modifier = Modifier.testTag(PrivacyTestTags.EXPORT_ROW),
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedRow(
+                    title = stringResource(R.string.privacy_action_clear_cache),
+                    subtitle = stringResource(R.string.privacy_action_clear_cache_note),
+                    leadingIcon = Icons.Outlined.DeleteSweep,
+                    destructive = true,
+                    onClick = if (state.clearingCache) {
+                        null
+                    } else {
+                        { dialog = if (state.unsyncedChanges > 0) PrivacyDialog.SYNC_FIRST else PrivacyDialog.CLEAR }
+                    },
+                    trailing = if (state.clearingCache) ({ RowProgress() }) else null,
+                    modifier = Modifier.testTag(PrivacyTestTags.CLEAR_CACHE_ROW),
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedRow(
+                    title = stringResource(R.string.privacy_action_logout),
+                    subtitle = stringResource(R.string.privacy_action_logout_note),
+                    leadingIcon = Icons.AutoMirrored.Outlined.Logout,
+                    destructive = true,
+                    onClick = { dialog = PrivacyDialog.LOGOUT },
+                    modifier = Modifier.testTag(PrivacyTestTags.LOGOUT_ROW),
+                )
             }
         }
     }
 
-    if (showClearDialog) {
-        ConfirmDialog(
+    when (dialog) {
+        PrivacyDialog.CLEAR -> ConfirmDialog(
             title = stringResource(R.string.privacy_clear_dialog_title),
             message = stringResource(R.string.privacy_clear_dialog_message),
             confirmLabel = stringResource(R.string.privacy_clear_dialog_confirm),
             onConfirm = {
-                showClearDialog = false
+                dialog = null
                 viewModel.clearCache()
             },
-            onDismiss = { showClearDialog = false },
+            onDismiss = { dialog = null },
+            destructive = true,
+            confirmTestTag = PrivacyTestTags.CLEAR_CONFIRM,
         )
-    }
-
-    if (showLogoutDialog) {
-        ConfirmDialog(
-            title = stringResource(R.string.privacy_logout_dialog_title),
-            message = stringResource(R.string.privacy_logout_dialog_message),
-            confirmLabel = stringResource(R.string.privacy_logout_dialog_confirm),
+        PrivacyDialog.SYNC_FIRST -> {
+            val waiting = state.unsyncedChanges.coerceAtLeast(1)
+            ConfirmDialog(
+                title = pluralStringResource(R.plurals.sweep_privacy_clear_blocked_title, waiting, waiting),
+                message = pluralStringResource(R.plurals.sweep_privacy_clear_blocked_message, waiting, waiting),
+                confirmLabel = stringResource(R.string.sync_now),
+                onConfirm = {
+                    dialog = null
+                    viewModel.syncNow()
+                },
+                onDismiss = { dialog = null },
+                confirmTestTag = PrivacyTestTags.SYNC_FIRST_CONFIRM,
+            )
+        }
+        PrivacyDialog.LOGOUT -> LogoutConfirmDialog(
+            unsyncedChanges = state.unsyncedChanges,
             onConfirm = {
-                showLogoutDialog = false
+                dialog = null
                 onLogout()
             },
-            onDismiss = { showLogoutDialog = false },
+            onDismiss = { dialog = null },
         )
+        null -> Unit
     }
 }
 
+/** An explanatory line in a grouped section: icon and body text, aligned with the other rows. */
 @Composable
-private fun SectionCard(icon: ImageVector, title: String, content: @Composable () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+private fun InfoRow(icon: ImageVector, text: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = Dimens.MinTouchTarget)
+            .padding(horizontal = Dimens.Space16, vertical = Dimens.Space12),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Space12),
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, contentDescription = null)
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
-            }
-            content()
-        }
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(Dimens.IconSmall))
+        Text(text = text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
     }
 }
 
 @Composable
-private fun Body(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-}
-
-@Composable
-private fun StorageRow(label: String, value: String, emphasize: Boolean = false) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            Icons.Outlined.Dns,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp),
-        )
-        Text(
-            text = label,
-            style = if (emphasize) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.weight(1f).padding(start = 8.dp),
-        )
-        Text(
-            text = value,
-            style = if (emphasize) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary,
-        )
+private fun RowProgress() {
+    Column(verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        CircularProgressIndicator(modifier = Modifier.size(Dimens.IconSmall), strokeWidth = Dimens.Space2)
     }
-}
-
-@Composable
-private fun ConfirmDialog(title: String, message: String, confirmLabel: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(message) },
-        confirmButton = { TextButton(onClick = onConfirm) { Text(confirmLabel) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.privacy_dialog_cancel)) } },
-    )
 }
