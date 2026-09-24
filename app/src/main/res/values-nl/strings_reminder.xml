@@ -29,7 +29,6 @@
 
     <!-- Gedeelde dialogen -->
     <string name="review_dialog_confirm">Instellen</string>
-    <string name="review_dialog_cancel">Annuleren</string>
     <string name="review_project_dialog_title">Kies een project</string>
     <string name="review_project_dialog_empty">Er zijn nog geen projecten beschikbaar.</string>
 

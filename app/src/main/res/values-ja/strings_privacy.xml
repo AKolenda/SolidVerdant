@@ -43,7 +43,6 @@
     <string name="privacy_action_logout">ログアウト / セッションを取り消す</string>
     <string name="privacy_action_logout_note">ローカルセッションとキャッシュされたアカウントデータをすべて消去し、保存されたトークンを削除します。</string>
 
-    <string name="privacy_dialog_cancel">キャンセル</string>
     <string name="privacy_clear_dialog_title">キャッシュを消去しますか？</string>
     <string name="privacy_clear_dialog_message">ローカルにキャッシュされた時間トラッキングのデータを削除します。サーバーから再同期されます。お気に入りは保持され、ログインは維持されます。</string>
     <string name="privacy_clear_dialog_confirm">消去</string>

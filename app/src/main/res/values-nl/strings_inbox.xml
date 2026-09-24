@@ -83,9 +83,6 @@
     <string name="inbox_settings_check_missing_description">Ontbrekende omschrijving</string>
     <string name="inbox_settings_check_missing_tags">Ontbrekende tags</string>
     <string name="inbox_settings_check_long">Lange items</string>
-    <string name="inbox_settings_done">Klaar</string>
-    <string name="inbox_settings_decrease">Verlagen</string>
-    <string name="inbox_settings_increase">Verhogen</string>
     <string name="inbox_minutes_value">%1$d min</string>
     <string name="inbox_hours_value">%1$d u</string>
 

@@ -43,7 +43,6 @@
     <string name="privacy_action_logout">Uitloggen / sessie intrekken</string>
     <string name="privacy_action_logout_note">Wist je lokale sessie en alle opgeslagen accountgegevens en verwijdert opgeslagen tokens.</string>
 
-    <string name="privacy_dialog_cancel">Annuleren</string>
     <string name="privacy_clear_dialog_title">Cachegegevens wissen?</string>
     <string name="privacy_clear_dialog_message">Dit verwijdert lokaal opgeslagen tijdregistratiegegevens. Ze synchroniseren opnieuw vanaf de server. Favorieten blijven en je blijft ingelogd.</string>
     <string name="privacy_clear_dialog_confirm">Wissen</string>

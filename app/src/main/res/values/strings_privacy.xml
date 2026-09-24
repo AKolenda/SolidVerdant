@@ -43,7 +43,6 @@
     <string name="privacy_action_logout">Log out / revoke session</string>
     <string name="privacy_action_logout_note">Clears your local session and all cached account data, and removes stored tokens.</string>
 
-    <string name="privacy_dialog_cancel">Cancel</string>
     <string name="privacy_clear_dialog_title">Clear cached data?</string>
     <string name="privacy_clear_dialog_message">This removes locally cached time-tracking data. It will re-sync from the server. Favourites are kept and you stay logged in.</string>
     <string name="privacy_clear_dialog_confirm">Clear</string>
