@@ -1737,6 +1737,16 @@ class SyncWorkerTest {
         assertTrue(db.outboxDao().peekAll().isEmpty())
     }
 
+    @Test fun start_sends_the_tags_and_billable_flag_chosen_on_start() = runTest {
+        repository().startEntry("org1", "m1", "u1", null, null, "tagged", listOf("tag-1"), billable = true)
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        assertEquals(listOf("tag-1"), remote.lastStartTagIds)
+        assertEquals(true, remote.lastStartBillable)
+        assertEquals(listOf("tag-1"), db.timeEntryDao().tagIdsFor("server-1"))
+    }
+
     @Test fun start_does_not_adopt_an_unrelated_running_timer() = runTest {
         val repository = repository()
         val local = repository.startEntry("org1", "m1", "u1", null, null, "offline timer", emptyList())

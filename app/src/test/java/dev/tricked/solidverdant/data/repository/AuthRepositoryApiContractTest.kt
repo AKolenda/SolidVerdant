@@ -352,7 +352,16 @@ class AuthRepositoryApiContractTest {
             }
         }
 
-        assertTrue(repository.startTimeEntry("org", "member", "user", startIso = "2026-08-07T10:00:00+02:00").isSuccess)
+        assertTrue(
+            repository.startTimeEntry(
+                "org",
+                "member",
+                "user",
+                startIso = "2026-08-07T10:00:00+02:00",
+                tags = listOf("tag-1"),
+                billable = true,
+            ).isSuccess,
+        )
         assertTrue(
             repository.createTimeEntry(
                 organizationId = "org",
@@ -373,6 +382,8 @@ class AuthRepositoryApiContractTest {
         )
 
         assertTrue(writeBodies[0].contains("\"start\":\"2026-08-07T08:00:00Z\""))
+        assertTrue("Tags chosen on start must reach the server", writeBodies[0].contains("\"tags\":[\"tag-1\"]"))
+        assertTrue(writeBodies[0].contains("\"billable\":true"))
         assertTrue(writeBodies[1].contains("\"start\":\"2026-08-07T08:00:00Z\""))
         assertTrue(writeBodies[1].contains("\"end\":\"2026-08-08T08:00:00Z\""))
         assertEquals("{\"end\":\"2026-08-08T08:00:00Z\"}", writeBodies[2])

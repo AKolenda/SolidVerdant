@@ -346,6 +346,8 @@ class SyncWorker @AssistedInject constructor(
             payload.taskId,
             payload.description,
             startTime = payload.start,
+            tagIds = payload.tagIds,
+            billable = payload.billable,
         ).getOrThrow()
         return reconcile(op, server, fallbackTagIds = payload.tagIds)
     }

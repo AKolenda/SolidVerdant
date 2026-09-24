@@ -267,6 +267,9 @@ class AuthRepository @Inject constructor(
         // really began so an offline-captured start is not stamped with the reconnect/sync time.
         // Null/blank falls back to now() for callers that do not thread a captured value.
         startIso: String? = null,
+        // Chosen when the timer started; omitting them made the tags vanish on the next pull.
+        tags: List<String> = emptyList(),
+        billable: Boolean = false,
     ): Result<TimeEntry> = try {
         val endpoint = authDataStore.getEndpoint()
         val api = apiClientFactory.createApi(endpoint)
@@ -282,7 +285,8 @@ class AuthRepository @Inject constructor(
             description = description,
             projectId = projectId,
             taskId = taskId,
-            billable = false,
+            billable = billable,
+            tags = tags,
         )
 
         val response = api.startTimeEntry(organizationId, request)

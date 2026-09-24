@@ -51,6 +51,8 @@ interface RemoteDataSource {
         description: String,
         // Capture-time start (ISO-8601) so an offline-queued START keeps its real start time.
         startTime: String,
+        tagIds: List<String> = emptyList(),
+        billable: Boolean = false,
     ): Result<TimeEntry>
     suspend fun createTimeEntry(
         organizationId: String,
@@ -102,7 +104,19 @@ class AuthRemoteDataSource @Inject constructor(private val authRepository: AuthR
         taskId: String?,
         description: String,
         startTime: String,
-    ) = authRepository.startTimeEntry(organizationId, memberId, userId, projectId, taskId, description, startIso = startTime)
+        tagIds: List<String>,
+        billable: Boolean,
+    ) = authRepository.startTimeEntry(
+        organizationId,
+        memberId,
+        userId,
+        projectId,
+        taskId,
+        description,
+        startIso = startTime,
+        tags = tagIds,
+        billable = billable,
+    )
     override suspend fun createTimeEntry(organizationId: String, memberId: String, userId: String, entry: TimeEntry, tags: List<String>) =
         authRepository.createTimeEntry(
             organizationId, memberId, userId, entry.start, requireNotNull(entry.end),

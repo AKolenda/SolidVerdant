@@ -353,6 +353,7 @@ class TimeEntryRepository @Inject constructor(
         taskId: String?,
         description: String,
         tagIds: List<String>,
+        billable: Boolean = false,
     ): TimeEntry {
         val now = clock.nowMs()
         val localId = "local-" + java.util.UUID.randomUUID().toString()
@@ -360,7 +361,7 @@ class TimeEntryRepository @Inject constructor(
         val entry = TimeEntry(
             id = localId, description = description, userId = userId, start = start,
             end = null, duration = null, taskId = taskId, projectId = projectId,
-            billable = false, organizationId = organizationId,
+            tags = tagIds.map(::Tag), billable = billable, organizationId = organizationId,
         )
         // SV-026: the optimistic Room write and its outbox enqueue must commit atomically, or a
         // crash between them yields an entry Room shows but the outbox never learns to sync (or
@@ -387,7 +388,7 @@ class TimeEntryRepository @Inject constructor(
                     createdAtMs = now,
                     clientId = newClientId(),
                     payloadJson = json.encodeToString(
-                        StartPayload(memberId, userId, projectId, taskId, description, tagIds, start = start),
+                        StartPayload(memberId, userId, projectId, taskId, description, tagIds, start = start, billable = billable),
                     ),
                 ),
             )

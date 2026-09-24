@@ -37,6 +37,8 @@ class FakeRemoteDataSource(
 
     // Capture-time timestamps received on the last START/STOP call, for SV-017 assertions.
     var lastStartTime: String? = null
+    var lastStartTagIds: List<String>? = null
+    var lastStartBillable: Boolean? = null
     var lastEndTime: String? = null
     var timeEntriesQueryValidator: ((TimeEntriesQuery) -> Throwable?)? = null
     var lastTimeEntriesQuery: TimeEntriesQuery? = null
@@ -74,11 +76,15 @@ class FakeRemoteDataSource(
         taskId: String?,
         description: String,
         startTime: String,
+        tagIds: List<String>,
+        billable: Boolean,
     ): Result<TimeEntry> {
         writeError?.let { return Result.failure(it) }
         if (failNextWrite) return Result.failure(java.io.IOException("offline"))
         started += Triple(description, projectId, taskId)
         lastStartTime = startTime
+        lastStartTagIds = tagIds
+        lastStartBillable = billable
         val entry = startResult(
             TimeEntry(
                 id = "server-1",
