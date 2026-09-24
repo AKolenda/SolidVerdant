@@ -86,7 +86,10 @@ class TimeTrackingTileService : TileService() {
 
     companion object {
         private const val NOTIFICATION_CHANNEL_ID = "time_tracking_errors"
-        private const val NOTIFICATION_ID = 1001
+
+        // Must differ from the tracking notification (1001) and its error (1002): posting a tile
+        // error under 1001 replaced the running-timer notification and its Stop action.
+        internal const val NOTIFICATION_ID = 1003
 
         // Actions
         const val ACTION_START_TRACKING = "dev.tricked.solidverdant.ACTION_START_TRACKING"

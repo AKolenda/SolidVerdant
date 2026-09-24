@@ -638,15 +638,39 @@ class TimeTrackingNotificationService : Service() {
         }
     }
 
-    /** Promote to a foreground service with the dataSync type (matches the manifest). */
+    /**
+     * Promote to a foreground service with the dataSync type (matches the manifest). Android can
+     * refuse: Android 15+ forbids dataSync from BOOT_COMPLETED, Android 12+ from most background
+     * starts, and the daily dataSync budget can be exhausted. The refusal is thrown here, long
+     * after startForegroundService() returned, so it must not crash the app: keep the same
+     * notification posted as a plain notification instead (the timer itself lives in Room and
+     * on the server).
+     */
     private fun startForegroundCompat(notification: Notification) {
-        // minSdk is 29, so the typed startForeground overload is always available.
-        startForeground(
-            NOTIFICATION_ID,
-            notification,
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-        )
-        isForeground = true
+        try {
+            // minSdk is 29, so the typed startForeground overload is always available.
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+            )
+            isForeground = true
+        } catch (e: IllegalStateException) {
+            // ForegroundServiceStartNotAllowedException (API 31+) extends IllegalStateException.
+            postWithoutForeground(notification, e)
+        } catch (e: SecurityException) {
+            postWithoutForeground(notification, e)
+        }
+    }
+
+    private fun postWithoutForeground(notification: Notification, error: Exception) {
+        Timber.w(error, "Foreground service not allowed; posting the timer notification without it")
+        isForeground = false
+        try {
+            notificationManager.notify(NOTIFICATION_ID, notification)
+        } catch (se: SecurityException) {
+            Timber.w(se, "Timer notification suppressed: notification permission missing")
+        }
     }
 
     private fun refreshNotificationIfVisible() {
