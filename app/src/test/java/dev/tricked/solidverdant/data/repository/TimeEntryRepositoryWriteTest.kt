@@ -431,7 +431,13 @@ class TimeEntryRepositoryWriteTest {
 
     @Test fun observed_entries_emit_once_per_change_and_skip_unrelated_writes() = runTest {
         db.catalogDao().upsertTags(listOf(dev.tricked.solidverdant.data.local.db.TagEntity("t1", "tag one", "org1")))
-        val entry = TimeEntry(id = "server-1", userId = "u", organizationId = "org1", start = "2026-07-07T08:00:00Z", end = "2026-07-07T09:00:00Z")
+        val entry = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+        )
         db.timeEntryDao().upsert(entry.toEntity(1L, SyncState.SYNCED))
         db.timeEntryDao().replaceTagRefs(entry.id, listOf("t1"))
 
@@ -463,7 +469,13 @@ class TimeEntryRepositoryWriteTest {
     @Test fun prune_keeps_months_loaded_in_this_process() = runTest {
         var now = java.time.Instant.parse("2026-09-01T00:00:00Z").toEpochMilli()
         val repository = repoAt({ now })
-        val veryOld = TimeEntry(id = "very-old", userId = "u", organizationId = "org1", start = "2024-03-10T08:00:00Z", end = "2024-03-10T09:00:00Z")
+        val veryOld = TimeEntry(
+            id = "very-old",
+            userId = "u",
+            organizationId = "org1",
+            start = "2024-03-10T08:00:00Z",
+            end = "2024-03-10T09:00:00Z",
+        )
         val loadedOld = veryOld.copy(id = "loaded-old", start = "2024-06-10T08:00:00Z", end = "2024-06-10T09:00:00Z")
         db.timeEntryDao().upsert(veryOld.toEntity(1L, SyncState.SYNCED))
         db.timeEntryDao().upsert(loadedOld.toEntity(1L, SyncState.SYNCED))
@@ -487,7 +499,9 @@ class TimeEntryRepositoryWriteTest {
             end = "2026-07-07T09:00:00Z",
         )
         db.timeEntryDao().upsert(synced.toEntity(1L, SyncState.SYNCED))
-        val neverSynced = repository.createCompletedEntry("org1", "m", "u", "local", null, null, emptyList(), false, synced.start, synced.end!!)
+        val neverSynced = repository.createCompletedEntry(
+            "org1", "m", "u", "local", null, null, emptyList(), false, synced.start, synced.end!!,
+        )
         repository.softDeleteLocal(synced)
         repository.softDeleteLocal(neverSynced)
 
@@ -509,7 +523,13 @@ class TimeEntryRepositoryWriteTest {
 
     @Test fun refresh_commits_orphaned_soft_deletes_before_pulling() = runTest {
         var now = 1_000L
-        val server = TimeEntry(id = "server-1", userId = "u", organizationId = "org1", start = "2026-07-07T08:00:00Z", end = "2026-07-07T09:00:00Z")
+        val server = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+        )
         val repository = repoAt({ now }, FakeRemoteDataSource(entries = listOf(server)))
         db.timeEntryDao().upsert(server.toEntity(1L, SyncState.SYNCED))
         repository.softDeleteLocal(server)
