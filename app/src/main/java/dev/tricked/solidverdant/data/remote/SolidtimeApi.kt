@@ -11,6 +11,7 @@ import dev.tricked.solidverdant.data.model.CreateClientRequest
 import dev.tricked.solidverdant.data.model.CreateProjectRequest
 import dev.tricked.solidverdant.data.model.CreateTagRequest
 import dev.tricked.solidverdant.data.model.CreateTaskRequest
+import dev.tricked.solidverdant.data.model.MembersResponse
 import dev.tricked.solidverdant.data.model.MembershipsResponse
 import dev.tricked.solidverdant.data.model.OrganizationResponse
 import dev.tricked.solidverdant.data.model.ProjectResponse
@@ -162,6 +163,23 @@ interface SolidtimeApi {
         @Query("start") start: String? = null,
         @Query("end") end: String? = null,
     ): TimeEntriesResponse
+
+    /**
+     * Time entries on one project, all of them regardless of date. A null [memberId] asks for every
+     * member's entries, which needs the `time-entries:view:all` permission.
+     */
+    @GET("api/v1/organizations/{organization}/time-entries")
+    suspend fun getProjectTimeEntries(
+        @Path("organization") organizationId: String,
+        @Query("project_ids[]") projectId: String,
+        @Query("member_id") memberId: String? = null,
+        @Query("limit") limit: Int = 500,
+        @Query("offset") offset: Int = 0,
+    ): TimeEntriesResponse
+
+    /** The organization's members; needs the `members:view` permission. */
+    @GET("api/v1/organizations/{organization}/members")
+    suspend fun getMembers(@Path("organization") organizationId: String, @Query("page") page: Int = 1): MembersResponse
 
     /**
      * Update an existing time entry

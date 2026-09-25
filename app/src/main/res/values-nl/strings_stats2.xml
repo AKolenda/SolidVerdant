@@ -57,6 +57,8 @@
 
     <!-- Uitsplitsingvenster. -->
     <string name="stats2_drilldown_empty">Geen vermeldingen in deze selectie</string>
+    <string name="stats2_drilldown_load_failed">Kon niet alle vermeldingen van de server laden</string>
+    <string name="stats2_drilldown_own_only">Alleen je eigen vermeldingen. Je rol kan de tijd van andere leden niet zien.</string>
     <string name="stats2_drilldown_total">Totaal %1$s</string>
     <string name="stats2_drilldown_no_description">(geen omschrijving)</string>
     <string name="stats2_drilldown_project_content_description">Toon vermeldingen voor %1$s</string>

@@ -11,7 +11,9 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -71,5 +73,44 @@ class StatDrillDownSheetTest {
         show(DrillDownUiState(target = target, isLoading = true, rows = listOf(row(0))))
 
         composeRule.onNodeWithTag(StatDrillDownTestTags.row("e0")).assertDoesNotExist()
+    }
+
+    @Test
+    fun aProjectHistoryNamesWhoLoggedEachEntryAndDatesOlderYears() {
+        val history = DrillDownTarget.ProjectHistory(projectId = "p1", projectName = "Job 42", colorHex = "#FF0000")
+        val lastYear = LocalDate.now().minusYears(1).withMonth(3).withDayOfMonth(4)
+        val rows = listOf(row(0).copy(memberName = "Sylvain", startDate = lastYear))
+        show(DrillDownUiState(target = history, isLoading = false, rows = rows, totalSeconds = 600, isRefreshing = true))
+
+        composeRule.onNodeWithText("Job 42").assertExists()
+        composeRule.onNodeWithText("Sylvain", substring = true).assertExists()
+        composeRule.onNodeWithText(lastYear.year.toString(), substring = true).assertExists()
+        composeRule.onNodeWithTag(StatDrillDownTestTags.REFRESHING).assertExists()
+    }
+
+    @Test
+    fun anUnreachableServerOffersRetryAndOwnOnlyListsSayWhy() {
+        var retries = 0
+        composeRule.setContent {
+            MaterialTheme {
+                StatDrillDownSheet(
+                    state = DrillDownUiState(
+                        target = target,
+                        isLoading = false,
+                        rows = listOf(row(0)),
+                        loadFailed = true,
+                        ownEntriesOnly = true,
+                    ),
+                    onDismiss = {},
+                    onRetry = { retries++ },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(StatDrillDownTestTags.OWN_ONLY).assertExists()
+        composeRule.onNodeWithTag(StatDrillDownTestTags.LOAD_FAILED).assertExists()
+        composeRule.onNodeWithText("Retry").performClick()
+        assertEquals(1, retries)
+        composeRule.onNodeWithTag(StatDrillDownTestTags.row("e0")).assertExists()
     }
 }

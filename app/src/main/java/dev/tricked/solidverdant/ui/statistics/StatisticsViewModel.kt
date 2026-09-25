@@ -21,6 +21,7 @@ import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.time.TemporalPolicy
 import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
+import dev.tricked.solidverdant.domain.time.isWorkTimeEntry
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -38,10 +39,12 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import retrofit2.HttpException
 import timber.log.Timber
 import java.time.LocalDate
 import java.time.ZoneId
@@ -50,6 +53,7 @@ import javax.inject.Inject
 
 private const val REMOTE_PAGE_SIZE = 500
 private const val UI_STATE_STOP_TIMEOUT_MS = 5_000L
+private const val HTTP_FORBIDDEN = 403
 
 data class StatisticsUiState(
     val isLoading: Boolean = true,
@@ -91,6 +95,12 @@ sealed interface DrillDownTarget {
 
     /** The Dashboard's "Other" row: every project folded out of the top list. */
     data class OtherProjects(val projectIds: Set<String?>) : DrillDownTarget
+
+    /**
+     * An Estimates row: every entry on the project, whatever its date, as the server's spent total
+     * counts them. The selected range and the filters do not apply.
+     */
+    data class ProjectHistory(val projectId: String, val projectName: String, val colorHex: String) : DrillDownTarget
 }
 
 /** Contents of the drill-down bottom sheet for the currently tapped [target]. */
@@ -99,6 +109,12 @@ data class DrillDownUiState(
     val isLoading: Boolean = true,
     val rows: List<DrillDownRow> = emptyList(),
     val totalSeconds: Long = 0L,
+    /** More entries are still arriving from the server; the rows so far are listed. */
+    val isRefreshing: Boolean = false,
+    /** The server could not be reached, so only the entries stored on this phone are listed. */
+    val loadFailed: Boolean = false,
+    /** The account may not see other members' time, so only its own entries are listed. */
+    val ownEntriesOnly: Boolean = false,
 )
 
 /**
@@ -165,8 +181,10 @@ class StatisticsViewModel @Inject constructor(
     private val _exportState = MutableStateFlow<ExportState>(ExportState.Idle)
     val exportState: StateFlow<ExportState> = _exportState.asStateFlow()
 
-    private val _drillDown = MutableStateFlow<DrillDownUiState?>(null)
-    val drillDown: StateFlow<DrillDownUiState?> = _drillDown.asStateFlow()
+    private val drillDownTarget = MutableStateFlow<DrillDownTarget?>(null)
+
+    /** Bumped by Retry in a project history list to fetch it again. */
+    private val projectHistoryReload = MutableStateFlow(0)
 
     /** Latest inputs needed to build a CSV of the current filtered range, refreshed by [uiState]. */
     @Volatile
@@ -438,71 +456,149 @@ class StatisticsViewModel @Inject constructor(
         openDrillDown(DrillDownTarget.TrendSlice(label, start, end))
     }
 
+    /** Opens every entry on an Estimates row's project, all dates and every visible member. */
+    fun openEstimateDrillDown(estimate: EstimateProgress) {
+        openDrillDown(DrillDownTarget.ProjectHistory(estimate.id, estimate.name, estimate.colorHex.orEmpty()))
+    }
+
     fun closeDrillDown() {
-        _drillDown.value = null
+        drillDownTarget.value = null
+    }
+
+    /** Retry in the drill-down: a project history is fetched again, a range list refreshes the range. */
+    fun retryDrillDown() {
+        if (drillDownTarget.value is DrillDownTarget.ProjectHistory) projectHistoryReload.value += 1 else refresh()
+    }
+
+    private fun openDrillDown(target: DrillDownTarget) {
+        drillDownTarget.value = target
     }
 
     /**
-     * Computes the drill-down rows for [target] off the main thread from the already-filtered,
-     * already-fetched entries in the current [uiState]. A late result is dropped if the user has
-     * since closed the sheet or opened a different slice, so a slow computation can't overwrite the
-     * visible selection. Does nothing when no range has resolved yet.
+     * The open drill-down, recomputed off the main thread while it is shown. A list opened before
+     * the range finished loading fills in when the server's entries arrive, and local edits show at
+     * once; closing the sheet or opening another slice cancels the previous computation.
      */
-    private fun openDrillDown(target: DrillDownTarget) {
-        val snapshot = uiState.value
-        val rangeStart = snapshot.rangeStart ?: return
-        val rangeEnd = snapshot.rangeEnd ?: return
-        val snapshotZone = zone
-        _drillDown.value = DrillDownUiState(target = target, isLoading = true)
-        viewModelScope.launch {
-            val rows = withContext(Dispatchers.Default) {
-                when (target) {
-                    is DrillDownTarget.ProjectSlice -> StatisticsAggregator.drillDown(
-                        entries = snapshot.filteredEntries,
-                        projects = snapshot.catalog.projects,
-                        tasks = snapshot.catalog.tasks,
-                        zone = snapshotZone,
-                        selStart = rangeStart,
-                        selEnd = rangeEnd,
-                        matchProject = true,
-                        projectId = target.projectId,
-                    )
-                    is DrillDownTarget.OtherProjects -> StatisticsAggregator.drillDown(
-                        entries = snapshot.filteredEntries.filter { it.projectId in target.projectIds },
-                        projects = snapshot.catalog.projects,
-                        tasks = snapshot.catalog.tasks,
-                        zone = snapshotZone,
-                        selStart = rangeStart,
-                        selEnd = rangeEnd,
-                        matchProject = false,
-                        projectId = null,
-                    )
-                    is DrillDownTarget.TrendSlice -> {
-                        val selStart = if (target.start.isAfter(rangeStart)) target.start else rangeStart
-                        val selEnd = if (target.end.isBefore(rangeEnd)) target.end else rangeEnd
-                        StatisticsAggregator.drillDown(
-                            entries = snapshot.filteredEntries,
-                            projects = snapshot.catalog.projects,
-                            tasks = snapshot.catalog.tasks,
-                            zone = snapshotZone,
-                            selStart = selStart,
-                            selEnd = selEnd,
-                            matchProject = false,
-                            projectId = null,
-                        )
-                    }
+    val drillDown: StateFlow<DrillDownUiState?> = drillDownTarget
+        .flatMapLatest { target ->
+            when (target) {
+                null -> flowOf(null)
+                is DrillDownTarget.ProjectHistory -> projectHistoryDrillDown(target)
+                else -> uiState.map { state -> rangeDrillDown(target, state) }.flowOn(Dispatchers.Default)
+            }.onStart { if (target != null) emit(DrillDownUiState(target = target, isLoading = true)) }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** The rows of a range list: the Dashboard's filtered entries, clipped to the tapped slice. */
+    private fun rangeDrillDown(target: DrillDownTarget, state: StatisticsUiState): DrillDownUiState {
+        val rangeStart = state.rangeStart ?: return DrillDownUiState(target = target, isLoading = true)
+        val rangeEnd = state.rangeEnd ?: return DrillDownUiState(target = target, isLoading = true)
+        fun rows(entries: List<TimeEntry>, selStart: LocalDate, selEnd: LocalDate, projectId: String?, matchProject: Boolean) =
+            StatisticsAggregator.drillDown(
+                entries = entries,
+                projects = state.catalog.projects,
+                tasks = state.catalog.tasks,
+                zone = zone,
+                selStart = selStart,
+                selEnd = selEnd,
+                matchProject = matchProject,
+                projectId = projectId,
+            )
+        val rows = when (target) {
+            is DrillDownTarget.ProjectSlice -> rows(state.filteredEntries, rangeStart, rangeEnd, target.projectId, matchProject = true)
+            is DrillDownTarget.OtherProjects ->
+                rows(state.filteredEntries.filter { it.projectId in target.projectIds }, rangeStart, rangeEnd, null, matchProject = false)
+            is DrillDownTarget.TrendSlice -> rows(
+                state.filteredEntries,
+                selStart = if (target.start.isAfter(rangeStart)) target.start else rangeStart,
+                selEnd = if (target.end.isBefore(rangeEnd)) target.end else rangeEnd,
+                projectId = null,
+                matchProject = false,
+            )
+            is DrillDownTarget.ProjectHistory -> emptyList()
+        }
+        return DrillDownUiState(
+            target = target,
+            isLoading = false,
+            rows = rows,
+            totalSeconds = rows.sumOf { it.seconds },
+            isRefreshing = state.isRefreshing,
+            loadFailed = state.refreshFailed,
+        )
+    }
+
+    /** The server's answer for one project's history; see [fetchProjectHistory]. */
+    private sealed interface ProjectHistoryLoad {
+        data object Loading : ProjectHistoryLoad
+        data object Failed : ProjectHistoryLoad
+        data class Loaded(val entries: List<TimeEntry>, val everyone: Boolean, val memberNames: Map<String, String>) : ProjectHistoryLoad
+    }
+
+    /**
+     * Every entry on [target]'s project. Room's rows replace the server copies by id and queued
+     * deletions drop out, so unsynced changes show; while the server is loading or unreachable,
+     * Room's own entries are listed.
+     */
+    private fun projectHistoryDrillDown(target: DrillDownTarget.ProjectHistory): Flow<DrillDownUiState> =
+        membershipFlow.flatMapLatest { membership ->
+            if (membership == null) return@flatMapLatest flowOf(DrillDownUiState(target = target, isLoading = false, loadFailed = true))
+            val organizationId = membership.organizationId
+            val server = projectHistoryReload.flatMapLatest {
+                flow {
+                    emit(ProjectHistoryLoad.Loading)
+                    emit(fetchProjectHistory(organizationId, membership.id, target.projectId))
                 }
             }
-            if (_drillDown.value?.target == target) {
-                _drillDown.value = DrillDownUiState(
+            combine(
+                server,
+                observeLocalEntries(organizationId),
+                uiState.map { it.catalog }.distinctUntilChanged(),
+            ) { load, local, catalog ->
+                val localIds = local.entries.mapTo(HashSet()) { it.id }
+                val serverOnly = (load as? ProjectHistoryLoad.Loaded)?.entries.orEmpty()
+                    .filter { it.id !in localIds && it.id !in local.pendingDeleteIds }
+                val entries = (local.entries.filter { it.projectId == target.projectId } + serverOnly).filter(::isWorkTimeEntry)
+                val rows = StatisticsAggregator.historyRows(
+                    entries = entries,
+                    projects = catalog.projects,
+                    tasks = catalog.tasks,
+                    zone = zone,
+                    memberNames = (load as? ProjectHistoryLoad.Loaded)?.memberNames.orEmpty(),
+                )
+                DrillDownUiState(
                     target = target,
-                    isLoading = false,
+                    isLoading = load == ProjectHistoryLoad.Loading && rows.isEmpty(),
                     rows = rows,
                     totalSeconds = rows.sumOf { it.seconds },
+                    isRefreshing = load == ProjectHistoryLoad.Loading,
+                    loadFailed = load == ProjectHistoryLoad.Failed,
+                    ownEntriesOnly = (load as? ProjectHistoryLoad.Loaded)?.everyone == false,
                 )
-            }
+            }.flowOn(Dispatchers.Default)
         }
-    }
+
+    /**
+     * Every member's entries on [projectId] when the account may see them, which is what the
+     * server's spent total counts; a refused request (403) falls back to the account's own entries.
+     * Authors are named only when the list holds more than one person's time.
+     */
+    private suspend fun fetchProjectHistory(organizationId: String, memberId: String, projectId: String): ProjectHistoryLoad =
+        withContext(Dispatchers.IO) {
+            val everyone = authRepository.getAllProjectTimeEntries(organizationId, projectId, memberId = null)
+            everyone.getOrNull()?.let { entries ->
+                val names = if (entries.mapTo(HashSet()) { it.userId }.size > 1) {
+                    authRepository.getMembers(organizationId).getOrNull().orEmpty().associate { it.userId to it.name }
+                } else {
+                    emptyMap()
+                }
+                return@withContext ProjectHistoryLoad.Loaded(entries, everyone = true, memberNames = names)
+            }
+            if ((everyone.exceptionOrNull() as? HttpException)?.code() != HTTP_FORBIDDEN) return@withContext ProjectHistoryLoad.Failed
+            authRepository.getAllProjectTimeEntries(organizationId, projectId, memberId).fold(
+                onSuccess = { ProjectHistoryLoad.Loaded(it, everyone = false, memberNames = emptyMap()) },
+                onFailure = { ProjectHistoryLoad.Failed },
+            )
+        }
 
     /**
      * Builds a CSV of the currently filtered range off the main thread, writes it to the export

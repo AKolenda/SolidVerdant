@@ -99,6 +99,8 @@ data class DrillDownRow(
     val startDate: LocalDate,
     val seconds: Long,
     val billable: Boolean,
+    /** Who logged the entry, set when a list holds more than one person's time. */
+    val memberName: String? = null,
 )
 
 object StatisticsAggregator {
@@ -247,6 +249,45 @@ object StatisticsAggregator {
                 startDate = daily.first().first,
                 seconds = daily.sumOf { it.second },
                 billable = e.billable,
+            )
+        }.sortedWith(
+            compareByDescending<DrillDownRow> { it.startDate }.thenByDescending { it.seconds },
+        )
+    }
+
+    /**
+     * Rows for whole entries, not clipped to any range: an estimate's project history. Running
+     * entries have no length yet and are left out. [memberNames] maps a user id to the name shown
+     * on its rows. Ordered like [drillDown]: newest day first, then longest first.
+     */
+    fun historyRows(
+        entries: List<TimeEntry>,
+        projects: List<Project>,
+        tasks: List<Task>,
+        zone: ZoneId,
+        memberNames: Map<String, String> = emptyMap(),
+    ): List<DrillDownRow> {
+        val projectById = projects.associateBy { it.id }
+        val taskById = tasks.associateBy { it.id }
+        return entries.mapNotNull { e ->
+            val start = parseTimeEntryInstant(e.start) ?: return@mapNotNull null
+            val seconds = when {
+                e.end != null -> parseTimeEntryInstant(e.end)?.let { it.epochSecond - start.epochSecond } ?: return@mapNotNull null
+                e.duration != null && e.duration > 0 -> e.duration.toLong()
+                else -> return@mapNotNull null
+            }
+            val project = e.projectId?.let { projectById[it] }
+            DrillDownRow(
+                entryId = e.id,
+                description = e.description,
+                projectId = e.projectId,
+                projectName = project?.name,
+                colorHex = project?.color ?: NO_PROJECT_COLOR,
+                taskName = e.taskId?.let { taskById[it]?.name },
+                startDate = start.atZone(zone).toLocalDate(),
+                seconds = seconds.coerceAtLeast(0),
+                billable = e.billable,
+                memberName = memberNames[e.userId],
             )
         }.sortedWith(
             compareByDescending<DrillDownRow> { it.startDate }.thenByDescending { it.seconds },

@@ -487,6 +487,60 @@ class AuthRepositoryApiContractTest {
     }
 
     @Test
+    fun `a project history asks for every member's entries on the project and pages to the end`() = runTest {
+        val urls = Collections.synchronizedList(mutableListOf<okhttp3.HttpUrl>())
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val url = requireNotNull(request.requestUrl)
+                urls += url
+                val offset = url.queryParameter("offset")?.toInt() ?: 0
+                val ids = if (offset == 0) 1..500 else 501..620
+                return MockResponse()
+                    .setHeader("Content-Type", "application/json")
+                    .setBody("""{"data":[${ids.joinToString(",") { entry(it) }}],"meta":{"total":620}}""")
+            }
+        }
+
+        val entries = repository.getAllProjectTimeEntries("org", "job", memberId = null).getOrThrow()
+
+        assertEquals(620, entries.size)
+        assertEquals(listOf("0", "500"), urls.map { it.queryParameter("offset") })
+        urls.forEach { url ->
+            assertEquals("/api/v1/organizations/org/time-entries", url.encodedPath)
+            assertEquals(listOf("job"), url.queryParameterValues("project_ids[]"))
+            assertNull(url.queryParameter("member_id"))
+            assertNull("Every date: no start filter", url.queryParameter("start"))
+            assertEquals("500", url.queryParameter("limit"))
+        }
+    }
+
+    @Test
+    fun `a refused all-members project history keeps its 403 and members are paged`() = runTest {
+        server.enqueue(
+            MockResponse().setResponseCode(403).setHeader("Content-Type", "application/json").setBody("""{"message":"Forbidden"}"""),
+        )
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "application/json").setBody(
+                """{"data":[{"id":"m1","user_id":"u1","name":"Alex","email":"a@example.test","role":"owner","is_placeholder":false,"billable_rate":null}],"meta":{"current_page":1,"last_page":2}}""",
+            ),
+        )
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "application/json").setBody(
+                """{"data":[{"id":"m2","user_id":"u2","name":"Sylvain","email":"s@example.test","role":"employee","is_placeholder":false,"billable_rate":null}],"meta":{"current_page":2,"last_page":2}}""",
+            ),
+        )
+
+        val refused = repository.getAllProjectTimeEntries("org", "job", memberId = null)
+        assertEquals(403, (refused.exceptionOrNull() as HttpException).code())
+
+        val members = repository.getMembers("org").getOrThrow()
+        assertEquals(listOf("u1" to "Alex", "u2" to "Sylvain"), members.map { it.userId to it.name })
+        server.takeRequest()
+        assertEquals("/api/v1/organizations/org/members?page=1", server.takeRequest().path)
+        assertEquals("/api/v1/organizations/org/members?page=2", server.takeRequest().path)
+    }
+
+    @Test
     fun `official empty 204 delete succeeds while missing entry 404 remains observable`() = runTest {
         server.enqueue(MockResponse().setResponseCode(204))
         server.enqueue(
@@ -624,6 +678,9 @@ class AuthRepositoryApiContractTest {
 
     private fun client(page: Int) =
         """{"id":"client-$page","name":"Client $page","is_archived":false,"created_at":"2026-08-08T08:00:00Z","updated_at":"2026-08-08T08:00:00Z"}"""
+
+    private fun entry(index: Int) =
+        """{"id":"e$index","start":"2026-08-07T08:00:00Z","end":"2026-08-07T09:00:00Z","duration":3600,"description":null,"task_id":null,"project_id":"job","organization_id":"org","user_id":"u$index","tags":[],"billable":false,"type":"work"}"""
 
     private fun paginated(item: String, page: Int): String =
         """{"data":[$item],"links":{"first":"https://example.test?page=1","last":"https://example.test?page=2","prev":null,"next":null},"meta":{"current_page":$page,"from":$page,"last_page":2,"links":[],"path":"https://example.test","per_page":15,"to":$page,"total":2}}"""

@@ -146,7 +146,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
             onExport = viewModel::export,
             onProjectClick = { viewModel.openProjectDrillDown(it.projectId, it.projectName, it.colorHex) },
             onOtherProjectsClick = viewModel::openOtherProjectsDrillDown,
-            onEstimateClick = { viewModel.openProjectDrillDown(it.id, it.name, it.colorHex.orEmpty()) },
+            onEstimateClick = viewModel::openEstimateDrillDown,
             onBucketClick = { bucket ->
                 val end = when (state.granularity) {
                     TrendGranularity.DAY -> bucket.startDate
@@ -162,7 +162,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
     }
 
     drillDown?.let { dd ->
-        StatDrillDownSheet(state = dd, onDismiss = viewModel::closeDrillDown)
+        StatDrillDownSheet(state = dd, onDismiss = viewModel::closeDrillDown, onRetry = viewModel::retryDrillDown)
     }
 }
 
@@ -275,8 +275,8 @@ private fun ExportAction(exporting: Boolean, onExport: () -> Unit) {
 /**
  * "Estimates & progress": server-authoritative spent vs estimated time per project, remaining or
  * overflow, and a consumed-fraction bar. Over-budget and near-estimate items are flagged with BOTH
- * a colour and a text label (never colour alone). Tapping a project opens its entries in the
- * selected range. Rendered only when [items] is non-empty.
+ * a colour and a text label (never colour alone). Tapping a project opens every entry the spent
+ * total counts, whatever the selected range. Rendered only when [items] is non-empty.
  */
 @Composable
 private fun EstimatesCard(items: List<EstimateProgress>, onClick: (EstimateProgress) -> Unit) {

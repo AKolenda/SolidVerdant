@@ -10,6 +10,7 @@ import dev.tricked.solidverdant.data.local.AccountDataOwnerGuard
 import dev.tricked.solidverdant.data.local.AuthDataStore
 import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Membership
+import dev.tricked.solidverdant.data.model.OrganizationMember
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
@@ -45,6 +46,10 @@ class AuthRepository @Inject constructor(
         private const val REDIRECT_URI = "solidtime://oauth/callback"
         private const val HTTP_NOT_FOUND = 404
         private const val MAX_CATALOG_PAGES = 10_000
+
+        /** The server's largest time-entry page, and a stop far beyond any one project's history. */
+        private const val PROJECT_ENTRY_PAGE_SIZE = 500
+        private const val MAX_PROJECT_ENTRY_PAGES = 200
     }
 
     val isLoggedIn: Flow<Boolean> = authDataStore.isLoggedIn
@@ -429,6 +434,47 @@ class AuthRepository @Inject constructor(
         throw e
     } catch (e: Exception) {
         Timber.e(e, "Failed to get time entries")
+        Result.failure(e)
+    }
+
+    /**
+     * Every time entry on [projectId], whatever its date, paged until the server has no more. A null
+     * [memberId] asks for every member's entries. A failure keeps its HTTP status, so a caller can
+     * tell a refused all-members request (403) from an outage; no partial list is returned.
+     */
+    suspend fun getAllProjectTimeEntries(organizationId: String, projectId: String, memberId: String?): Result<List<TimeEntry>> = try {
+        val api = apiClientFactory.createApi(authDataStore.getEndpoint())
+        val entries = LinkedHashMap<String, TimeEntry>()
+        var offset = 0
+        for (page in 0 until MAX_PROJECT_ENTRY_PAGES) {
+            val response = api.getProjectTimeEntries(organizationId, projectId, memberId, PROJECT_ENTRY_PAGE_SIZE, offset)
+            val added = response.data.count { entries.putIfAbsent(it.id, it) == null }
+            offset += response.data.size
+            val total = response.meta?.total
+            // A short page, the reported total or a page of only repeats ends the list.
+            if (response.data.size < PROJECT_ENTRY_PAGE_SIZE || (total != null && offset >= total) || added == 0) break
+        }
+        Result.success(entries.values.toList())
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Timber.w("Failed to get the project's time entries: %s", e.javaClass.simpleName)
+        Result.failure(e)
+    }
+
+    /** The organization's members, for naming who logged an entry. */
+    suspend fun getMembers(organizationId: String): Result<List<OrganizationMember>> = try {
+        val api = apiClientFactory.createApi(authDataStore.getEndpoint())
+        Result.success(
+            collectAllPages { page ->
+                val response = api.getMembers(organizationId, page)
+                response.data to response.meta
+            },
+        )
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Timber.w("Failed to get members: %s", e.javaClass.simpleName)
         Result.failure(e)
     }
 

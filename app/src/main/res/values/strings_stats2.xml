@@ -57,6 +57,8 @@
 
     <!-- Drill-down sheet. -->
     <string name="stats2_drilldown_empty">No entries in this selection</string>
+    <string name="stats2_drilldown_load_failed">Couldn\'t load every entry from the server</string>
+    <string name="stats2_drilldown_own_only">Only your entries. Your role can\'t see other members\' time.</string>
     <string name="stats2_drilldown_total">Total %1$s</string>
     <string name="stats2_drilldown_no_description">(no description)</string>
     <string name="stats2_drilldown_project_content_description">Show entries for %1$s</string>
