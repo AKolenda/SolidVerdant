@@ -47,7 +47,7 @@ import org.robolectric.Shadows.shadowOf
 /**
  * The running entry's details and the editing fields Stop and Resume commit: saves after the timer
  * ended, edits kept through Stop and Pause → Resume, deleting the running timer, one-shot editor
- * requests, and the Calendar's Continue while paused.
+ * requests, and Continue while idle, paused or running.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -70,6 +70,17 @@ class TrackingViewModelRunningEntryTest {
         projectId = "project-1",
         taskId = "task-1",
     )
+
+    /** A finished entry for another job, and the timer that continuing it starts. */
+    private val olderEntry = active.copy(
+        id = "older",
+        start = "2026-08-10T06:00:00Z",
+        end = "2026-08-10T07:00:00Z",
+        description = "Other work",
+        projectId = "project-7",
+        taskId = null,
+    )
+    private val nextRunning = olderEntry.copy(id = "local-next", start = "2026-08-10T10:00:00Z", end = null)
 
     @Before
     fun setUp() {
@@ -359,26 +370,76 @@ class TrackingViewModelRunningEntryTest {
     }
 
     @Test
-    fun continue_is_refused_while_a_timer_is_paused_and_keeps_its_fields() = runTest(dispatcher.scheduler) {
+    fun continue_while_paused_ends_the_pause_and_starts_the_entry() = runTest(dispatcher.scheduler) {
         val repository = mockk<TimeEntryRepository>(relaxed = true)
+        coEvery { repository.startEntry(any(), any(), any(), any(), any(), any(), any(), any()) } returns nextRunning
         cacheActiveEntry()
         val viewModel = viewModel(repository)
         viewModel.pauseTimeEntry()
         dispatcher.scheduler.runCurrent()
         assertTrue(viewModel.uiState.value.isPaused)
 
-        val started = viewModel.continueEntry(
-            entry = active.copy(id = "older", description = "Other work", projectId = "project-7"),
-            organizationId = "org",
-            memberId = "member",
-            userId = "user",
-        )
+        val started = viewModel.continueEntry(olderEntry, organizationId = "org", memberId = "member", userId = "user")
         dispatcher.scheduler.runCurrent()
 
-        assertFalse(started)
-        assertEquals("Precision setup", viewModel.uiState.value.editingDescription)
-        assertEquals("project-1", viewModel.uiState.value.editingProjectId)
-        coVerify(exactly = 0) { repository.startEntry(any(), any(), any(), any(), any(), any(), any()) }
+        assertTrue(started)
+        coVerify(exactly = 1) { repository.startEntry("org", "member", "user", "project-7", null, "Other work", emptyList(), false) }
+        val state = viewModel.uiState.value
+        assertFalse(state.isPaused)
+        assertTrue(state.isTracking)
+        assertEquals(nextRunning.id, state.currentTimeEntry?.id)
+        assertEquals("Other work", state.editingDescription)
+        assertEquals("project-7", state.editingProjectId)
+        dispose(viewModel)
+    }
+
+    @Test
+    fun continue_while_a_timer_runs_stops_it_with_its_fields_and_starts_the_entry() = runTest(dispatcher.scheduler) {
+        val repository = mockk<TimeEntryRepository>(relaxed = true)
+        coEvery { repository.switchEntry(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns nextRunning
+        cacheActiveEntry()
+        val viewModel = viewModel(repository)
+        // The docked timer's unsaved description is what Stop would commit.
+        viewModel.updateDescription("Precision setup, checked")
+
+        val started = viewModel.continueEntry(olderEntry, organizationId = "org", memberId = "member", userId = "user")
+        dispatcher.scheduler.runCurrent()
+
+        assertTrue(started)
+        coVerify(exactly = 1) {
+            repository.switchEntry(
+                running = match { it.id == "active" },
+                editedRunning = match { it.id == "active" && it.description == "Precision setup, checked" && it.projectId == "project-1" },
+                runningTagIds = emptyList(),
+                organizationId = "org",
+                memberId = "member",
+                userId = "user",
+                projectId = "project-7",
+                taskId = null,
+                description = "Other work",
+                tagIds = emptyList(),
+                billable = false,
+            )
+        }
+        coVerify(exactly = 0) { repository.startEntry(any(), any(), any(), any(), any(), any(), any(), any()) }
+        val state = viewModel.uiState.value
+        assertTrue(state.isTracking)
+        assertEquals(nextRunning.id, state.currentTimeEntry?.id)
+        assertEquals("Other work", state.editingDescription)
+        assertEquals("project-7", state.editingProjectId)
+        assertNull(state.editingTaskId)
+        dispose(viewModel)
+    }
+
+    @Test
+    fun continue_ignores_an_entry_that_is_still_running() = runTest(dispatcher.scheduler) {
+        val repository = mockk<TimeEntryRepository>(relaxed = true)
+        val viewModel = viewModel(repository)
+
+        assertFalse(viewModel.continueEntry(active, organizationId = "org", memberId = "member", userId = "user"))
+        dispatcher.scheduler.runCurrent()
+
+        coVerify(exactly = 0) { repository.startEntry(any(), any(), any(), any(), any(), any(), any(), any()) }
         dispose(viewModel)
     }
 

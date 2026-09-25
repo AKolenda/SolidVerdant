@@ -2236,25 +2236,86 @@ class TrackingViewModel @Inject constructor(
     }
 
     /**
-     * Start a new timer with [entry]'s fields from a surface without the start sheet, such as the
-     * Calendar's Continue. Refused while a timer runs or is paused: that would overwrite the
-     * paused timer's fields, which Resume starts with. Returns whether the start was requested.
+     * Start a new timer with [entry]'s fields: the history play button, its swipe and menu, and the
+     * Calendar's Continue. A running timer is stopped first with the fields it shows, and a paused
+     * one is ended, so one tap moves tracking onto that job. Returns whether the start was requested.
      */
     fun continueEntry(entry: TimeEntry, organizationId: String, memberId: String, userId: String): Boolean {
         val state = _uiState.value
-        if (state.currentTimeEntry != null || state.isTracking || state.isPaused || timerMutationInProgress) {
-            Timber.d("Ignoring continue while a timer is running or paused")
+        val running = state.currentTimeEntry
+        // A start still being written has no row to stop yet, and a running entry is already tracking.
+        if (!isCompletedTimeEntry(entry) || (state.isTracking && running == null) || !beginTimerMutation()) {
+            Timber.d("Ignoring continue for a running entry or while a timer change is in flight")
             return false
         }
-        _uiState.value = state.copy(
-            editingDescription = entry.description.orEmpty(),
-            editingProjectId = entry.projectId,
-            editingTaskId = entry.taskId,
-            editingTags = entry.tags.map { it.id },
-            editingBillable = entry.billable,
-        )
-        cacheTrackingDraft(_uiState.value)
-        startTimeEntry(organizationId, memberId, userId)
+        if (running != null) {
+            // As Stop does: keep a poll racing the STOP from showing the old timer as running again.
+            locallyStoppingEntryIds += running.id
+            pendingHistoryMembershipChanges[running.id] = HistoryMembershipChange.COMPLETED_ENTRY_PRESENT
+        }
+        clearActivePollOverride()
+        viewModelScope.launch {
+            try {
+                val tagIds = entry.tags.map { it.id }
+                val started = if (running == null) {
+                    timeEntryRepository.startEntry(
+                        organizationId = organizationId,
+                        memberId = memberId,
+                        userId = userId,
+                        projectId = entry.projectId,
+                        taskId = entry.taskId,
+                        description = entry.description.orEmpty(),
+                        tagIds = tagIds,
+                        billable = entry.billable,
+                    )
+                } else {
+                    timeEntryRepository.switchEntry(
+                        running = running,
+                        editedRunning = running.copy(
+                            description = state.editingDescription,
+                            projectId = state.editingProjectId,
+                            taskId = state.editingTaskId,
+                            billable = state.editingBillable,
+                            tags = state.editingTags.map(::Tag),
+                        ),
+                        runningTagIds = state.editingTags,
+                        organizationId = organizationId,
+                        memberId = memberId,
+                        userId = userId,
+                        projectId = entry.projectId,
+                        taskId = entry.taskId,
+                        description = entry.description.orEmpty(),
+                        tagIds = tagIds,
+                        billable = entry.billable,
+                    )
+                }
+                // The docked timer shows, and Stop commits, the editing fields: take them from the
+                // row that is now running.
+                _uiState.value = _uiState.value.copy(
+                    isTracking = true,
+                    isPaused = false,
+                    currentTimeEntry = started,
+                    editingDescription = started.description.orEmpty(),
+                    editingProjectId = started.projectId,
+                    editingTaskId = started.taskId,
+                    editingTags = started.tags.map { it.id },
+                    editingBillable = started.billable,
+                )
+                cacheTrackingDraft(_uiState.value)
+                startTimer(started.start)
+                syncTrigger.requestSync()
+                showTrackingWidget(started, showTrackingNotification(started))
+                _uiState.value = _uiState.value.copy(isLoading = false)
+                timerMutationInProgress = false
+                Timber.d("Continued an entry as the running timer (optimistic)")
+            } catch (e: Exception) {
+                running?.let {
+                    locallyStoppingEntryIds.remove(it.id)
+                    pendingHistoryMembershipChanges.remove(it.id)
+                }
+                handleTimerMutationFailure(e, R.string.error_start_entry)
+            }
+        }
         return true
     }
 

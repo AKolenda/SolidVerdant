@@ -547,6 +547,29 @@ class TimeEntryRepository @Inject constructor(
         return existingActive ?: entry
     }
 
+    /**
+     * Stop [running] with the metadata in [editedRunning] and start a new entry, in one transaction:
+     * the play button on another entry moves the timer onto that job without a moment where
+     * neither or both run. Returns the running entry afterwards, as [startEntry] does.
+     */
+    @Suppress("LongParameterList")
+    suspend fun switchEntry(
+        running: TimeEntry,
+        editedRunning: TimeEntry,
+        runningTagIds: List<String>,
+        organizationId: String,
+        memberId: String,
+        userId: String,
+        projectId: String?,
+        taskId: String?,
+        description: String,
+        tagIds: List<String>,
+        billable: Boolean,
+    ): TimeEntry = database.withTransaction {
+        stopEntryInternal(running, running.userId, editedRunning, runningTagIds)
+        startEntry(organizationId, memberId, userId, projectId, taskId, description, tagIds, billable)
+    }
+
     suspend fun stopEntry(entry: TimeEntry, userId: String) {
         stopEntryInternal(entry, userId, editedEntry = null, editedTagIds = null)
     }

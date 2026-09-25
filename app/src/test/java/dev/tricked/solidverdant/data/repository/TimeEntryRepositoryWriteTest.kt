@@ -147,6 +147,42 @@ class TimeEntryRepositoryWriteTest {
         assertEquals(listOf(OutboxOpType.START), db.outboxDao().peekAll().map { it.opType })
     }
 
+    @Test fun switch_stops_the_running_entry_with_its_edits_then_starts_the_next() = runTest {
+        val running = repo.startEntry("org1", "member1", "u1", projectId = "p1", taskId = null, description = "setup", tagIds = emptyList())
+
+        val next = repo.switchEntry(
+            running = running,
+            editedRunning = running.copy(description = "setup, checked"),
+            runningTagIds = emptyList(),
+            organizationId = "org1",
+            memberId = "member1",
+            userId = "u1",
+            projectId = "p2",
+            taskId = null,
+            description = "welding",
+            tagIds = emptyList(),
+            billable = true,
+        )
+
+        assertTrue(next.id != running.id)
+        assertEquals(next.id, repo.observeActiveEntry("org1").first()?.id)
+        assertEquals("welding", next.description)
+        assertTrue(next.billable)
+        val stopped = db.timeEntryDao().getById(running.id)
+        assertNotNull(stopped?.end)
+        assertEquals("setup, checked", stopped?.description)
+        val ops = db.outboxDao().peekAll()
+        assertEquals(
+            listOf(
+                OutboxOpType.START to running.id,
+                OutboxOpType.UPDATE to running.id,
+                OutboxOpType.STOP to running.id,
+                OutboxOpType.START to next.id,
+            ),
+            ops.map { it.opType to it.timeEntryId },
+        )
+    }
+
     @Test fun delete_of_never_synced_entry_cancels_create_and_enqueues_no_delete() = runTest {
         // SV-008: deleting an entry that never reached the server (local- id) must cancel its queued
         // START/CREATE and enqueue NO server DELETE - otherwise the START uploads first on the next

@@ -12,12 +12,10 @@ import dev.tricked.solidverdant.domain.time.isCompletedTimeEntry
 import dev.tricked.solidverdant.domain.time.parseTimeEntryInstant
 
 /**
- * Whether the entry sheet offers Continue: a finished work entry, and only while the tracker has
- * no timer running or paused ([timerActive]). The tracker ignores a start while a timer is active,
- * so offering it then would only overwrite the active timer's description, project and tags.
+ * Whether the entry sheet offers Continue: a finished work entry. Continuing while a timer runs
+ * stops that timer first, so the offer does not depend on the tracker's state.
  */
-internal fun canContinueCalendarEntry(entry: TimeEntry, timerActive: Boolean): Boolean =
-    !timerActive && isCompletedTimeEntry(entry) && entry.type != TimeEntryType.BREAK
+internal fun canContinueCalendarEntry(entry: TimeEntry): Boolean = isCompletedTimeEntry(entry) && entry.type != TimeEntryType.BREAK
 
 /** Resolved catalogue context used by calendar blocks and entry action surfaces. */
 data class CalendarEntryMetadata(val title: String?, val context: List<String>, val durationSeconds: Long?) {

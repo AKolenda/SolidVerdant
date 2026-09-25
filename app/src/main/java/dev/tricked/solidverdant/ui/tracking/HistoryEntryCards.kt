@@ -78,6 +78,7 @@ import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
+import dev.tricked.solidverdant.domain.time.isCompletedTimeEntry
 import dev.tricked.solidverdant.ui.components.GroupedDivider
 import dev.tricked.solidverdant.ui.components.SyncChip
 import dev.tricked.solidverdant.ui.localization.appLocale
@@ -182,6 +183,9 @@ internal fun HistoryEntryCard(
     onDeleteStack: ((List<TimeEntry>) -> Unit)? = null,
 ) {
     val lead = group.lead
+    // A running entry (shown while searching for running timers) is already tracking.
+    val continueLeadEntry = onContinue?.takeIf { isCompletedTimeEntry(lead) }
+    val continueLead = continueLeadEntry?.let { continueEntry -> { continueEntry(lead) } }
     val groupIssues = status.reviewIssues
     val stacked = group.entries.size > 1
     var expanded by rememberSaveable(group.key) { mutableStateOf(false) }
@@ -207,7 +211,7 @@ internal fun HistoryEntryCard(
             shape = shape,
             // Swiping a stack away deletes every entry in it, after the caller's confirmation.
             onDelete = if (stacked) onDeleteStack?.let { deleteStack -> { deleteStack(group.entries) } } else ({ onDelete(lead) }),
-            onContinue = onContinue?.let { continueEntry -> { continueEntry(lead) } },
+            onContinue = continueLead,
         ) {
             Column(
                 Modifier
@@ -246,7 +250,7 @@ internal fun HistoryEntryCard(
                                 onToggle = { expanded = !expanded },
                             )
                         } else {
-                            EntryActionsMenu(entry = lead, onContinue = onContinue, onDuplicate = onDuplicate, onDelete = onDelete)
+                            EntryActionsMenu(entry = lead, onContinue = continueLeadEntry, onDuplicate = onDuplicate, onDelete = onDelete)
                         }
                     }
                     Text(
@@ -269,7 +273,7 @@ internal fun HistoryEntryCard(
                         syncStatus = groupSyncStatus,
                         retryTag = TrackingTestTags.entryRetrySyncButton(lead.id),
                         onRetrySync = if (stacked) retryGroup else ({ onRetrySync(lead) }),
-                        onContinue = onContinue?.let { continueEntry -> { continueEntry(lead) } },
+                        onContinue = continueLead,
                     )
                 }
                 if (stacked && expanded) {
@@ -283,7 +287,7 @@ internal fun HistoryEntryCard(
                             onEdit = onEdit,
                             onDelete = onDelete,
                             onDuplicate = onDuplicate,
-                            onContinue = onContinue,
+                            onContinue = onContinue?.takeIf { isCompletedTimeEntry(entry) },
                         )
                     }
                 }
@@ -550,7 +554,7 @@ internal val LocalLongEntryHours = androidx.compose.runtime.staticCompositionLoc
 
 private const val DEFAULT_LONG_ENTRY_HOURS = 10
 
-/** "⋯" button anchoring Continue (while no timer runs), Duplicate and Delete for one entry. */
+/** "⋯" button anchoring Continue, Duplicate and Delete for one entry. */
 @Composable
 private fun EntryActionsMenu(
     entry: TimeEntry,
@@ -605,7 +609,7 @@ private fun EntryActionsMenu(
 
 /**
  * Card wrapped in iOS-style swipe actions: swipe left to delete, swipe right to continue the entry
- * as a new timer (only offered while no timer runs). Both are also TalkBack custom actions. A null
+ * as a new timer. Both are also TalkBack custom actions. A null
  * [onDelete] disables the delete swipe; the caller confirms a delete before anything is removed.
  */
 @OptIn(ExperimentalMaterial3Api::class)

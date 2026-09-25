@@ -68,7 +68,7 @@ class CalendarEntryMetadataTest {
     }
 
     @Test
-    fun `continue is offered only for a finished work entry while no timer is running or paused`() {
+    fun `continue is offered only for a finished work entry`() {
         val finished = TimeEntry(
             id = "done",
             userId = "user",
@@ -77,10 +77,8 @@ class CalendarEntryMetadataTest {
             end = "2026-08-11T10:00:00Z",
         )
 
-        assertTrue(canContinueCalendarEntry(finished, timerActive = false))
-        // A paused timer has no running entry but is still active: Continue cannot start then.
-        assertFalse(canContinueCalendarEntry(finished, timerActive = true))
-        assertFalse(canContinueCalendarEntry(finished.copy(end = null), timerActive = false))
-        assertFalse(canContinueCalendarEntry(finished.copy(type = TimeEntryType.BREAK), timerActive = false))
+        assertTrue(canContinueCalendarEntry(finished))
+        assertFalse(canContinueCalendarEntry(finished.copy(end = null)))
+        assertFalse(canContinueCalendarEntry(finished.copy(type = TimeEntryType.BREAK)))
     }
 }

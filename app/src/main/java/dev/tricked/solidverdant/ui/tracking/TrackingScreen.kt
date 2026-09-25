@@ -261,6 +261,9 @@ fun TrackingScreen(
     // Pause or Stop tapped in the running entry's details, with that sheet's pending fields.
     onStopTrackingWithEdits: (RunningEntryEdits) -> Unit = { onStopTracking() },
     onPauseTrackingWithEdits: (RunningEntryEdits) -> Unit = { onPauseTracking() },
+    // A history entry's play button: starts it, first stopping a running or ending a paused timer.
+    // Without it the button is offered only while no timer runs.
+    onContinueEntry: ((TimeEntry) -> Unit)? = null,
 ) {
     var showEditDialog by remember { mutableStateOf<TimeEntry?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -669,7 +672,7 @@ fun TrackingScreen(
                             onDelete = onHistoryDelete,
                             onDateClick = onHistoryDateClick,
                             onRetrySync = { onRetrySyncEntry(it.id) },
-                            onContinue = continueEntry.takeIf { !timerActive },
+                            onContinue = onContinueEntry ?: continueEntry.takeIf { !timerActive },
                             onDuplicate = { onDuplicateEntry(it.id) },
                             onDeleteStack = requestDelete,
                             reviewIssues = reviewIssues,

@@ -515,6 +515,18 @@ fun SolidVerdantApp(
                         onOpenSyncCenter = {
                             navController.navigate(SyncRoutes.SYNC_CENTER)
                         },
+                        onContinueEntry = { entry ->
+                            authUiState.currentMembership?.let { membership ->
+                                authUiState.user?.let { user ->
+                                    trackingViewModel.continueEntry(
+                                        entry = entry,
+                                        organizationId = membership.organizationId,
+                                        memberId = membership.id,
+                                        userId = user.id,
+                                    )
+                                }
+                            }
+                        },
                         onLoadMoreEntries = trackingViewModel::loadMoreTimeEntries,
                         onLoadNewerEntries = trackingViewModel::loadNewerTimeEntries,
                         onJumpToDate = trackingViewModel::jumpToHistoryDate,
@@ -563,8 +575,6 @@ fun SolidVerdantApp(
                             initialDate = calendarInitialDate,
                             onInitialDateConsumed = onCalendarInitialDateConsumed,
                             runningEntry = trackingUiState.currentTimeEntry,
-                            // A paused timer has no running entry but still blocks Continue.
-                            timerActive = trackingUiState.isTracking || trackingUiState.isPaused,
                             elapsedSeconds = trackingViewModel.elapsedSeconds,
                             projects = trackingUiState.projects,
                             clients = trackingUiState.clients,
@@ -664,8 +674,7 @@ fun SolidVerdantApp(
                             onDuplicateEntry = { entryId -> trackingViewModel.duplicateTimeEntry(entryId, openEditor = false) },
                             onSplitEntry = { entryId, atIso -> trackingViewModel.splitTimeEntry(entryId, atIso, openEditor = false) },
                             onStopEntry = { trackingViewModel.stopTimeEntry() },
-                            // Refused while a timer runs or is paused, whatever the Calendar shows,
-                            // so a paused timer's fields are never overwritten.
+                            // Stops a running or ends a paused timer first, as the history play button does.
                             onContinueEntry = { entry ->
                                 authUiState.user?.let { user ->
                                     trackingViewModel.continueEntry(

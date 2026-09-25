@@ -94,12 +94,6 @@ fun CalendarScreen(
     initialDate: LocalDate? = null,
     onInitialDateConsumed: () -> Unit = {},
     runningEntry: TimeEntry? = null,
-    /**
-     * Whether the tracker has a timer running or paused. A paused timer has no [runningEntry], so
-     * without this the calendar would offer Continue, which cannot start while a timer is paused
-     * and would overwrite the paused timer's details.
-     */
-    timerActive: Boolean = false,
     elapsedSeconds: StateFlow<Long>? = null,
     projects: List<Project>,
     clients: List<Client> = emptyList(),
@@ -118,7 +112,7 @@ fun CalendarScreen(
     onDuplicateEntry: (String) -> Unit = {},
     onSplitEntry: (String, String) -> Unit = { _, _ -> },
     onStopEntry: (TimeEntry) -> Unit = {},
-    /** Start a new timer with the entry's details; offered only while no timer runs. */
+    /** Start a new timer with the entry's details, stopping a running timer first. */
     onContinueEntry: (TimeEntry) -> Unit = {},
     onUndoDelete: (TimeEntry) -> Unit = {},
     onRetrySyncEntry: (String) -> Unit = {},
@@ -319,7 +313,7 @@ fun CalendarScreen(
             },
             syncOperation = syncOperationByEntryId[entry.id],
             onDismiss = { contextEntry = null },
-            onContinue = if (canContinueCalendarEntry(entry, timerActive = timerActive || visibleRunningEntry != null)) {
+            onContinue = if (canContinueCalendarEntry(entry)) {
                 {
                     contextEntry = null
                     onContinueEntry(entry)

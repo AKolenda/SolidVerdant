@@ -25,6 +25,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.time.Instant
 import java.time.LocalDate
 
 /** History cards: stacked duplicates, the "⋯" menu, continue and group retry. */
@@ -149,6 +150,43 @@ class HistoryEntryCardsTest {
         composeRule.onNodeWithTag(TrackingTestTags.entryContinueButton(first.id)).performClick()
 
         assertEquals(listOf(single.id, first.id), continued)
+    }
+
+    @Test
+    fun `a running entry shown by search offers no play button`() {
+        val running = single.copy(id = "running", end = null)
+        val state = TrackingUiState(timeEntries = listOf(running), hasLoadedTimeEntries = true)
+        composeRule.setContent {
+            MaterialTheme {
+                LazyColumn {
+                    trackingHistoryItems(
+                        uiState = state,
+                        // The running-timer search is the one view that lists running entries.
+                        historyItems = buildHistoryListItems(
+                            days = mapOf(LocalDate.of(2026, 7, 6) to listOf(running)),
+                            firstDayOfWeek = state.firstDayOfWeek,
+                            today = LocalDate.of(2026, 7, 6),
+                            zone = state.zone,
+                            now = Instant.parse("2026-07-06T11:00:00Z"),
+                            includeRunning = true,
+                        ),
+                        projectsById = emptyMap(),
+                        tasksById = emptyMap(),
+                        clientsById = emptyMap(),
+                        syncStatusByEntryId = emptyMap(),
+                        onEdit = {},
+                        onDelete = {},
+                        onDateClick = {},
+                        onContinue = { continued += it.id },
+                    )
+                }
+            }
+        }
+
+        composeRule.onAllNodesWithTag(TrackingTestTags.ENTRY_ROW).assertCountEquals(1)
+        composeRule.onNodeWithTag(TrackingTestTags.entryContinueButton(running.id)).assertDoesNotExist()
+        composeRule.onNodeWithTag(TrackingTestTags.entryActionsButton(running.id)).performClick()
+        composeRule.onNodeWithTag(TrackingTestTags.ENTRY_CONTINUE_ACTION).assertDoesNotExist()
     }
 
     @Test
