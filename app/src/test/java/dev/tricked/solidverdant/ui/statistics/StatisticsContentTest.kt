@@ -139,6 +139,32 @@ class StatisticsContentTest {
     }
 
     @Test
+    fun anEstimateRowOpensThatProjectsEntries() {
+        val overBudget = EstimateProgress(id = "p1", name = "Alpha", colorHex = "#FF0000", estimatedSeconds = 1800, spentSeconds = 3600)
+        val tapped = mutableListOf<EstimateProgress>()
+        composeRule.setContent {
+            MaterialTheme {
+                StatisticsContent(
+                    state = state.copy(estimateProgress = listOf(overBudget)),
+                    exporting = false,
+                    onRangeChange = {},
+                    onFiltersChange = {},
+                    onClearFilters = {},
+                    onRefresh = {},
+                    onExport = {},
+                    onProjectClick = {},
+                    onBucketClick = {},
+                    onEstimateClick = { tapped += it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(DashboardTestTags.LIST).performScrollToNode(hasTestTag(DashboardTestTags.estimateRow("p1")))
+        composeRule.onNodeWithTag(DashboardTestTags.estimateRow("p1")).performClick()
+        assertEquals(listOf(overBudget), tapped)
+    }
+
+    @Test
     fun failedRefreshOffersRetryAboveTheCachedCards() {
         var retries = 0
         composeRule.setContent {

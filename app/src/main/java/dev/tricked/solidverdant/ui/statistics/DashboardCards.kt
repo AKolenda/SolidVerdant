@@ -57,6 +57,7 @@ internal object DashboardTestTags {
     const val LIST = "stats_dashboard_list"
     const val OTHER_PROJECTS_ROW = "stats_projects_other_row"
     fun projectRow(projectId: String?) = "stats_project_row_${projectId ?: "none"}"
+    fun estimateRow(projectId: String) = "stats_estimate_row_$projectId"
 }
 
 /** The swatch and bar colour for the folded "Other" projects, distinct from the no-project grey. */

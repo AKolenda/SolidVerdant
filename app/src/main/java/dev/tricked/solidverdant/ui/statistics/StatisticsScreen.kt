@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.core.graphics.toColorInt
@@ -144,6 +146,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
             onExport = viewModel::export,
             onProjectClick = { viewModel.openProjectDrillDown(it.projectId, it.projectName, it.colorHex) },
             onOtherProjectsClick = viewModel::openOtherProjectsDrillDown,
+            onEstimateClick = { viewModel.openProjectDrillDown(it.id, it.name, it.colorHex.orEmpty()) },
             onBucketClick = { bucket ->
                 val end = when (state.granularity) {
                     TrendGranularity.DAY -> bucket.startDate
@@ -183,6 +186,7 @@ internal fun StatisticsContent(
     onBucketClick: (TrendBucket) -> Unit,
     modifier: Modifier = Modifier,
     onOtherProjectsClick: (Set<String?>) -> Unit = {},
+    onEstimateClick: (EstimateProgress) -> Unit = {},
 ) {
     val overview = remember(state.summary) { StatisticsAggregator.projectOverview(state.summary) }
     Column(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -234,7 +238,7 @@ internal fun StatisticsContent(
                             ProjectBreakdownCard(state.summary, overview, onProjectClick, onOtherProjectsClick)
                         }
                         if (state.estimateProgress.isNotEmpty()) {
-                            item(key = "estimates") { EstimatesCard(state.estimateProgress) }
+                            item(key = "estimates") { EstimatesCard(state.estimateProgress, onEstimateClick) }
                         }
                     }
                 }
@@ -271,20 +275,21 @@ private fun ExportAction(exporting: Boolean, onExport: () -> Unit) {
 /**
  * "Estimates & progress": server-authoritative spent vs estimated time per project, remaining or
  * overflow, and a consumed-fraction bar. Over-budget and near-estimate items are flagged with BOTH
- * a colour and a text label (never colour alone). Rendered only when [items] is non-empty.
+ * a colour and a text label (never colour alone). Tapping a project opens its entries in the
+ * selected range. Rendered only when [items] is non-empty.
  */
 @Composable
-private fun EstimatesCard(items: List<EstimateProgress>) {
+private fun EstimatesCard(items: List<EstimateProgress>, onClick: (EstimateProgress) -> Unit) {
     DashboardCard(title = stringResource(R.string.stats2_estimates_title)) {
         val barFallback = MaterialTheme.colorScheme.primary
         items.forEach { item ->
-            EstimateRow(item, barFallback)
+            EstimateRow(item, barFallback, onClick = { onClick(item) })
         }
     }
 }
 
 @Composable
-private fun EstimateRow(item: EstimateProgress, defaultBarColor: Color) {
+private fun EstimateRow(item: EstimateProgress, defaultBarColor: Color, onClick: () -> Unit) {
     val swatchFallback = MaterialTheme.colorScheme.outline
     val errorColor = MaterialTheme.colorScheme.error
     val spent = item.spentSeconds.toLong()
@@ -313,6 +318,12 @@ private fun EstimateRow(item: EstimateProgress, defaultBarColor: Color) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .testTag(DashboardTestTags.estimateRow(item.id))
+            .clickable(
+                role = Role.Button,
+                onClickLabel = stringResource(R.string.stats2_drilldown_project_content_description, item.name),
+                onClick = onClick,
+            )
             .semantics(mergeDescendants = true) { contentDescription = rowCd },
         verticalArrangement = Arrangement.spacedBy(Dimens.Space8),
     ) {
