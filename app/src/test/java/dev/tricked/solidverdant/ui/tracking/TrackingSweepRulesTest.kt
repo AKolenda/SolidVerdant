@@ -83,6 +83,15 @@ class TrackingSweepRulesTest {
         assertEquals(-1, historyJumpHeaderIndex(LocalDate.of(2026, 6, 10), emptyList(), jumpedWindow, jumpedWindow))
     }
 
+    @Test
+    fun `a jump to a day already loaded scrolls on the list built from the same entries`() {
+        val window = listOf(entry("loaded", "2026-09-01T08:00:00Z", "2026-09-01T09:00:00Z"))
+        // The jump fetches the page it already shows: an equal list the history does not rebuild.
+        val refetched = window.toList()
+
+        assertEquals(1, historyJumpHeaderIndex(LocalDate.of(2026, 9, 1), items(window), window, refetched))
+    }
+
     private fun items(entries: List<TimeEntry>): List<HistoryListItem> {
         val now = Instant.parse("2026-09-24T12:00:00Z")
         return buildHistoryListItems(

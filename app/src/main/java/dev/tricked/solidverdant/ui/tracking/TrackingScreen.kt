@@ -264,6 +264,9 @@ fun TrackingScreen(
     // A history entry's play button: starts it, first stopping a running or ending a paused timer.
     // Without it the button is offered only while no timer runs.
     onContinueEntry: ((TimeEntry) -> Unit)? = null,
+    // Favorites & templates (gap analysis #1, #9). The template ViewModel resolves the current
+    // organization itself; its catalogue includes archived/done items so availability can be shown.
+    templateViewModel: ManageTemplatesViewModel = hiltViewModel(),
 ) {
     var showEditDialog by remember { mutableStateOf<TimeEntry?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -296,9 +299,6 @@ fun TrackingScreen(
                 operation.status == TimeEntryRepository.EntrySyncStatus.RETRYING
         }
 
-    // Favorites & templates (gap analysis #1, #9). The template ViewModel resolves the current
-    // organization itself; its catalogue includes archived/done items so availability can be shown.
-    val templateViewModel: ManageTemplatesViewModel = hiltViewModel()
     val templateState by templateViewModel.uiState.collectAsState()
     val onSaveTemplateFromForm: (TemplateDraft) -> Unit = { draft ->
         templateViewModel.saveNewTemplate(draft)
@@ -405,7 +405,11 @@ fun TrackingScreen(
         historyListState,
         uiState.timeEntries.size,
         uiState.canLoadNewerHistory,
+        uiState.historyJumpDate,
     ) {
+        // A jump publishes its window before the list scrolls to the day; until then the list
+        // still sits at the top and would ask for the newer page straight away.
+        if (uiState.historyJumpDate != null) return@LaunchedEffect
         snapshotFlow {
             hasUserScrolledHistory &&
                 uiState.canLoadNewerHistory &&
@@ -570,7 +574,7 @@ fun TrackingScreen(
             }
             val historyListItems = historySnapshot.items
             // Built off the main thread, the list can briefly lag the entries it is shown with.
-            val historyIsCurrent = historySnapshot.entries === uiState.timeEntries && historySnapshot.filter == historyFilter
+            val historyIsCurrent = historySnapshot.entries == uiState.timeEntries && historySnapshot.filter == historyFilter
             // The Review checks, shown on each entry's card.
             val reviewIssues by produceState(emptyMap<String, Set<EntryReviewIssue>>(), uiState.timeEntries, longTimerHours) {
                 value = withContext(Dispatchers.Default) {
@@ -896,14 +900,15 @@ fun TrackingScreen(
 /**
  * The day header a history jump to [target] scrolls to (-1 when the list has no day), or null to
  * wait: the jump replaces the window, and until the list is rebuilt from those entries, [builtFrom]
- * is the previous window, where the header would point somewhere else.
+ * is the previous window, where the header would point somewhere else. A jump to a day already
+ * loaded fetches the same entries again; that equal list is not rebuilt, so it compares by content.
  */
 internal fun historyJumpHeaderIndex(
     target: LocalDate,
     items: List<HistoryListItem>,
     builtFrom: List<TimeEntry>?,
     currentEntries: List<TimeEntry>,
-): Int? = if (builtFrom !== currentEntries) null else historyHeaderIndex(target, items)
+): Int? = if (builtFrom != currentEntries) null else historyHeaderIndex(target, items)
 
 /** The history list and the entries and filter it was built from, to tell a lagging build apart. */
 @Immutable
