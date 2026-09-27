@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -22,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -31,19 +33,18 @@ import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository.EntrySyncStatus
 import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
-import dev.tricked.solidverdant.ui.theme.readableOn
 
 /**
- * A single calendar entry card: a grey card
- * (surfaceContainerHighest) with [MaterialTheme.shapes.small] corners, the
- * title in onSurface and the project line in the entry [color], blended until
- * it stays legible on the card. Use this everywhere an entry is rendered so the
- * per-view block renderers stay consistent.
+ * A single calendar entry card with [MaterialTheme.shapes.small] corners: tinted with the entry
+ * [color] and led by a bar in it, the title in onSurface and the project line in onSurfaceVariant.
+ * The tint is laid over the page background, so the hour lines and an overlapping entry do not
+ * show through. Use this everywhere an entry is rendered so the per-view block renderers stay
+ * consistent.
  *
- * @param color    entry accent colour (e.g. its project colour), used for the subtitle.
+ * @param color    entry colour (e.g. its project colour): the card's tint and its bar.
  * @param title    entry title; null/blank falls back to the shared
  *                 "Untitled entry" string.
- * @param subtitle optional secondary line (e.g. "Project - Task") in [color].
+ * @param subtitle optional secondary line (e.g. "Project - Task").
  * @param time     optional trailing text (e.g. formatted duration or time range).
  * @param minHeight minimum block height; defaults to [Dimens.EntryMinHeight].
  */
@@ -59,9 +60,8 @@ fun EntryBlock(
 ) {
     val resolvedTitle = title?.takeIf { it.isNotBlank() }
         ?: stringResource(R.string.uikit_untitled_entry)
-    val cardColor = MaterialTheme.colorScheme.surfaceContainerHighest
-    val onSurface = MaterialTheme.colorScheme.onSurface
-    val subtitleColor = remember(color, cardColor, onSurface) { color.readableOn(background = cardColor, towards = onSurface) }
+    val background = MaterialTheme.colorScheme.background
+    val cardColor = remember(color, background) { color.copy(alpha = ENTRY_TINT_ALPHA).compositeOver(background) }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -74,6 +74,13 @@ fun EntryBlock(
             ),
         verticalAlignment = Alignment.Top,
     ) {
+        Spacer(
+            Modifier
+                .width(Dimens.EntryBarWidth)
+                .height(Dimens.EntryBarHeight)
+                .background(color),
+        )
+        Spacer(Modifier.width(Dimens.EntryBarGap))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.Top) {
                 Text(
@@ -104,7 +111,7 @@ fun EntryBlock(
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.labelSmall,
-                    color = subtitleColor,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     // The calendar supplies a finite card height. Let metadata use every line
                     // that fits inside that height, then rely on the card clip for short slots.
                     // A fixed line cap wastes most of tall week-view entries.
@@ -116,6 +123,8 @@ fun EntryBlock(
         }
     }
 }
+
+private const val ENTRY_TINT_ALPHA = 0.22f
 
 @Preview
 @Composable

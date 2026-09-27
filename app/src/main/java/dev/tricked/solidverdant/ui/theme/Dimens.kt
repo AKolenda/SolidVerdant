@@ -15,9 +15,10 @@ import androidx.compose.ui.unit.dp
  *  - Statistics KPI / donut / trend cards use 16.dp content padding and 8.dp
  *    inner vertical gaps ([CardContentPadding], [CardContentGap]).
  *  - The month/day calendar entry cards clip to [MaterialTheme.shapes.small]
- *    (8.dp), keep an 8.dp gap between title and duration, and are inset with
- *    8.dp horizontal / 4.dp vertical padding
- *    ([CornerRadius], [EntryBarGap], [EntryPaddingHorizontal], [EntryPaddingVertical]).
+ *    (8.dp), lead with a 4.dp x 24.dp colour bar, keep an 8.dp gap after the
+ *    bar and between title and duration, and are inset with 8.dp horizontal /
+ *    4.dp vertical padding ([CornerRadius], [EntryBarWidth], [EntryBarHeight],
+ *    [EntryBarGap], [EntryPaddingHorizontal], [EntryPaddingVertical]).
  *  - Calendar day entries coerce to a minimum block height of 34.dp
  *    ([EntryMinHeight]).
  */
@@ -45,6 +46,8 @@ object Dimens {
 
     // --- Calendar entry-block metrics (measured from Day/Month calendar) ---
     val EntryMinHeight = 34.dp
+    val EntryBarWidth = 4.dp
+    val EntryBarHeight = 24.dp
     val EntryBarGap = 8.dp
     val EntryPaddingHorizontal = 8.dp
     val EntryPaddingVertical = 4.dp
