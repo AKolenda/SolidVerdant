@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="filter_all">Alle</string>
+    <string name="filter_nothing_to_choose">Nog niets om uit te kiezen</string>
+    <string name="filter_select_dates">Datums kiezen</string>
+    <string name="filter_section_date">Datum</string>
+    <string name="filter_section_details">Details</string>
+    <string name="filter_section_status">Status</string>
+    <string name="filter_any_time">Altijd</string>
+    <string name="filter_week_short">7 dagen</string>
+    <string name="filter_failed_sync">Synchronisatie mislukt</string>
+    <plurals name="filter_selected_count">
+        <item quantity="one">%1$d geselecteerd</item>
+        <item quantity="other">%1$d geselecteerd</item>
+    </plurals>
+</resources>

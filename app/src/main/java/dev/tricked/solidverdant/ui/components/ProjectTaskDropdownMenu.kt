@@ -7,6 +7,7 @@
 package dev.tricked.solidverdant.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -23,11 +24,13 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -47,13 +50,22 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.graphics.toColorInt
@@ -61,8 +73,12 @@ import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.ui.theme.Dimens
+import dev.tricked.solidverdant.ui.theme.readableOn
 
 private enum class PickerKind { PROJECT, TASK }
+
+/** How entry-form selectors render: Material outlined fields, or iOS-style grouped-list rows. */
+enum class SelectorStyle { Field, Grouped }
 
 /** Shared, separately searchable project and task selectors used by entry forms. */
 @Composable
@@ -77,6 +93,7 @@ fun ProjectTaskDropdown(
     rounded: Boolean = false,
     onCreateProject: ((String) -> Unit)? = null,
     onCreateTask: ((String, String) -> Unit)? = null,
+    style: SelectorStyle = SelectorStyle.Field,
 ) {
     var activePicker by rememberSaveable { mutableStateOf<PickerKind?>(null) }
     var projectQuery by rememberSaveable { mutableStateOf("") }
@@ -96,7 +113,7 @@ fun ProjectTaskDropdown(
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(Dimens.Space12),
+        verticalArrangement = Arrangement.spacedBy(if (style == SelectorStyle.Grouped) 0.dp else Dimens.Space12),
     ) {
         SearchableSelectorField(
             value = selectedProject?.name ?: stringResource(R.string.no_project),
@@ -106,7 +123,11 @@ fun ProjectTaskDropdown(
             enabled = enabled,
             shape = fieldShape,
             testTag = EditTimeEntryTestTags.PROJECT_SELECTOR,
+            style = style,
+            // A folder icon; the project colour shows on the name in the picker instead.
+            leading = { GroupedRowIcon(Icons.Outlined.Folder) },
         )
+        if (style == SelectorStyle.Grouped) GroupedDivider(inset = Dimens.SettingsIconInset)
         SearchableSelectorField(
             value = when {
                 selectedProject == null -> stringResource(R.string.select_project_first)
@@ -119,6 +140,8 @@ fun ProjectTaskDropdown(
             enabled = enabled && selectedProject != null,
             shape = fieldShape,
             testTag = EditTimeEntryTestTags.TASK_SELECTOR,
+            style = style,
+            leading = { GroupedRowIcon(Icons.AutoMirrored.Outlined.List) },
         )
     }
 
@@ -176,7 +199,20 @@ internal fun SearchableSelectorField(
     enabled: Boolean,
     shape: androidx.compose.ui.graphics.Shape,
     testTag: String,
+    style: SelectorStyle = SelectorStyle.Field,
+    leading: (@Composable () -> Unit)? = null,
 ) {
+    if (style == SelectorStyle.Grouped) {
+        GroupedSelectorRow(
+            value = value,
+            label = label,
+            enabled = enabled,
+            onOpen = { onExpandedChange(true) },
+            testTag = testTag,
+            leading = leading,
+        )
+        return
+    }
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { if (enabled) onExpandedChange(it) }) {
         OutlinedTextField(
             value = value,
@@ -192,6 +228,78 @@ internal fun SearchableSelectorField(
             singleLine = true,
             shape = shape,
         )
+    }
+}
+
+/**
+ * Grouped-list selector row: the current value as the title with a chevron. The tagged node owns
+ * the value text and click action so tests can target it in either semantics tree.
+ */
+@Composable
+private fun GroupedSelectorRow(
+    value: String,
+    label: String,
+    enabled: Boolean,
+    onOpen: () -> Unit,
+    testTag: String,
+    leading: (@Composable () -> Unit)?,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = Dimens.MinTouchTarget)
+            .testTag(testTag)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onOpen)
+            .clearAndSetSemantics {
+                text = AnnotatedString(value)
+                contentDescription = label
+                role = Role.Button
+                if (enabled) {
+                    onClick {
+                        onOpen()
+                        true
+                    }
+                } else {
+                    disabled()
+                }
+            }
+            .padding(horizontal = Dimens.Space16, vertical = Dimens.Space12),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Space12),
+    ) {
+        Box(Modifier.size(Dimens.IconSmall), contentAlignment = Alignment.Center) { leading?.invoke() }
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.size(Dimens.IconSmall),
+        )
+    }
+}
+
+/** Leading icon for grouped selector rows, tinted like [GroupedRow]'s icons so a section reads as one. */
+@Composable
+internal fun GroupedRowIcon(icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(Dimens.IconSmall))
+}
+
+/** A project's colour for its name in the picker, blended until legible on the dialog surface. */
+@Composable
+private fun readableProjectColor(hex: String): Color {
+    val background = MaterialTheme.colorScheme.surfaceContainerHigh
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    return remember(hex, background, onSurface) {
+        runCatching { Color(hex.toColorInt()) }
+            .map { it.readableOn(background = background, towards = onSurface) }
+            .getOrDefault(onSurface)
     }
 }
 
@@ -243,18 +351,7 @@ private fun ProjectPickerDialog(
                 text = project.name,
                 selected = project.id == selectedProjectId,
                 onClick = { onSelect(project.id) },
-                leadingContent = if (showProjectColors) {
-                    {
-                        Box(
-                            modifier = Modifier
-                                .size(Dimens.Space12)
-                                .clip(CircleShape)
-                                .background(Color(project.color.toColorInt())),
-                        )
-                    }
-                } else {
-                    null
-                },
+                textColor = if (showProjectColors) readableProjectColor(project.color) else Color.Unspecified,
             )
         }
         if (filteredProjects.isEmpty()) {
@@ -347,9 +444,10 @@ internal fun PickerItem(
     onClick: () -> Unit,
     leadingContent: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier,
+    textColor: Color = Color.Unspecified,
 ) {
     DropdownMenuItem(
-        text = { Text(text, style = MaterialTheme.typography.bodyLarge) },
+        text = { Text(text, style = MaterialTheme.typography.bodyLarge, color = textColor) },
         onClick = onClick,
         modifier = modifier.semantics { this.selected = selected },
         leadingIcon = leadingContent,
@@ -398,15 +496,11 @@ internal fun PickerDialog(
                         Modifier.fillMaxWidth()
                     },
                 ) {
+                    // Close, then the title: the same header as the full-screen date-range picker.
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(start = Dimens.Space24, end = Dimens.Space8, top = Dimens.Space8),
+                        modifier = Modifier.fillMaxWidth().padding(start = Dimens.Space4, end = Dimens.Space8, top = Dimens.Space4),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.weight(1f),
-                        )
                         IconButton(
                             onClick = onClose,
                             modifier = Modifier
@@ -415,6 +509,11 @@ internal fun PickerDialog(
                         ) {
                             Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close))
                         }
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.weight(1f),
+                        )
                     }
                     OutlinedTextField(
                         value = searchQuery,

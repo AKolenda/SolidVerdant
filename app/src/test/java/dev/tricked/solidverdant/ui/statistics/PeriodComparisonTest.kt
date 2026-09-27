@@ -7,9 +7,7 @@
 package dev.tricked.solidverdant.ui.statistics
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -69,49 +67,25 @@ class PeriodComparisonTest {
     }
 
     @Test
-    fun `comparison ranks project changes by magnitude and drops unchanged`() {
+    fun `comparison carries the total delta and the previous window`() {
         val prevRange = LocalDate.parse("2026-06-24")..LocalDate.parse("2026-06-30")
-        val current = summary(
-            total = 400,
-            billable = 200,
-            avg = 57,
-            perProject = listOf(pt("p1", "Alpha", 300), pt("p2", "Beta", 100)),
-        )
-        val previous = summary(
-            total = 250,
-            billable = 100,
-            avg = 35,
-            perProject = listOf(pt("p1", "Alpha", 100), pt("p3", "Gamma", 100), pt("p2", "Beta", 50)),
-        )
+        val current = summary(total = 400, billable = 200, avg = 57, perProject = listOf(pt("p1", "Alpha", 400)))
+        val previous = summary(total = 250, billable = 100, avg = 35, perProject = listOf(pt("p1", "Alpha", 250)))
         val cmp = computeComparison(current, previous, prevRange)
 
         assertEquals(150, cmp.total.absoluteDelta)
-        assertEquals(100, cmp.billable.absoluteDelta)
-        assertTrue(cmp.previousHasData)
+        assertEquals(60.0, cmp.total.percentChange()!!, 0.01)
         assertEquals(LocalDate.parse("2026-06-24"), cmp.previousStart)
-
-        // p1 +200, p2 +50, p3 -100 ; ranked by |delta|: p1(200), p3(100), p2(50)
-        assertEquals(listOf("Alpha", "Gamma", "Beta"), cmp.topChanges.map { it.projectName })
-        assertEquals(200, cmp.topChanges[0].delta)
-        assertEquals(-100, cmp.topChanges[1].delta)
+        assertEquals(LocalDate.parse("2026-06-30"), cmp.previousEnd)
     }
 
     @Test
-    fun `comparison drops projects with identical time in both periods`() {
-        val prevRange = LocalDate.parse("2026-06-24")..LocalDate.parse("2026-06-30")
-        val current = summary(400, 0, 0, listOf(pt("p1", "Alpha", 300), pt("p2", "Beta", 100)))
-        val previous = summary(400, 0, 0, listOf(pt("p1", "Alpha", 300), pt("p2", "Beta", 100)))
-        val cmp = computeComparison(current, previous, prevRange)
-        assertTrue(cmp.topChanges.isEmpty())
-    }
-
-    @Test
-    fun `previousHasData is false when the previous period is empty`() {
+    fun `comparison against an empty previous period has no percentage`() {
         val prevRange = LocalDate.parse("2026-06-24")..LocalDate.parse("2026-06-30")
         val current = summary(400, 200, 57, listOf(pt("p1", "Alpha", 400)))
         val previous = summary(0, 0, 0, emptyList())
         val cmp = computeComparison(current, previous, prevRange)
-        assertFalse(cmp.previousHasData)
+        assertEquals(0L, cmp.total.previous)
         assertNull(cmp.total.percentChange())
     }
 }

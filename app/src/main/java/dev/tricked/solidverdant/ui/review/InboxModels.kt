@@ -11,7 +11,11 @@ import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.domain.inbox.InboxCheckConfig
 import dev.tricked.solidverdant.domain.inbox.InboxIssue
+import java.time.DayOfWeek
+import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
+import java.util.concurrent.TimeUnit
 
 /** Transient, one-shot failures the Inbox surfaces as a snackbar. Mapped to strings in the pane. */
 enum class InboxActionError { REFRESH_FAILED, CREATE_FAILED, RESOLVE_FAILED }
@@ -53,7 +57,51 @@ data class InboxUiState(
      */
     val horizonChosen: Boolean = false,
     val horizonStartMs: Long? = null,
+    /** The choice [horizonStartMs] still matches today, or null when it has drifted or was moved by hand. */
+    val horizonOption: HorizonOption? = null,
+    /** Account week start, so working days list in the user's week order. */
+    val firstDayOfWeek: DayOfWeek = DayOfWeek.MONDAY,
 ) {
     /** All issues resolved: show the reassuring "all caught up" state. */
     val isCaughtUp: Boolean get() = !isLoading && issues.isEmpty()
 }
+
+/**
+ * The lower bound [option] stands for at [nowMs] in the account [zone]: the start of today, the
+ * start of this week (from [firstDayOfWeek]), 30 days ago, or null for [HorizonOption.EVERYTHING].
+ */
+internal fun horizonStartFor(option: HorizonOption, nowMs: Long, zone: ZoneId, firstDayOfWeek: DayOfWeek): Long? {
+    val today = Instant.ofEpochMilli(nowMs).atZone(zone).toLocalDate()
+    return when (option) {
+        HorizonOption.TODAY -> today.startMs(zone)
+        HorizonOption.THIS_WEEK -> {
+            val daysBack = ((today.dayOfWeek.value - firstDayOfWeek.value) + DAYS_PER_WEEK) % DAYS_PER_WEEK
+            today.minusDays(daysBack.toLong()).startMs(zone)
+        }
+        HorizonOption.LAST_30_DAYS -> nowMs - TimeUnit.DAYS.toMillis(LAST_N_DAYS)
+        HorizonOption.EVERYTHING -> null
+    }
+}
+
+/**
+ * Which choice the stored horizon still is, so the settings show it selected. A bound chosen on an
+ * earlier day (or moved by "Dismiss everything before this") matches nothing and returns null.
+ */
+internal fun matchHorizonOption(chosen: Boolean, startMs: Long?, nowMs: Long, zone: ZoneId, firstDayOfWeek: DayOfWeek): HorizonOption? {
+    if (!chosen) return null
+    if (startMs == null) return HorizonOption.EVERYTHING
+    return HorizonOption.entries.firstOrNull { option ->
+        val bound = horizonStartFor(option, nowMs, zone, firstDayOfWeek) ?: return@firstOrNull false
+        if (option == HorizonOption.LAST_30_DAYS) {
+            // "30 days ago" moves with the clock; it still reads as chosen on the day it was picked.
+            Instant.ofEpochMilli(bound).atZone(zone).toLocalDate() == Instant.ofEpochMilli(startMs).atZone(zone).toLocalDate()
+        } else {
+            bound == startMs
+        }
+    }
+}
+
+private fun LocalDate.startMs(zone: ZoneId): Long = atStartOfDay(zone).toInstant().toEpochMilli()
+
+private const val DAYS_PER_WEEK = 7
+private const val LAST_N_DAYS = 30L

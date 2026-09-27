@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="history_this_week">今週</string>
+    <string name="history_last_week">先週</string>
+    <string name="history_week_range">%1$s～%2$s</string>
+    <string name="history_project_task">%1$s：%2$s</string>
+    <string name="history_client_suffix">" - %1$s"</string>
+    <string name="history_entry_actions">その他の操作</string>
+    <string name="history_hide_entries">エントリーを非表示</string>
+    <plurals name="history_show_entries">
+        <item quantity="other">%1$d件のエントリーを表示</item>
+    </plurals>
+    <string name="history_not_billable">請求対象外</string>
+    <string name="history_no_tags">タグなし</string>
+    <string name="entry_continue">続行</string>
+    <plurals name="history_delete_stack_title">
+        <item quantity="other">%1$d件のエントリーを削除しますか？</item>
+    </plurals>
+    <string name="history_delete_stack_message">このスタック内のすべてのエントリーが削除され、削除待ちになります。</string>
+    <string name="review_issue_no_project">プロジェクトなし</string>
+    <string name="review_issue_no_description">説明なし</string>
+    <string name="review_issue_overlap">他のエントリーと重複</string>
+    <plurals name="review_issue_long">
+        <item quantity="other">%1$d時間を超えています</item>
+    </plurals>
+    <string name="review_issue_separator">"・"</string>
+</resources>

@@ -220,6 +220,20 @@ class CalendarDateUtilsTest {
     }
 
     @Test
+    fun monthHeat_isZeroWhenNoLoadedDayHasWorkTime() {
+        // Only break days or empty buckets: the busiest day has 0 work seconds.
+        assertEquals(0f, monthHeatIntensity(seconds = 0L, maxSeconds = 0L))
+        assertEquals(0f, monthHeatIntensity(seconds = 0L, maxSeconds = -1L))
+    }
+
+    @Test
+    fun monthHeat_isTheShareOfTheBusiestDay() {
+        assertEquals(0.5f, monthHeatIntensity(seconds = 1_800L, maxSeconds = 3_600L))
+        assertEquals(1f, monthHeatIntensity(seconds = 3_600L, maxSeconds = 3_600L))
+        assertEquals(1f, monthHeatIntensity(seconds = 7_200L, maxSeconds = 3_600L))
+    }
+
+    @Test
     fun formatRunningDuration_keepsSecondsAndClampsNegativeValues() {
         assertEquals("02:05:09", formatRunningDuration(2 * 3600 + 5 * 60 + 9L))
         assertEquals("00:00:00", formatRunningDuration(-1))

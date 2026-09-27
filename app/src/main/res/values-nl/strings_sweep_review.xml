@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ This Source Code Form is subject to the terms of the Mozilla Public
+  ~ License, v. 2.0. If a copy of the MPL was not distributed with this
+  ~ file, You can obtain one at https://mozilla.org/MPL/2.0/.
+  -->
+<resources>
+    <!-- Shared steppers -->
+    <string name="sweep_stepper_decrease">%1$s verlagen</string>
+    <string name="sweep_stepper_increase">%1$s verhogen</string>
+
+    <!-- Inbox settings -->
+    <string name="sweep_inbox_horizon_short_today">Vandaag</string>
+    <string name="sweep_inbox_horizon_short_week">Week</string>
+    <string name="sweep_inbox_horizon_short_30_days">30 dagen</string>
+    <string name="sweep_inbox_horizon_short_all">Alles</string>
+    <string name="sweep_inbox_thresholds">Drempels</string>
+    <string name="sweep_inbox_work_start_title">Werkdag begint</string>
+    <string name="sweep_inbox_work_end_title">Werkdag eindigt</string>
+    <string name="sweep_inbox_work_window_invalid">De werkdag moet eindigen na het begin. Er is niets gewijzigd.</string>
+    <string name="sweep_inbox_work_days_none">Geen</string>
+    <string name="sweep_inbox_work_days_every">Elke dag</string>
+    <string name="sweep_inbox_work_days_range">%1$s–%2$s</string>
+
+    <!-- Review day -->
+    <string name="sweep_review_skip_failed_title">Deze wijziging niet meer synchroniseren?</string>
+    <string name="sweep_review_skip_failed_message">De wijziging blijft op dit apparaat, maar wordt nooit naar de server gestuurd. Dit kan niet ongedaan worden gemaakt.</string>
+    <string name="sweep_review_skip_failed_confirm">Niet synchroniseren</string>
+
+    <!-- Logout -->
+    <string name="sweep_logout_title">Uitloggen?</string>
+    <string name="sweep_logout_synced_message">Alles op dit apparaat staat op de server. Je moet opnieuw inloggen; favorieten blijven op dit apparaat.</string>
+    <plurals name="sweep_logout_unsynced_title">
+        <item quantity="one">Uitloggen en %1$d wijziging kwijtraken?</item>
+        <item quantity="other">Uitloggen en %1$d wijzigingen kwijtraken?</item>
+    </plurals>
+    <plurals name="sweep_logout_unsynced_message">
+        <item quantity="one">%1$d wijziging op dit apparaat heeft de server nog niet bereikt. Uitloggen verwijdert die definitief. Blijf ingelogd, maak verbinding met internet en laat die eerst synchroniseren (of kijk in Synchronisatie en herstel).</item>
+        <item quantity="other">%1$d wijzigingen op dit apparaat hebben de server nog niet bereikt. Uitloggen verwijdert ze definitief. Blijf ingelogd, maak verbinding met internet en laat ze eerst synchroniseren (of kijk in Synchronisatie en herstel).</item>
+    </plurals>
+    <string name="sweep_logout_confirm">Uitloggen</string>
+    <string name="sweep_logout_confirm_anyway">Toch uitloggen</string>
+
+    <!-- Privacy: clearing the cache -->
+    <string name="sweep_privacy_cleared">Gecachte gegevens gewist</string>
+    <string name="sweep_privacy_clear_failed">De gecachte gegevens konden niet worden gewist. Probeer het opnieuw.</string>
+    <plurals name="sweep_privacy_clear_blocked_title">
+        <item quantity="one">%1$d wijziging wacht op synchronisatie</item>
+        <item quantity="other">%1$d wijzigingen wachten op synchronisatie</item>
+    </plurals>
+    <plurals name="sweep_privacy_clear_blocked_message">
+        <item quantity="one">Als je de cache nu wist, gaat deze wijziging verloren. Stuur die eerst naar de server en wis de cache zodra Synchronisatie en herstel niets meer laat wachten.</item>
+        <item quantity="other">Als je de cache nu wist, gaan deze wijzigingen verloren. Stuur ze eerst naar de server en wis de cache zodra Synchronisatie en herstel niets meer laat wachten.</item>
+    </plurals>
+
+    <!-- Sync & recovery -->
+    <plurals name="sweep_sync_discard_title">
+        <item quantity="one">%1$d mislukte wijziging verwijderen?</item>
+        <item quantity="other">%1$d mislukte wijzigingen verwijderen?</item>
+    </plurals>
+    <plurals name="sweep_sync_discard_message">
+        <item quantity="one">De mislukte wijziging aan deze registratie (%2$s) wordt uit de uploadwachtrij verwijderd en bereikt de server nooit. Dit kan niet ongedaan worden gemaakt.</item>
+        <item quantity="other">Alle %1$d mislukte wijzigingen aan deze registratie (%2$s) worden uit de uploadwachtrij verwijderd en bereiken de server nooit. Dit kan niet ongedaan worden gemaakt.</item>
+    </plurals>
+    <string name="sweep_sync_use_server_title">Serverversie gebruiken?</string>
+    <string name="sweep_sync_use_server_message">De wijzigingen van dit apparaat aan deze registratie worden vervangen door de versie van de server. Dit kan niet ongedaan worden gemaakt.</string>
+
+    <!-- Server configuration -->
+    <string name="sweep_config_nothing_to_paste">Niets om te plakken: het klembord bevat geen serveradres of client-ID.</string>
+    <string name="sweep_config_clipboard_empty">Kopieer eerst het serveradres of de client-ID.</string>
+    <string name="sweep_config_test_passed">Verbinding werkt</string>
+    <string name="sweep_config_test_failed">Verbinding mislukt</string>
+</resources>

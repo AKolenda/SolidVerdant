@@ -7,6 +7,11 @@
 package dev.tricked.solidverdant.ui.tracking
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -66,6 +71,48 @@ class TimeEntryFormSheetTest {
         assertFalse(canDismissTimeEntryFormSheet(hasTimePicker = true, hasDatePicker = false, hasSplitPicker = false))
         assertFalse(canDismissTimeEntryFormSheet(hasTimePicker = false, hasDatePicker = true, hasSplitPicker = false))
         assertFalse(canDismissTimeEntryFormSheet(hasTimePicker = false, hasDatePicker = false, hasSplitPicker = true))
+        assertFalse(
+            canDismissTimeEntryFormSheet(hasTimePicker = false, hasDatePicker = false, hasSplitPicker = false, hasTemplatePicker = true),
+        )
         assertTrue(canDismissTimeEntryFormSheet(hasTimePicker = false, hasDatePicker = false, hasSplitPicker = false))
+    }
+
+    @Test
+    fun another_entry_replacing_the_open_one_does_not_keep_its_fields() {
+        val history = TimeEntry(
+            id = "history",
+            userId = "user",
+            organizationId = "org",
+            start = "2026-08-21T08:00:00Z",
+            end = "2026-08-21T09:00:00Z",
+            description = "Typed into the history entry",
+        )
+        val running =
+            TimeEntry(id = "running", userId = "user", organizationId = "org", start = "2026-08-21T10:00:00Z", description = "Running work")
+        var shown by mutableStateOf(history)
+        var saved: String? = null
+        composeRule.setContent {
+            MaterialTheme {
+                TimeEntryFormSheet(
+                    entry = shown,
+                    zone = ZoneId.of("UTC"),
+                    suggestedStart = null,
+                    projects = emptyList(),
+                    tasks = emptyList(),
+                    tags = emptyList(),
+                    onDismiss = {},
+                    onSave = { description, _, _, _, _, _, _ -> saved = description },
+                )
+            }
+        }
+        composeRule.onNodeWithTag(TrackingTestTags.SHEET_DESCRIPTION_FIELD).assert(hasText("Typed into the history entry"))
+
+        // "Edit the running entry" arrives while the history entry's sheet is open.
+        shown = running
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(TrackingTestTags.SHEET_DESCRIPTION_FIELD).assert(hasText("Running work"))
+        composeRule.onNodeWithTag(TrackingTestTags.SHEET_SAVE_BUTTON).performClick()
+        assertEquals("Running work", saved)
     }
 }

@@ -8,7 +8,6 @@ package dev.tricked.solidverdant.ui.statistics
 
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
-import kotlin.math.abs
 
 /**
  * The immediately preceding equivalent-length window for [range].
@@ -39,63 +38,13 @@ data class MetricDelta(val current: Long, val previous: Long) {
 
 private const val PERCENT_SCALE = 100.0
 
-/** How one project's tracked time moved between the two periods. */
-data class ProjectChange(val projectId: String?, val projectName: String?, val colorHex: String, val current: Long, val previous: Long) {
-    val delta: Long get() = current - previous
-}
+/** Total tracked time across the current and previous periods, shown on the Dashboard total card. */
+data class PeriodComparison(val total: MetricDelta, val previousStart: LocalDate, val previousEnd: LocalDate)
 
-/** Aggregated previous-period comparison surfaced under the KPI grid. */
-data class PeriodComparison(
-    val total: MetricDelta,
-    val billable: MetricDelta,
-    val avgPerDay: MetricDelta,
-    val topChanges: List<ProjectChange>,
-    val previousStart: LocalDate,
-    val previousEnd: LocalDate,
-) {
-    val previousHasData: Boolean get() = total.previous > 0L || billable.previous > 0L
-}
-
-/**
- * Builds the [PeriodComparison] from two already-computed summaries plus the previous window's
- * dates. Project changes union the projects present in either period (so a project that vanished or
- * newly appeared still shows), ranked by the magnitude of their movement.
- */
-fun computeComparison(
-    current: StatisticsSummary,
-    previous: StatisticsSummary,
-    previousRange: ClosedRange<LocalDate>,
-    maxProjectChanges: Int = 5,
-): PeriodComparison {
-    val currentByProject = current.perProject.associateBy { it.projectId }
-    val previousByProject = previous.perProject.associateBy { it.projectId }
-    val ids = LinkedHashSet<String?>().apply {
-        current.perProject.forEach { add(it.projectId) }
-        previous.perProject.forEach { add(it.projectId) }
-    }
-    val changes = ids.map { id ->
-        val cur = currentByProject[id]
-        val prev = previousByProject[id]
-        ProjectChange(
-            projectId = id,
-            projectName = cur?.projectName ?: prev?.projectName,
-            // Empty when neither period carried a colour; the renderer resolves it to the neutral
-            // outline token rather than baking a grey literal here.
-            colorHex = cur?.colorHex ?: prev?.colorHex ?: "",
-            current = cur?.seconds ?: 0L,
-            previous = prev?.seconds ?: 0L,
-        )
-    }
-        .filter { it.delta != 0L }
-        .sortedWith(compareByDescending<ProjectChange> { abs(it.delta) }.thenBy { it.projectName ?: "" })
-        .take(maxProjectChanges)
-
-    return PeriodComparison(
+/** Builds the [PeriodComparison] from two already-computed summaries plus the previous window's dates. */
+fun computeComparison(current: StatisticsSummary, previous: StatisticsSummary, previousRange: ClosedRange<LocalDate>): PeriodComparison =
+    PeriodComparison(
         total = MetricDelta(current.totalSeconds, previous.totalSeconds),
-        billable = MetricDelta(current.billableSeconds, previous.billableSeconds),
-        avgPerDay = MetricDelta(current.avgSecondsPerDay, previous.avgSecondsPerDay),
-        topChanges = changes,
         previousStart = previousRange.start,
         previousEnd = previousRange.endInclusive,
     )
-}

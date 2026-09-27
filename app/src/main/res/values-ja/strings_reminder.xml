@@ -29,7 +29,6 @@
 
     <!-- 共通ダイアログ -->
     <string name="review_dialog_confirm">設定</string>
-    <string name="review_dialog_cancel">キャンセル</string>
     <string name="review_project_dialog_title">プロジェクトを選択</string>
     <string name="review_project_dialog_empty">利用できるプロジェクトはまだありません。</string>
 

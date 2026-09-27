@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ This Source Code Form is subject to the terms of the Mozilla Public
+  ~ License, v. 2.0. If a copy of the MPL was not distributed with this
+  ~ file, You can obtain one at https://mozilla.org/MPL/2.0/.
+  -->
+<resources>
+    <!-- Shared steppers -->
+    <string name="sweep_stepper_decrease">%1$sを減らす</string>
+    <string name="sweep_stepper_increase">%1$sを増やす</string>
+
+    <!-- Inbox settings -->
+    <string name="sweep_inbox_horizon_short_today">今日</string>
+    <string name="sweep_inbox_horizon_short_week">今週</string>
+    <string name="sweep_inbox_horizon_short_30_days">30日</string>
+    <string name="sweep_inbox_horizon_short_all">すべて</string>
+    <string name="sweep_inbox_thresholds">しきい値</string>
+    <string name="sweep_inbox_work_start_title">勤務開始時刻</string>
+    <string name="sweep_inbox_work_end_title">勤務終了時刻</string>
+    <string name="sweep_inbox_work_window_invalid">勤務終了は開始より後にしてください。変更は保存されていません。</string>
+    <string name="sweep_inbox_work_days_none">なし</string>
+    <string name="sweep_inbox_work_days_every">毎日</string>
+    <string name="sweep_inbox_work_days_range">%1$s〜%2$s</string>
+
+    <!-- Review day -->
+    <string name="sweep_review_skip_failed_title">この変更の同期をやめますか？</string>
+    <string name="sweep_review_skip_failed_message">変更はこのデバイスに残りますが、サーバーには送信されません。この操作は元に戻せません。</string>
+    <string name="sweep_review_skip_failed_confirm">同期をやめる</string>
+
+    <!-- Logout -->
+    <string name="sweep_logout_title">ログアウトしますか？</string>
+    <string name="sweep_logout_synced_message">このデバイスのデータはすべてサーバーに届いています。再度サインインが必要です。お気に入りはこのデバイスに残ります。</string>
+    <plurals name="sweep_logout_unsynced_title">
+        <item quantity="other">%1$d件の変更を失ってログアウトしますか？</item>
+    </plurals>
+    <plurals name="sweep_logout_unsynced_message">
+        <item quantity="other">このデバイスの%1$d件の変更はまだサーバーに届いていません。ログアウトすると完全に削除されます。ログインしたままインターネットに接続して先に同期してください（または「同期と復旧」を確認してください）。</item>
+    </plurals>
+    <string name="sweep_logout_confirm">ログアウト</string>
+    <string name="sweep_logout_confirm_anyway">それでもログアウト</string>
+
+    <!-- Privacy: clearing the cache -->
+    <string name="sweep_privacy_cleared">キャッシュデータを消去しました</string>
+    <string name="sweep_privacy_clear_failed">キャッシュデータを消去できませんでした。もう一度お試しください。</string>
+    <plurals name="sweep_privacy_clear_blocked_title">
+        <item quantity="other">%1$d件の変更が同期待ちです</item>
+    </plurals>
+    <plurals name="sweep_privacy_clear_blocked_message">
+        <item quantity="other">今キャッシュを消去すると、これらの変更は削除されます。先にサーバーへ送信し、「同期と復旧」に待機中の変更がなくなってからキャッシュを消去してください。</item>
+    </plurals>
+
+    <!-- Sync & recovery -->
+    <plurals name="sweep_sync_discard_title">
+        <item quantity="other">失敗した%1$d件の変更を破棄しますか？</item>
+    </plurals>
+    <plurals name="sweep_sync_discard_message">
+        <item quantity="other">この記録に対する失敗した%1$d件の変更（%2$s）はアップロード待ちから削除され、サーバーには届きません。この操作は元に戻せません。</item>
+    </plurals>
+    <string name="sweep_sync_use_server_title">サーバー版を使用しますか？</string>
+    <string name="sweep_sync_use_server_message">この記録に対するこのデバイスの変更は、サーバーのコピーに置き換えられます。この操作は元に戻せません。</string>
+
+    <!-- Server configuration -->
+    <string name="sweep_config_nothing_to_paste">貼り付けるものがありません。クリップボードにサーバーアドレスやクライアントIDがありません。</string>
+    <string name="sweep_config_clipboard_empty">先にサーバーアドレスまたはクライアントIDをコピーしてください。</string>
+    <string name="sweep_config_test_passed">接続できました</string>
+    <string name="sweep_config_test_failed">接続できませんでした</string>
+</resources>

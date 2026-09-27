@@ -128,4 +128,21 @@ class EstimateProgressTest {
         val out = StatisticsAggregator.projectEstimateProgress(projects, StatFilters())
         assertEquals(listOf("b"), out.map { it.id })
     }
+
+    @Test
+    fun `dashboard lists only projects with time in the range, most urgent first up to the limit`() {
+        val projects = listOf(
+            project("idle", estimatedTime = 100, spentTime = 200),
+            project("over", estimatedTime = 100, spentTime = 150),
+            project("high", estimatedTime = 100, spentTime = 90),
+            project("low", estimatedTime = 100, spentTime = 10),
+        )
+        val out = StatisticsAggregator.projectEstimateProgress(
+            projects,
+            StatFilters(),
+            relevantProjectIds = setOf("over", "high", "low"),
+            limit = 2,
+        )
+        assertEquals(listOf("over", "high"), out.map { it.id })
+    }
 }

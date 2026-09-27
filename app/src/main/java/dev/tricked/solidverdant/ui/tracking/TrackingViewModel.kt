@@ -9,6 +9,7 @@ package dev.tricked.solidverdant.ui.tracking
 import android.content.Context
 import androidx.annotation.StringRes
 import androidx.annotation.VisibleForTesting
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -40,6 +41,7 @@ import dev.tricked.solidverdant.util.Clock
 import dev.tricked.solidverdant.widget.TimeTrackingWidget
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -49,14 +51,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -80,6 +85,7 @@ internal enum class HistoryWindowMode { RECENT, PAGINATED }
 internal enum class HistoryMembershipChange { COMPLETED_ENTRY_PRESENT, ENTRY_ABSENT }
 
 internal fun resolvedHistoryMembershipChangeIds(changes: Map<String, HistoryMembershipChange>, collected: List<TimeEntry>): Set<String> {
+    if (changes.isEmpty()) return emptySet()
     val collectedById = collected.associateBy { it.id }
     return changes.mapNotNullTo(mutableSetOf()) { (entryId, change) ->
         val collectedEntry = collectedById[entryId]
@@ -132,20 +138,40 @@ internal object HistoryWindow {
                     isCompletedTimeEntry(it) &&
                     (it.id in locallyMutatedEntryIds || insideWindow(it))
             }
-
-            completedAdditions.fold(refreshed) { entries, addition ->
-                val insertionIndex = entries.indexOfFirst { it.start < addition.start }
-                if (insertionIndex == -1) {
-                    entries + addition
-                } else {
-                    entries.toMutableList().apply {
-                        add(insertionIndex, addition)
-                    }
-                }
-            }
+            insertNewestFirst(refreshed, completedAdditions)
         }
     }
+
+    /**
+     * Places each of [additions] before the first entry of [entries] that started earlier, in one
+     * pass: the additions are stably sorted newest first, then merged in. The result equals
+     * inserting them one by one in their given order, without copying the list per addition.
+     */
+    internal fun insertNewestFirst(entries: List<TimeEntry>, additions: List<TimeEntry>): List<TimeEntry> {
+        if (additions.isEmpty()) return entries
+        val pending = additions.sortedByDescending { it.start }
+        val merged = ArrayList<TimeEntry>(entries.size + pending.size)
+        var next = 0
+        entries.forEach { entry ->
+            while (next < pending.size && pending[next].start > entry.start) merged += pending[next++]
+            merged += entry
+        }
+        while (next < pending.size) merged += pending[next++]
+        return merged
+    }
 }
+
+/**
+ * Whether [candidate] is [entry]: the same id, or, for a `local-` [entry] that START reconciliation
+ * has since rekeyed, the same organization, user and start (the identity a reconcile preserves).
+ */
+internal fun isSameRunningEntry(candidate: TimeEntry, entry: TimeEntry): Boolean = candidate.id == entry.id ||
+    (
+        isLocalTimeEntryId(entry.id) &&
+            candidate.organizationId == entry.organizationId &&
+            candidate.userId == entry.userId &&
+            candidate.start == entry.start
+        )
 
 /** Preserve a server-missing active row only while its creating START has not reached the server. */
 internal fun shouldPreserveLocallyStartedEntry(entryId: String, operations: List<TimeEntryRepository.SyncOperation>): Boolean =
@@ -225,6 +251,8 @@ data class TrackingUiState(
     val conflictedEntryIds: Set<String> = emptySet(),
     /** Account temporal-policy zone; history filtering and new-entry pickers use it. */
     val zone: ZoneId = ZoneId.systemDefault(),
+    /** Account temporal-policy week start; history week headers begin on this day. */
+    val firstDayOfWeek: DayOfWeek = DayOfWeek.MONDAY,
     /**
      * Roadmap #13: id of an entry the UI should open for editing right after a duplicate/split
      * (the freshly created copy / second half). One-shot: cleared via [TrackingViewModel.consumeEntryToEdit].
@@ -234,6 +262,54 @@ data class TrackingUiState(
     /** Mutations retain the legacy internal flag; refresh/sync have independent flags. */
     val isMutating: Boolean get() = isLoading
 }
+
+/** The next entry's fields as typed into the start-timer sheet. */
+@Immutable
+data class EntryDraft(
+    val description: String = "",
+    val projectId: String? = null,
+    val taskId: String? = null,
+    val tags: List<String> = emptyList(),
+    val billable: Boolean = false,
+)
+
+fun TrackingUiState.entryDraft(): EntryDraft = EntryDraft(
+    description = editingDescription,
+    projectId = editingProjectId,
+    taskId = editingTaskId,
+    tags = editingTags,
+    billable = editingBillable,
+)
+
+/**
+ * This state without the idle start-timer draft. Typing into the start sheet then leaves it equal,
+ * so the app shell and the history skip recomposition and only the form, fed by [entryDraft],
+ * redraws. A running or paused timer keeps its fields, which the docked timer shows.
+ */
+fun TrackingUiState.withoutIdleDraft(): TrackingUiState = if (isTracking || isPaused || currentTimeEntry != null) {
+    this
+} else {
+    copy(
+        editingDescription = "",
+        editingProjectId = null,
+        editingTaskId = null,
+        editingTags = emptyList(),
+        editingBillable = false,
+    )
+}
+
+/**
+ * Pending fields of the running entry's details sheet. A Pause or Stop tapped in that sheet commits
+ * them with the stop, so nothing typed there is lost when the sheet closes.
+ */
+data class RunningEntryEdits(
+    val description: String?,
+    val projectId: String?,
+    val taskId: String?,
+    val tagIds: List<String>,
+    val billable: Boolean,
+    val start: String,
+)
 
 /**
  * ViewModel for time tracking operations
@@ -250,11 +326,14 @@ class TrackingViewModel @Inject constructor(
     private val clock: Clock,
 ) : ViewModel() {
 
-    // Account temporal-policy zone. Seeded synchronously (first-frame correct) and kept current by
-    // the collector in init. Provider owns the device-zone fallback.
-    @Volatile
-    private var currentPolicy: TemporalPolicy = runBlocking { temporalPolicyProvider.current() }
+    // Account temporal-policy zone. The policy decodes the cached profile, so it is read off the main
+    // thread by the collector in init; until it arrives the screen uses the provider's own fallback
+    // (device zone, Monday). The history is built off the main thread too, so it rebuilds with the
+    // account zone before its first result is shown.
+    private val initialPolicy = TemporalPolicy(zone = ZoneId.systemDefault(), firstDayOfWeek = DayOfWeek.MONDAY)
 
+    // A small first-frame cache (see [firstFrameCacheOf]): the running timer, the newest entries and
+    // only the catalogue items they show. Room replaces it as soon as the collectors start.
     private val cachedTrackingState = settingsDataStore.getCachedTrackingState()
     private val cachedTrackingDraft = settingsDataStore.getCachedTrackingDraft()
         ?.takeIf { draft -> draft.organizationId == cachedTrackingState?.organizationId }
@@ -280,20 +359,24 @@ class TrackingViewModel @Inject constructor(
                 editingTaskId = cached.activeEntry?.taskId ?: cachedTrackingDraft?.taskId,
                 editingTags = cached.activeEntry?.tags?.map { it.id }.orEmpty(),
                 editingBillable = cached.activeEntry?.billable ?: false,
-                zone = currentPolicy.zone,
+                zone = initialPolicy.zone,
+                firstDayOfWeek = initialPolicy.firstDayOfWeek,
             )
         } ?: TrackingUiState(
             cachedContinueEntry = settingsDataStore.getCachedContinueEntry(),
-            zone = currentPolicy.zone,
+            zone = initialPolicy.zone,
+            firstDayOfWeek = initialPolicy.firstDayOfWeek,
         ),
     )
     val uiState: StateFlow<TrackingUiState> = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch {
-            temporalPolicyProvider.policy.collect { policy ->
-                currentPolicy = policy
-                _uiState.value = _uiState.value.copy(zone = policy.zone)
+            temporalPolicyProvider.policy.flowOn(Dispatchers.Default).collect { policy ->
+                val state = _uiState.value
+                if (state.zone != policy.zone || state.firstDayOfWeek != policy.firstDayOfWeek) {
+                    _uiState.value = state.copy(zone = policy.zone, firstDayOfWeek = policy.firstDayOfWeek)
+                }
             }
         }
     }
@@ -337,6 +420,24 @@ class TrackingViewModel @Inject constructor(
     private var activePollOverrideOrganizationId: String? = null
     private var activePollOverride: TimeEntry? = null
     private val locallyStoppingEntryIds = mutableSetOf<String>()
+
+    // A deleted running timer stays active on the server until its deferred DELETE syncs; the poll
+    // must not bring it back meanwhile. Cleared by undo, or once the server reports no timer.
+    private val locallyDeletedEntryIds = mutableSetOf<String>()
+
+    // The Room active row last seen by the collector, to notice edits made to the running entry
+    // (details sheet, Calendar, a pull) and keep the editing fields that Stop commits in step.
+    private var lastRoomActive: TimeEntry? = null
+
+    // What the tracking notification shows now; the active-entry poll re-posts it only on change.
+    private var postedTrackingNotification: TrackingNotificationContent? = null
+
+    // Snapshots for the first-frame cache; written debounced, and only when what they hold changed.
+    private val firstFrameSources = MutableStateFlow<FirstFrameSource?>(null)
+
+    @Volatile
+    private var lastWrittenFirstFrame: SettingsDataStore.CachedTrackingState? = cachedTrackingState
+    private var entryToEditExpiryJob: Job? = null
 
     // Room emissions can arrive before a mutation coroutine reaches its success/failure branch.
     // Keep this guard separate from [TrackingUiState.isLoading] so a collector cannot re-enable
@@ -441,11 +542,54 @@ class TrackingViewModel @Inject constructor(
         if (isTracking) {
             // Active tracking always owns a foreground notification.
             return
-        } else if (alwaysShow) {
+        }
+        postedTrackingNotification = null
+        if (alwaysShow) {
             TimeTrackingNotificationService.showIdle(context)
         } else {
             TimeTrackingNotificationService.hide(context)
         }
+    }
+
+    /**
+     * Post the running-timer notification for [entry] and return what it shows. With
+     * [onlyIfChanged] an unchanged notification is left alone, so the 10-second poll does not
+     * restart the foreground service for nothing.
+     */
+    private fun showTrackingNotification(entry: TimeEntry, onlyIfChanged: Boolean = false): TrackingNotificationContent {
+        val content = TrackingNotificationContent(
+            start = entry.start,
+            projectName = _uiState.value.projects.find { it.id == entry.projectId }?.name,
+            taskName = _uiState.value.tasks.find { it.id == entry.taskId }?.name,
+            description = entry.description,
+            projectId = entry.projectId,
+            taskId = entry.taskId,
+            organizationId = entry.organizationId,
+        )
+        if (onlyIfChanged && content == postedTrackingNotification) return content
+        postedTrackingNotification = content
+        TimeTrackingNotificationService.startTracking(
+            context = context,
+            startTime = Instant.parse(entry.start),
+            projectName = content.projectName,
+            taskName = content.taskName,
+            description = entry.description,
+            projectId = entry.projectId,
+            taskId = entry.taskId,
+            organizationId = entry.organizationId,
+        )
+        return content
+    }
+
+    private suspend fun showTrackingWidget(entry: TimeEntry, content: TrackingNotificationContent) {
+        settingsDataStore.setWidgetTrackingState(
+            isTracking = true,
+            startTimeEpochMillis = Instant.parse(entry.start).toEpochMilli(),
+            projectName = content.projectName,
+            taskName = content.taskName,
+            description = entry.description,
+        )
+        TimeTrackingWidget.requestUpdate(context)
     }
 
     /**
@@ -456,17 +600,9 @@ class TrackingViewModel @Inject constructor(
         // selected account or starting another refresh; a slow/non-cooperative HTTP call must not
         // write stale tracking state into the next screen.
         activeEntryRequestGeneration++
-        val historyContextChanged = historyOrganizationId != organizationId || historyMemberId != memberId
-        if (historyContextChanged) {
-            historyRequestGeneration++
-            val canKeepCachedFirstFrame = historyOrganizationId == null && cachedTrackingState?.organizationId == organizationId
-            if (!canKeepCachedFirstFrame) resetHistoryForContextSwitch()
-        }
-        historyOrganizationId = organizationId
-        historyMemberId = memberId
 
         // Reads: continuously project the Room source-of-truth into UI state.
-        startDataCollectors(organizationId)
+        observeLocalData(organizationId, memberId)
 
         // Refresh: pull fresh data from the network into Room in the background. The
         // collectors above surface the upserts automatically.
@@ -490,7 +626,8 @@ class TrackingViewModel @Inject constructor(
                 isRefreshing = userInitiated,
                 error = null,
             )
-            val refreshResult = timeEntryRepository.refreshAll(organizationId, memberId)
+            // Pull-to-refresh also refetches the catalogue; automatic refreshes reuse a fresh one.
+            val refreshResult = timeEntryRepository.refreshAll(organizationId, memberId, forceCatalog = userInitiated)
             // Refresh implementations and test doubles may finish after cancellation. Do not let
             // that stale completion start a monitor or clear a newer screen's refresh state.
             currentCoroutineContext().ensureActive()
@@ -517,6 +654,25 @@ class TrackingViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Project the organization's Room data into [TrackingUiState] without refreshing from the
+     * network. The app shell calls this as soon as the membership is known, so local history and
+     * the full catalogue replace the small first-frame cache even while a refresh waits for account
+     * revalidation or the network. [loadAllData] does the same before it refreshes.
+     */
+    fun observeLocalData(organizationId: String, memberId: String) {
+        val historyContextChanged = historyOrganizationId != organizationId || historyMemberId != memberId
+        if (historyContextChanged) {
+            activeEntryRequestGeneration++
+            historyRequestGeneration++
+            val canKeepCachedFirstFrame = historyOrganizationId == null && cachedTrackingState?.organizationId == organizationId
+            if (!canKeepCachedFirstFrame) resetHistoryForContextSwitch()
+        }
+        historyOrganizationId = organizationId
+        historyMemberId = memberId
+        startDataCollectors(organizationId)
+    }
+
     /** Collect the Room-backed flows for an organization into [TrackingUiState]. */
     @Suppress("LongMethod")
     private fun startDataCollectors(organizationId: String) {
@@ -532,12 +688,15 @@ class TrackingViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(syncOperations = emptyList(), syncStatusVisible = false)
         collectingOrganizationId = organizationId
         lastCollectedActiveId = null
+        lastRoomActive = null
         historyLoadStage = 1
         historyWindowStartOffset = 0
         historyOffset = 0
         historyWindowMode = HistoryWindowMode.RECENT
         pendingHistoryMembershipChanges.clear()
         clearActivePollOverride()
+        firstFrameSources.value = null
+        firstFrameCacheJob = launchFirstFrameCacheWriter(organizationId)
         dataCollectorJob = viewModelScope.launch {
             combine(
                 combine(
@@ -574,10 +733,6 @@ class TrackingViewModel @Inject constructor(
                         .maxByOrNull { it.start },
                 )
             }.flowOn(Dispatchers.Default).conflate().collect { (data, overlapCount, continueEntry) ->
-                val active = activePollOverrideFor(organizationId, data.active)
-                val currentState = _uiState.value
-                val activeChanged = active?.id != lastCollectedActiveId || active?.start != currentState.currentTimeEntry?.start
-                val mode = historyWindowMode
                 // Single source of truth: the collector only owns the displayed list (and the
                 // paging offset) while the recent slice is on screen. Once the user has paged or
                 // jumped, loadMore/jump own the window and offset; here we merely refresh visible
@@ -586,13 +741,25 @@ class TrackingViewModel @Inject constructor(
                     pendingHistoryMembershipChanges,
                     data.entries,
                 )
-                val displayedEntries = HistoryWindow.merge(
-                    mode = mode,
-                    displayed = currentState.timeEntries,
-                    collected = data.entries,
-                    locallyMutatedEntryIds = resolvedMembershipChanges,
-                    includesNewestHistory = !currentState.canLoadNewerHistory,
-                )
+                val displayedEntries = when (historyWindowMode) {
+                    HistoryWindowMode.RECENT -> data.entries
+                    HistoryWindowMode.PAGINATED -> mergePaginatedWindow(data.entries, resolvedMembershipChanges)
+                }
+                // Nothing below suspends, so it works on one consistent state.
+                val active = activePollOverrideFor(organizationId, data.active)
+                val currentState = _uiState.value
+                val activeChanged = active?.id != lastCollectedActiveId || active?.start != currentState.currentTimeEntry?.start
+                val mode = historyWindowMode
+                // The running entry's own row was edited (details sheet, Calendar, a pull): keep the
+                // editing fields in step, or the next Stop would commit the old values back.
+                val previousRoomActive = lastRoomActive
+                lastRoomActive = data.active
+                val editedActiveRow = data.active?.takeIf { row ->
+                    !activeChanged &&
+                        active?.id == row.id &&
+                        previousRoomActive?.id == row.id &&
+                        !row.hasSameEditableFields(previousRoomActive)
+                }
                 resolvedMembershipChanges.forEach(pendingHistoryMembershipChanges::remove)
                 if (mode == HistoryWindowMode.RECENT) {
                     historyOffset = data.entries.size
@@ -620,29 +787,34 @@ class TrackingViewModel @Inject constructor(
                     isLoading = currentState.isLoading || timerMutationInProgress,
                     // Only reset in-progress edits when the active entry itself changes,
                     // so a user's typing is not clobbered by a background emission.
-                    editingDescription = if (activeChanged && active != null) {
-                        active.description.orEmpty()
-                    } else if (activeChanged && shouldClearDescriptionAfterStop()) {
-                        ""
-                    } else {
-                        currentState.editingDescription
+                    editingDescription = when {
+                        activeChanged && active != null -> active.description.orEmpty()
+                        activeChanged && shouldClearDescriptionAfterStop() -> ""
+                        editedActiveRow != null -> editedActiveRow.description.orEmpty()
+                        else -> currentState.editingDescription
                     },
-                    editingProjectId = if (activeChanged && active != null) {
-                        active.projectId
-                    } else if (activeChanged && autoClearEntryFieldsAfterStopEnabled) {
-                        null
-                    } else {
-                        currentState.editingProjectId
+                    editingProjectId = when {
+                        activeChanged && active != null -> active.projectId
+                        activeChanged && autoClearEntryFieldsAfterStopEnabled -> null
+                        editedActiveRow != null -> editedActiveRow.projectId
+                        else -> currentState.editingProjectId
                     },
-                    editingTaskId = if (activeChanged && active != null) {
-                        active.taskId
-                    } else if (activeChanged && autoClearEntryFieldsAfterStopEnabled) {
-                        null
-                    } else {
-                        currentState.editingTaskId
+                    editingTaskId = when {
+                        activeChanged && active != null -> active.taskId
+                        activeChanged && autoClearEntryFieldsAfterStopEnabled -> null
+                        editedActiveRow != null -> editedActiveRow.taskId
+                        else -> currentState.editingTaskId
                     },
-                    editingTags = if (activeChanged) active?.tags?.map { it.id }.orEmpty() else currentState.editingTags,
-                    editingBillable = if (activeChanged) (active?.billable ?: false) else currentState.editingBillable,
+                    editingTags = when {
+                        activeChanged -> active?.tags?.map { it.id }.orEmpty()
+                        editedActiveRow != null -> editedActiveRow.tags.map { it.id }
+                        else -> currentState.editingTags
+                    },
+                    editingBillable = when {
+                        activeChanged -> active?.billable ?: false
+                        editedActiveRow != null -> editedActiveRow.billable
+                        else -> currentState.editingBillable
+                    },
                 )
                 _uiState.value = nextState
                 if (activeChanged && active == null) cacheTrackingDraft(nextState)
@@ -655,23 +827,7 @@ class TrackingViewModel @Inject constructor(
                         settingsDataStore.cacheContinueEntry(continueEntry)
                     }
                 }
-                firstFrameCacheJob?.cancel()
-                firstFrameCacheJob = viewModelScope.launch(Dispatchers.IO) {
-                    delay(FIRST_FRAME_CACHE_DEBOUNCE_MS)
-                    settingsDataStore.cacheTrackingState(
-                        SettingsDataStore.CachedTrackingState(
-                            organizationId = organizationId,
-                            timeEntries = data.entries.take(FIRST_FRAME_ENTRY_LIMIT),
-                            projects = data.projects,
-                            clients = data.clients,
-                            tasks = data.tasks,
-                            tags = data.tags,
-                            activeEntry = active,
-                            overlapCount = overlapCount,
-                        ),
-                    )
-                    _hasSnapshot.value = true
-                }
+                firstFrameSources.value = FirstFrameSource(organizationId, data, active, overlapCount)
                 if (activeChanged) {
                     lastCollectedActiveId = active?.id
                     if (active != null) startTimer(active.start) else stopTimer()
@@ -696,6 +852,70 @@ class TrackingViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(syncOperations = operations)
                 }
         }
+    }
+
+    /**
+     * Merges a Room emission into the paginated window on a background thread. loadMore, a jump or
+     * a manual create can replace the window while that runs; then the merge is redone against the
+     * new window rather than overwriting it with a stale one.
+     */
+    private suspend fun mergePaginatedWindow(collected: List<TimeEntry>, locallyMutatedEntryIds: Set<String>): List<TimeEntry> {
+        repeat(PAGINATED_MERGE_ATTEMPTS) {
+            val displayed = _uiState.value.timeEntries
+            val canLoadNewerHistory = _uiState.value.canLoadNewerHistory
+            val merged = withContext(Dispatchers.Default) {
+                HistoryWindow.merge(
+                    mode = HistoryWindowMode.PAGINATED,
+                    displayed = displayed,
+                    collected = collected,
+                    locallyMutatedEntryIds = locallyMutatedEntryIds,
+                    includesNewestHistory = !canLoadNewerHistory,
+                )
+            }
+            val now = _uiState.value
+            if (now.timeEntries === displayed && now.canLoadNewerHistory == canLoadNewerHistory) return merged
+        }
+        val state = _uiState.value
+        return HistoryWindow.merge(
+            mode = HistoryWindowMode.PAGINATED,
+            displayed = state.timeEntries,
+            collected = collected,
+            locallyMutatedEntryIds = locallyMutatedEntryIds,
+            includesNewestHistory = !state.canLoadNewerHistory,
+        )
+    }
+
+    /**
+     * Writes the first-frame cache for [organizationId] off the main thread: debounced, trimmed to
+     * what the first frame shows, and skipped when that did not change, so ordinary Room and sync
+     * updates no longer re-encode and rewrite the whole snapshot.
+     */
+    @OptIn(FlowPreview::class)
+    private fun launchFirstFrameCacheWriter(organizationId: String): Job = viewModelScope.launch(Dispatchers.Default) {
+        firstFrameSources
+            .filterNotNull()
+            .filter { it.organizationId == organizationId }
+            .debounce(FIRST_FRAME_CACHE_DEBOUNCE_MS)
+            .map { source ->
+                firstFrameCacheOf(
+                    organizationId = source.organizationId,
+                    entries = source.data.entries,
+                    active = source.active,
+                    projects = source.data.projects,
+                    clients = source.data.clients,
+                    tasks = source.data.tasks,
+                    tags = source.data.tags,
+                    overlapCount = source.overlapCount,
+                )
+            }
+            .distinctUntilChanged()
+            .collect { snapshot ->
+                if (snapshot != lastWrittenFirstFrame) {
+                    withContext(Dispatchers.IO) { settingsDataStore.cacheTrackingState(snapshot) }
+                    lastWrittenFirstFrame = snapshot
+                }
+                _hasSnapshot.value = true
+            }
     }
 
     private fun clearActivePollOverride() {
@@ -822,6 +1042,23 @@ class TrackingViewModel @Inject constructor(
     private data class CollectedTracking(val data: TrackingData, val overlapCount: Int, val continueEntry: TimeEntry?)
 
     /**
+     * One collector emission handed to the first-frame cache writer. Not a data class: publishing
+     * it must not compare whole entry lists on the main thread.
+     */
+    private class FirstFrameSource(val organizationId: String, val data: TrackingData, val active: TimeEntry?, val overlapCount: Int)
+
+    /** The content of the running-timer notification; the poll re-posts it only when this changes. */
+    private data class TrackingNotificationContent(
+        val start: String,
+        val projectName: String?,
+        val taskName: String?,
+        val description: String?,
+        val projectId: String?,
+        val taskId: String?,
+        val organizationId: String,
+    )
+
+    /**
      * Keep notification state in sync with timers started or stopped on another device while
      * this ViewModel is alive. Changing organizations replaces the old monitor immediately.
      */
@@ -859,6 +1096,9 @@ class TrackingViewModel @Inject constructor(
      * stale. Pending local changes are flushed via [SyncTrigger.requestSync] on the same schedule.
      */
     fun onAppForegrounded(organizationId: String, memberId: String, refreshAll: Boolean) {
+        // The notification may have been dismissed or its service stopped while the app was away;
+        // let the next poll post it once more even if the timer did not change.
+        postedTrackingNotification = null
         if (refreshAll) {
             val now = clock.nowMs()
             val last = lastForegroundRefreshMs
@@ -905,10 +1145,14 @@ class TrackingViewModel @Inject constructor(
                 // The active-entry endpoint is account-wide. Only surface an entry for the
                 // organization currently selected in the app.
                 val serverTimeEntry = timeEntry?.takeIf { it.organizationId == organizationId }
-                if (serverTimeEntry == null) locallyStoppingEntryIds.clear()
+                if (serverTimeEntry == null) {
+                    locallyStoppingEntryIds.clear()
+                    locallyDeletedEntryIds.clear()
+                }
                 val polledTimeEntry = serverTimeEntry
                     ?.takeUnless {
                         it.id in locallyStoppingEntryIds ||
+                            it.id in locallyDeletedEntryIds ||
                             shouldDeferServerActiveWhileStopping(it.id, _uiState.value.syncOperations)
                     }
                 // A locally started timer whose START/CREATE is still in the outbox does not
@@ -927,19 +1171,10 @@ class TrackingViewModel @Inject constructor(
                 if (onlyIfChanged &&
                     currentTimeEntry?.id == _uiState.value.currentTimeEntry?.id
                 ) {
+                    // Nothing changed hands: re-post the notification only if what it shows changed,
+                    // instead of restarting the foreground service every poll.
                     if (currentTimeEntry != null) {
-                        TimeTrackingNotificationService.startTracking(
-                            context = context,
-                            startTime = Instant.parse(currentTimeEntry.start),
-                            projectName = _uiState.value.projects
-                                .find { it.id == currentTimeEntry.projectId }?.name,
-                            taskName = _uiState.value.tasks
-                                .find { it.id == currentTimeEntry.taskId }?.name,
-                            description = currentTimeEntry.description,
-                            projectId = currentTimeEntry.projectId,
-                            taskId = currentTimeEntry.taskId,
-                            organizationId = currentTimeEntry.organizationId,
-                        )
+                        showTrackingNotification(currentTimeEntry, onlyIfChanged = true)
                     } else {
                         updateNotificationState()
                     }
@@ -958,25 +1193,12 @@ class TrackingViewModel @Inject constructor(
 
                 // Update notification state based on tracking status and settings
                 if (currentTimeEntry != null) {
-                    val projectName = _uiState.value.projects
-                        .find { it.id == currentTimeEntry.projectId }?.name
-                    val taskName = _uiState.value.tasks
-                        .find { it.id == currentTimeEntry.taskId }?.name
-                    TimeTrackingNotificationService.startTracking(
-                        context = context,
-                        startTime = Instant.parse(currentTimeEntry.start),
-                        projectName = projectName,
-                        taskName = taskName,
-                        description = currentTimeEntry.description,
-                        projectId = currentTimeEntry.projectId,
-                        taskId = currentTimeEntry.taskId,
-                        organizationId = currentTimeEntry.organizationId,
-                    )
+                    val content = showTrackingNotification(currentTimeEntry)
                     settingsDataStore.setWidgetTrackingState(
                         isTracking = true,
                         startTimeEpochMillis = Instant.parse(currentTimeEntry.start).toEpochMilli(),
-                        projectName = projectName,
-                        taskName = taskName,
+                        projectName = content.projectName,
+                        taskName = content.taskName,
                         description = currentTimeEntry.description,
                     )
                 } else {
@@ -1041,7 +1263,7 @@ class TrackingViewModel @Inject constructor(
                     // Tag resolution plus the dedupe/sort of a growing window is O(n log n);
                     // keep it off the main thread so paging in more history cannot jank a
                     // scroll that is still settling.
-                    val (incoming, merged) = withContext(Dispatchers.Default) {
+                    val (incoming, computed) = withContext(Dispatchers.Default) {
                         val tagsById = currentTags.associateBy { it.id }
                         val resolved = response.data.map { entry ->
                             entry.copy(tags = entry.tags.map { tagsById[it.id] ?: it })
@@ -1049,6 +1271,14 @@ class TrackingViewModel @Inject constructor(
                         resolved to (currentEntries + resolved)
                             .distinctBy { it.id }
                             .sortedByDescending { it.start }
+                    }
+                    if (!isCurrentHistoryRequest(organizationId, memberId, requestGeneration)) return@onSuccess
+                    // A Room emission may have refreshed the window during the merge; keep its rows.
+                    val latest = _uiState.value.timeEntries
+                    val merged = if (latest === currentEntries) {
+                        computed
+                    } else {
+                        (latest + incoming).distinctBy { it.id }.sortedByDescending { it.start }
                     }
                     val total = response.meta?.total ?: _uiState.value.totalTimeEntries
                     historyOffset = if (historyLoadStage <= 1) {
@@ -1242,15 +1472,26 @@ class TrackingViewModel @Inject constructor(
                 offset = newStart,
             ).onSuccess { response ->
                 if (!isCurrentHistoryRequest(organizationId, memberId, requestGeneration)) return@onSuccess
-                val tagsById = _uiState.value.tags.associateBy { it.id }
-                val incoming = response.data.map { entry ->
-                    entry.copy(tags = entry.tags.map { tagsById[it.id] ?: it })
+                val currentTags = _uiState.value.tags
+                val displayed = _uiState.value.timeEntries
+                val (incoming, merged) = withContext(Dispatchers.Default) {
+                    val tagsById = currentTags.associateBy { it.id }
+                    val incoming = response.data.map { entry ->
+                        entry.copy(tags = entry.tags.map { tagsById[it.id] ?: it })
+                    }
+                    incoming to (incoming + displayed).distinctBy { it.id }.sortedByDescending { it.start }
                 }
+                if (!isCurrentHistoryRequest(organizationId, memberId, requestGeneration)) return@onSuccess
                 historyWindowStartOffset = newStart
                 historyWindowMode = HistoryWindowMode.PAGINATED
+                val latest = _uiState.value.timeEntries
                 _uiState.value = _uiState.value.copy(
-                    timeEntries = (incoming + _uiState.value.timeEntries)
-                        .distinctBy { it.id }.sortedByDescending { it.start },
+                    // A Room emission may have refreshed the window meanwhile; merge onto that one.
+                    timeEntries = if (latest === displayed) {
+                        merged
+                    } else {
+                        (incoming + latest).distinctBy { it.id }.sortedByDescending { it.start }
+                    },
                     isLoadingMoreTimeEntries = false,
                     canLoadNewerHistory = newStart > 0,
                 )
@@ -1465,6 +1706,7 @@ class TrackingViewModel @Inject constructor(
                     taskId = _uiState.value.editingTaskId,
                     description = _uiState.value.editingDescription,
                     tagIds = _uiState.value.editingTags,
+                    billable = _uiState.value.editingBillable,
                 )
                 // startEntry returns the row that was committed to Room. Project that durable
                 // value before notification/widget side effects so a fresh-login Stop action
@@ -1476,28 +1718,7 @@ class TrackingViewModel @Inject constructor(
                 syncTrigger.requestSync()
 
                 // Active timers always have a foreground notification.
-                val projectName = _uiState.value.projects.find { it.id == timeEntry.projectId }?.name
-                val taskName = _uiState.value.tasks.find { it.id == timeEntry.taskId }?.name
-
-                TimeTrackingNotificationService.startTracking(
-                    context = context,
-                    startTime = Instant.parse(timeEntry.start),
-                    projectName = projectName,
-                    taskName = taskName,
-                    description = timeEntry.description,
-                    projectId = timeEntry.projectId,
-                    taskId = timeEntry.taskId,
-                    organizationId = timeEntry.organizationId,
-                )
-
-                settingsDataStore.setWidgetTrackingState(
-                    isTracking = true,
-                    startTimeEpochMillis = Instant.parse(timeEntry.start).toEpochMilli(),
-                    projectName = projectName,
-                    taskName = taskName,
-                    description = timeEntry.description,
-                )
-                TimeTrackingWidget.requestUpdate(context)
+                showTrackingWidget(timeEntry, showTrackingNotification(timeEntry))
 
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -1538,26 +1759,7 @@ class TrackingViewModel @Inject constructor(
 
                 // Reassert the foreground notification with the edited details.
                 if (isRunningTimeEntry(updatedEntry)) {
-                    val projectName = _uiState.value.projects.find { it.id == updatedEntry.projectId }?.name
-                    val taskName = _uiState.value.tasks.find { it.id == updatedEntry.taskId }?.name
-                    TimeTrackingNotificationService.startTracking(
-                        context = context,
-                        startTime = Instant.parse(updatedEntry.start),
-                        projectName = projectName,
-                        taskName = taskName,
-                        description = updatedEntry.description,
-                        projectId = updatedEntry.projectId,
-                        taskId = updatedEntry.taskId,
-                        organizationId = updatedEntry.organizationId,
-                    )
-                    settingsDataStore.setWidgetTrackingState(
-                        isTracking = true,
-                        startTimeEpochMillis = Instant.parse(updatedEntry.start).toEpochMilli(),
-                        projectName = projectName,
-                        taskName = taskName,
-                        description = updatedEntry.description,
-                    )
-                    TimeTrackingWidget.requestUpdate(context)
+                    showTrackingWidget(updatedEntry, showTrackingNotification(updatedEntry))
                 }
 
                 _uiState.value = _uiState.value.copy(
@@ -1572,9 +1774,10 @@ class TrackingViewModel @Inject constructor(
     }
 
     /**
-     * Stop the active time entry
+     * Stop the active time entry. [edits] are the running entry's details-sheet fields when Stop is
+     * tapped there; they are committed with the stop instead of being dropped with the sheet.
      */
-    fun stopTimeEntry() {
+    fun stopTimeEntry(edits: RunningEntryEdits? = null) {
         val currentEntry = _uiState.value.currentTimeEntry
 
         // If paused, the entry is already stopped - just clear the paused state
@@ -1604,6 +1807,7 @@ class TrackingViewModel @Inject constructor(
         }
 
         if (!beginTimerMutation()) return
+        edits?.let(::applyRunningEntryEdits)
 
         // Active polling can complete between the local STOP transaction and the outbox observer
         // emission. Suppress that exact server id synchronously while the STOP is being queued.
@@ -1615,8 +1819,9 @@ class TrackingViewModel @Inject constructor(
             try {
                 // Commit the editable running-entry fields atomically with the stop. Otherwise a
                 // fast Stop can leave metadata only in UI state while timestamp sync wins.
+                val stopTarget = retimeRunningEntry(currentEntry, edits)
                 val editingTags = _uiState.value.editingTags
-                val editedEntry = currentEntry.copy(
+                val editedEntry = stopTarget.copy(
                     description = _uiState.value.editingDescription,
                     projectId = _uiState.value.editingProjectId,
                     taskId = _uiState.value.editingTaskId,
@@ -1624,8 +1829,8 @@ class TrackingViewModel @Inject constructor(
                     tags = editingTags.map(::Tag),
                 )
                 timeEntryRepository.stopEntryWithEdits(
-                    entry = currentEntry,
-                    userId = currentEntry.userId,
+                    entry = stopTarget,
+                    userId = stopTarget.userId,
                     editedEntry = editedEntry,
                     tagIds = editingTags,
                 )
@@ -1665,9 +1870,10 @@ class TrackingViewModel @Inject constructor(
 
     /**
      * Pause the active time entry - stops it via API but keeps notification in paused state
-     * preserving the project/task/description for easy resume
+     * preserving the project/task/description for easy resume. [edits] are the details-sheet fields
+     * when Pause is tapped there: they are saved on the paused entry and resumed with.
      */
-    fun pauseTimeEntry() {
+    fun pauseTimeEntry(edits: RunningEntryEdits? = null) {
         val currentEntry = _uiState.value.currentTimeEntry
         if (currentEntry == null) {
             Timber.w("No active time entry to pause")
@@ -1675,12 +1881,32 @@ class TrackingViewModel @Inject constructor(
         }
 
         if (!beginTimerMutation()) return
+        edits?.let(::applyRunningEntryEdits)
 
+        // Like Stop: keep a poll racing the STOP from showing the paused timer as running again.
+        locallyStoppingEntryIds += currentEntry.id
+        pendingHistoryMembershipChanges[currentEntry.id] = HistoryMembershipChange.COMPLETED_ENTRY_PRESENT
         clearActivePollOverride()
         viewModelScope.launch {
             try {
                 // Optimistic local stop + outbox enqueue; keep editing state for resume.
-                timeEntryRepository.stopEntry(currentEntry, currentEntry.userId)
+                if (edits == null) {
+                    timeEntryRepository.stopEntry(currentEntry, currentEntry.userId)
+                } else {
+                    val stopTarget = retimeRunningEntry(currentEntry, edits)
+                    timeEntryRepository.stopEntryWithEdits(
+                        entry = stopTarget,
+                        userId = stopTarget.userId,
+                        editedEntry = stopTarget.copy(
+                            description = edits.description,
+                            projectId = edits.projectId,
+                            taskId = edits.taskId,
+                            billable = edits.billable,
+                            tags = edits.tagIds.map(::Tag),
+                        ),
+                        tagIds = edits.tagIds,
+                    )
+                }
                 syncTrigger.requestSync()
 
                 _uiState.value = _uiState.value.copy(
@@ -1695,15 +1921,50 @@ class TrackingViewModel @Inject constructor(
                 Timber.d("Time entry paused successfully (optimistic)")
 
                 // Update notification to paused state
+                postedTrackingNotification = null
                 TimeTrackingNotificationService.showPaused(context)
 
                 // Update widget state to idle
                 settingsDataStore.setWidgetTrackingState(isTracking = false)
                 TimeTrackingWidget.requestUpdate(context)
             } catch (e: Exception) {
+                locallyStoppingEntryIds.remove(currentEntry.id)
+                pendingHistoryMembershipChanges.remove(currentEntry.id)
                 handleTimerMutationFailure(e, R.string.error_pause_entry)
             }
         }
+    }
+
+    /** Put the running entry's details-sheet fields into the editing state that Stop and Resume use. */
+    private fun applyRunningEntryEdits(edits: RunningEntryEdits) {
+        _uiState.value = _uiState.value.copy(
+            editingDescription = edits.description.orEmpty(),
+            editingProjectId = edits.projectId,
+            editingTaskId = edits.taskId,
+            editingTags = edits.tagIds,
+            editingBillable = edits.billable,
+        )
+    }
+
+    /**
+     * Save a start time changed in the details sheet before stopping, since the stop keeps the
+     * row's start. Returns the entry to stop.
+     */
+    private suspend fun retimeRunningEntry(entry: TimeEntry, edits: RunningEntryEdits?): TimeEntry {
+        if (edits == null) return entry
+        val editedStart = parseTimeEntryInstant(edits.start)
+        if (editedStart == null || editedStart.epochSecond == parseTimeEntryInstant(entry.start)?.epochSecond) return entry
+        val retimed = entry.copy(
+            start = edits.start,
+            end = null,
+            description = edits.description,
+            projectId = edits.projectId,
+            taskId = edits.taskId,
+            billable = edits.billable,
+            tags = edits.tagIds.map(::Tag),
+        )
+        timeEntryRepository.updateEntry(retimed, edits.tagIds)
+        return retimed
     }
 
     /**
@@ -1728,32 +1989,12 @@ class TrackingViewModel @Inject constructor(
                     taskId = _uiState.value.editingTaskId,
                     description = _uiState.value.editingDescription,
                     tagIds = _uiState.value.editingTags,
+                    billable = _uiState.value.editingBillable,
                 )
                 syncTrigger.requestSync()
 
-                val projectName = _uiState.value.projects.find { it.id == timeEntry.projectId }?.name
-                val taskName = _uiState.value.tasks.find { it.id == timeEntry.taskId }?.name
-
                 // Update notification to tracking state
-                TimeTrackingNotificationService.startTracking(
-                    context = context,
-                    startTime = Instant.parse(timeEntry.start),
-                    projectName = projectName,
-                    taskName = taskName,
-                    description = timeEntry.description,
-                    projectId = timeEntry.projectId,
-                    taskId = timeEntry.taskId,
-                    organizationId = timeEntry.organizationId,
-                )
-
-                settingsDataStore.setWidgetTrackingState(
-                    isTracking = true,
-                    startTimeEpochMillis = Instant.parse(timeEntry.start).toEpochMilli(),
-                    projectName = projectName,
-                    taskName = taskName,
-                    description = timeEntry.description,
-                )
-                TimeTrackingWidget.requestUpdate(context)
+                showTrackingWidget(timeEntry, showTrackingNotification(timeEntry))
 
                 _uiState.value = _uiState.value.copy(isLoading = false, isTracking = true)
                 timerMutationInProgress = false
@@ -1832,8 +2073,14 @@ class TrackingViewModel @Inject constructor(
     }
 
     /**
-     * Update a past time entry
+     * Update a past time entry.
+     *
+     * A [timeEntry] that was running when its editor opened may have ended since: Pause, Stop from
+     * the notification or another surface. Room decides, not the editor's copy; saving such an entry
+     * as running would clear the recorded end and restart the timer from its old start, so the
+     * edits are saved onto the ended row with its real end instead.
      */
+    @Suppress("LongMethod")
     fun updatePastTimeEntry(
         timeEntry: TimeEntry,
         description: String?,
@@ -1844,23 +2091,31 @@ class TrackingViewModel @Inject constructor(
         start: String,
         end: String?,
     ) {
-        val keepRunning = isRunningTimeEntry(timeEntry)
-        if (keepRunning) clearActivePollOverride()
+        val savesRunningEntry = isRunningTimeEntry(timeEntry)
+        if (savesRunningEntry) clearActivePollOverride()
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
-                val updatedEntry = timeEntry.copy(
+                val endedCopy = if (savesRunningEntry) endedCopyOf(timeEntry) else null
+                val keepRunning = savesRunningEntry && endedCopy == null
+                val endedAt = endedCopy?.end
+                if (endedAt != null && !startsBefore(start, endedAt)) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = context.getString(R.string.running_entry_ended_start_after_end),
+                    )
+                    return@launch
+                }
+                val updatedEntry = (endedCopy ?: timeEntry).copy(
                     description = description,
                     projectId = projectId,
                     taskId = taskId,
                     billable = billable,
                     start = start,
-                    end = if (keepRunning) {
-                        null
-                    } else {
-                        requireNotNull(end) {
-                            "A completed time entry must have an end time"
-                        }
+                    end = when {
+                        keepRunning -> null
+                        endedAt != null -> endedAt
+                        else -> requireNotNull(end) { "A completed time entry must have an end time" }
                     },
                     tags = tags.map { Tag(it) },
                 )
@@ -1871,26 +2126,18 @@ class TrackingViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(isLoading = false)
 
                 if (keepRunning) {
-                    val projectName = _uiState.value.projects.find { it.id == updatedEntry.projectId }?.name
-                    val taskName = _uiState.value.tasks.find { it.id == updatedEntry.taskId }?.name
-                    TimeTrackingNotificationService.startTracking(
-                        context = context,
-                        startTime = Instant.parse(updatedEntry.start),
-                        projectName = projectName,
-                        taskName = taskName,
-                        description = updatedEntry.description,
-                        projectId = updatedEntry.projectId,
-                        taskId = updatedEntry.taskId,
-                        organizationId = updatedEntry.organizationId,
-                    )
-                    settingsDataStore.setWidgetTrackingState(
-                        isTracking = true,
-                        startTimeEpochMillis = Instant.parse(updatedEntry.start).toEpochMilli(),
-                        projectName = projectName,
-                        taskName = taskName,
-                        description = updatedEntry.description,
-                    )
-                    TimeTrackingWidget.requestUpdate(context)
+                    // The docked timer shows, and Stop commits, the editing fields: keep them in
+                    // step with what was just saved, or Stop would write the old values back.
+                    if (_uiState.value.currentTimeEntry?.let { isSameRunningEntry(it, timeEntry) } == true) {
+                        _uiState.value = _uiState.value.copy(
+                            editingDescription = description.orEmpty(),
+                            editingProjectId = projectId,
+                            editingTaskId = taskId,
+                            editingTags = tags,
+                            editingBillable = billable,
+                        )
+                    }
+                    showTrackingWidget(updatedEntry, showTrackingNotification(updatedEntry))
                 }
 
                 Timber.d("Time entry updated successfully (optimistic)")
@@ -1901,16 +2148,43 @@ class TrackingViewModel @Inject constructor(
     }
 
     /**
+     * Room's ended copy of [entry] when an editor still holds it as running, or null while it runs.
+     * A `local-` id retired by START reconciliation is matched by identity, like the repository does.
+     */
+    private suspend fun endedCopyOf(entry: TimeEntry): TimeEntry? {
+        if (timeEntryRepository.isEntryRunning(entry.id)) return null
+        fun List<TimeEntry>.copyOf(): TimeEntry? = firstOrNull { it.id == entry.id }
+            ?: firstOrNull { isLocalTimeEntryId(entry.id) && isSameRunningEntry(it, entry) }
+        val stored = try {
+            timeEntryRepository.observeTimeEntries(entry.organizationId).first().copyOf()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.w(e, "Could not read the entry before saving it")
+            null
+        } ?: _uiState.value.timeEntries.copyOf()
+        return stored?.takeIf(::isCompletedTimeEntry)
+    }
+
+    private fun startsBefore(start: String, end: String): Boolean {
+        val startInstant = parseTimeEntryInstant(start) ?: return false
+        val endInstant = parseTimeEntryInstant(end) ?: return false
+        return startInstant < endInstant
+    }
+
+    /**
      * Roadmap #13: duplicate a completed entry, then open the copy for immediate editing. Running
      * and conflicted entries are guarded by the repository; a failure surfaces as an error message.
+     * Surfaces with their own editor (Calendar) pass [openEditor] false, so the Time Tracker does
+     * not open the copy the next time it is shown.
      */
-    fun duplicateTimeEntry(entryId: String) {
+    fun duplicateTimeEntry(entryId: String, openEditor: Boolean = true) {
         val memberId = historyMemberId ?: return
         viewModelScope.launch {
             timeEntryRepository.duplicateEntry(entryId, memberId)
                 .onSuccess { created ->
                     syncTrigger.requestSync()
-                    _uiState.value = _uiState.value.copy(entryToEditId = created.id)
+                    if (openEditor) requestEntryEditor(created.id)
                 }
                 .onFailure { error ->
                     Timber.e(error, "Failed to duplicate time entry")
@@ -1922,14 +2196,15 @@ class TrackingViewModel @Inject constructor(
     /**
      * Roadmap #13: split a completed entry at [atIso]; on success open the new second half for
      * immediate editing. Validation (interior instant, running/conflict guards) lives in the repo.
+     * [openEditor] as for [duplicateTimeEntry].
      */
-    fun splitTimeEntry(entryId: String, atIso: String) {
+    fun splitTimeEntry(entryId: String, atIso: String, openEditor: Boolean = true) {
         val memberId = historyMemberId ?: return
         viewModelScope.launch {
             timeEntryRepository.splitEntry(entryId, atIso, memberId)
                 .onSuccess { newId ->
                     syncTrigger.requestSync()
-                    _uiState.value = _uiState.value.copy(entryToEditId = newId)
+                    if (openEditor) requestEntryEditor(newId)
                 }
                 .onFailure { error ->
                     Timber.e(error, "Failed to split time entry")
@@ -1938,11 +2213,110 @@ class TrackingViewModel @Inject constructor(
         }
     }
 
-    /** One-shot consume of [TrackingUiState.entryToEditId] once the UI has opened the editor. */
+    /**
+     * Ask the Time Tracker to open [entryId]. The request expires: an editor must not pop up on its
+     * own long after the action, for example when the id changed on sync before the list showed it.
+     */
+    private fun requestEntryEditor(entryId: String) {
+        _uiState.value = _uiState.value.copy(entryToEditId = entryId)
+        entryToEditExpiryJob?.cancel()
+        entryToEditExpiryJob = viewModelScope.launch {
+            delay(ENTRY_TO_EDIT_TTL_MS)
+            if (_uiState.value.entryToEditId == entryId) consumeEntryToEdit()
+        }
+    }
+
+    /** One-shot consume of [TrackingUiState.entryToEditId] once the UI has opened the editor, or given up. */
     fun consumeEntryToEdit() {
+        entryToEditExpiryJob?.cancel()
+        entryToEditExpiryJob = null
         if (_uiState.value.entryToEditId != null) {
             _uiState.value = _uiState.value.copy(entryToEditId = null)
         }
+    }
+
+    /**
+     * Start a new timer with [entry]'s fields: the history play button, its swipe and menu, and the
+     * Calendar's Continue. A running timer is stopped first with the fields it shows, and a paused
+     * one is ended, so one tap moves tracking onto that job. Returns whether the start was requested.
+     */
+    fun continueEntry(entry: TimeEntry, organizationId: String, memberId: String, userId: String): Boolean {
+        val state = _uiState.value
+        val running = state.currentTimeEntry
+        // A start still being written has no row to stop yet, and a running entry is already tracking.
+        if (!isCompletedTimeEntry(entry) || (state.isTracking && running == null) || !beginTimerMutation()) {
+            Timber.d("Ignoring continue for a running entry or while a timer change is in flight")
+            return false
+        }
+        if (running != null) {
+            // As Stop does: keep a poll racing the STOP from showing the old timer as running again.
+            locallyStoppingEntryIds += running.id
+            pendingHistoryMembershipChanges[running.id] = HistoryMembershipChange.COMPLETED_ENTRY_PRESENT
+        }
+        clearActivePollOverride()
+        viewModelScope.launch {
+            try {
+                val tagIds = entry.tags.map { it.id }
+                val started = if (running == null) {
+                    timeEntryRepository.startEntry(
+                        organizationId = organizationId,
+                        memberId = memberId,
+                        userId = userId,
+                        projectId = entry.projectId,
+                        taskId = entry.taskId,
+                        description = entry.description.orEmpty(),
+                        tagIds = tagIds,
+                        billable = entry.billable,
+                    )
+                } else {
+                    timeEntryRepository.switchEntry(
+                        running = running,
+                        editedRunning = running.copy(
+                            description = state.editingDescription,
+                            projectId = state.editingProjectId,
+                            taskId = state.editingTaskId,
+                            billable = state.editingBillable,
+                            tags = state.editingTags.map(::Tag),
+                        ),
+                        runningTagIds = state.editingTags,
+                        organizationId = organizationId,
+                        memberId = memberId,
+                        userId = userId,
+                        projectId = entry.projectId,
+                        taskId = entry.taskId,
+                        description = entry.description.orEmpty(),
+                        tagIds = tagIds,
+                        billable = entry.billable,
+                    )
+                }
+                // The docked timer shows, and Stop commits, the editing fields: take them from the
+                // row that is now running.
+                _uiState.value = _uiState.value.copy(
+                    isTracking = true,
+                    isPaused = false,
+                    currentTimeEntry = started,
+                    editingDescription = started.description.orEmpty(),
+                    editingProjectId = started.projectId,
+                    editingTaskId = started.taskId,
+                    editingTags = started.tags.map { it.id },
+                    editingBillable = started.billable,
+                )
+                cacheTrackingDraft(_uiState.value)
+                startTimer(started.start)
+                syncTrigger.requestSync()
+                showTrackingWidget(started, showTrackingNotification(started))
+                _uiState.value = _uiState.value.copy(isLoading = false)
+                timerMutationInProgress = false
+                Timber.d("Continued an entry as the running timer (optimistic)")
+            } catch (e: Exception) {
+                running?.let {
+                    locallyStoppingEntryIds.remove(it.id)
+                    pendingHistoryMembershipChanges.remove(it.id)
+                }
+                handleTimerMutationFailure(e, R.string.error_start_entry)
+            }
+        }
+        return true
     }
 
     /**
@@ -1973,11 +2347,20 @@ class TrackingViewModel @Inject constructor(
 
     private suspend fun deleteTimeEntryInternal(entry: TimeEntry) {
         _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+        val runningTimer = _uiState.value.currentTimeEntry
+            ?.takeIf { isRunningTimeEntry(entry) && isSameRunningEntry(it, entry) }
+        if (runningTimer != null) {
+            // The server keeps the timer running until the deferred DELETE syncs: keep the poll
+            // and any earlier poll result from showing the deleted timer again meanwhile.
+            locallyDeletedEntryIds += setOf(entry.id, runningTimer.id)
+            clearActivePollOverride()
+        }
 
         // Optimistic local-only soft-delete; the collector removes it from the list. No outbox op
         // exists yet, so there is nothing here for the sync worker to act on.
         pendingHistoryMembershipChanges[entry.id] = HistoryMembershipChange.ENTRY_ABSENT
         timeEntryRepository.softDeleteLocal(entry)
+        if (runningTimer != null) endDeletedTimer()
 
         pendingDeleteCommitJobs.remove(entry.id)?.cancel()
         pendingDeleteCommitJobs[entry.id] = viewModelScope.launch {
@@ -1992,6 +2375,29 @@ class TrackingViewModel @Inject constructor(
         Timber.d("Time entry soft-deleted successfully (optimistic)")
     }
 
+    /**
+     * The running timer was deleted: end it everywhere now, as Stop does, rather than leaving the
+     * notification and widget running until something else refreshes them.
+     */
+    private suspend fun endDeletedTimer() {
+        val currentState = _uiState.value
+        _uiState.value = currentState.copy(
+            isTracking = false,
+            currentTimeEntry = null,
+            editingDescription = if (shouldClearDescriptionAfterStop()) "" else currentState.editingDescription,
+            editingProjectId = if (autoClearEntryFieldsAfterStopEnabled) null else currentState.editingProjectId,
+            editingTaskId = if (autoClearEntryFieldsAfterStopEnabled) null else currentState.editingTaskId,
+            editingTags = emptyList(),
+            editingBillable = false,
+        )
+        cacheTrackingDraft(_uiState.value)
+        stopTimer()
+        lastCollectedActiveId = null
+        updateNotificationState()
+        settingsDataStore.setWidgetTrackingState(isTracking = false)
+        TimeTrackingWidget.requestUpdate(context)
+    }
+
     fun undoDelete(entry: TimeEntry) {
         viewModelScope.launch {
             // Cancel the deferred server-facing commit first: if the window hasn't closed yet,
@@ -1999,11 +2405,21 @@ class TrackingViewModel @Inject constructor(
             // to race against.
             pendingDeleteCommitJobs.remove(entry.id)?.cancel()
             pendingHistoryMembershipChanges[entry.id] = HistoryMembershipChange.COMPLETED_ENTRY_PRESENT
+            val restoresTimer = entry.id in locallyDeletedEntryIds
+            if (restoresTimer) {
+                // The timer is back: stop hiding it from the poll, and drop a poll result that
+                // still says no timer runs.
+                locallyDeletedEntryIds.clear()
+                clearActivePollOverride()
+            }
             if (!timeEntryRepository.undoDelete(entry, historyMemberId)) {
                 pendingHistoryMembershipChanges.remove(entry.id)
                 _uiState.value = _uiState.value.copy(error = context.getString(R.string.undo_delete_too_late))
             } else {
                 syncTrigger.requestSync()
+                // The restored row is active again; the collector brings back the docked timer,
+                // and the notification and widget come back here.
+                if (restoresTimer && isRunningTimeEntry(entry)) showTrackingWidget(entry, showTrackingNotification(entry))
             }
         }
     }
@@ -2085,12 +2501,60 @@ class TrackingViewModel @Inject constructor(
         const val FIRST_SCROLL_TOTAL = 150
         const val MAX_PAGE_SIZE = 500
         const val HISTORY_REFRESH_LIMIT = 250
-        const val FIRST_FRAME_ENTRY_LIMIT = 30
         const val FIRST_FRAME_CACHE_DEBOUNCE_MS = 500L
         const val TRACKING_DRAFT_CACHE_DEBOUNCE_MS = 300L
         const val DELETE_UNDO_WINDOW_MS = 5_000L
+        const val PAGINATED_MERGE_ATTEMPTS = 3
+
+        /** How long a duplicate/split waits to be opened by the Time Tracker before it is dropped. */
+        const val ENTRY_TO_EDIT_TTL_MS = 10_000L
     }
 }
 
 internal fun historyEntryStartDate(entry: TimeEntry, zone: ZoneId): LocalDate? =
     parseTimeEntryInstant(entry.start)?.atZone(zone)?.toLocalDate()
+
+/**
+ * The first-frame cache: the running timer, the newest [FIRST_FRAME_CACHE_ENTRY_LIMIT] entries, and
+ * only the projects, clients, tasks and tags those show. The complete catalogue is read from Room
+ * once the collectors start, so it does not have to be decoded before the first frame.
+ */
+@Suppress("LongParameterList")
+internal fun firstFrameCacheOf(
+    organizationId: String,
+    entries: List<TimeEntry>,
+    active: TimeEntry?,
+    projects: List<Project>,
+    clients: List<Client>,
+    tasks: List<Task>,
+    tags: List<Tag>,
+    overlapCount: Int,
+): SettingsDataStore.CachedTrackingState {
+    val shown = entries.take(FIRST_FRAME_CACHE_ENTRY_LIMIT)
+    val referenced = if (active != null) shown + active else shown
+    val projectIds = referenced.mapNotNullTo(HashSet()) { it.projectId }
+    val taskIds = referenced.mapNotNullTo(HashSet()) { it.taskId }
+    val tagIds = referenced.flatMapTo(HashSet()) { entry -> entry.tags.map { it.id } }
+    val shownProjects = projects.filter { it.id in projectIds }
+    val clientIds = shownProjects.mapNotNullTo(HashSet()) { it.clientId }
+    return SettingsDataStore.CachedTrackingState(
+        organizationId = organizationId,
+        timeEntries = shown,
+        projects = shownProjects,
+        clients = clients.filter { it.id in clientIds },
+        tasks = tasks.filter { it.id in taskIds },
+        tags = tags.filter { it.id in tagIds },
+        activeEntry = active,
+        overlapCount = overlapCount,
+    )
+}
+
+internal const val FIRST_FRAME_CACHE_ENTRY_LIMIT = 30
+
+/** Whether [other] has the same fields the running-timer editing state mirrors. */
+private fun TimeEntry.hasSameEditableFields(other: TimeEntry?): Boolean = other != null &&
+    description.orEmpty() == other.description.orEmpty() &&
+    projectId == other.projectId &&
+    taskId == other.taskId &&
+    billable == other.billable &&
+    tags.mapTo(HashSet()) { it.id } == other.tags.mapTo(HashSet()) { it.id }

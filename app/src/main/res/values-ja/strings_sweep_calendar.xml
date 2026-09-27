@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- カレンダーのシートとダイアログ（機能別。他の文字列ファイルと統合されます）。 -->
+    <string name="calendar_sync_status">同期状態</string>
+    <string name="calendar_split_date">日付</string>
+    <string name="calendar_settings_start_title">表示の開始時刻</string>
+    <string name="calendar_settings_end_title">表示の終了時刻</string>
+</resources>

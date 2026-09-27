@@ -18,12 +18,10 @@ import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -32,6 +30,7 @@ import dev.tricked.solidverdant.e2e.BackendPortable
 import dev.tricked.solidverdant.e2e.E2eFixture
 import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.TestTags
+import dev.tricked.solidverdant.e2e.robots.openCalendarFromMenu
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
 import org.junit.After
@@ -69,7 +68,7 @@ class CalendarRunningTimerE2eTest {
         val originalHandle = e2e.prepare(E2eFixture.Active(original))
         e2e.launchApp()
 
-        e2e.composeRule.onNodeWithTag("main_nav_calendar", useUnmergedTree = true).performClick()
+        e2e.composeRule.openCalendarFromMenu()
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_CONTENT_READY), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_RUNNING_TIMER), WAIT_MS)
 
@@ -78,7 +77,7 @@ class CalendarRunningTimerE2eTest {
         e2e.composeRule.waitForIdle()
         e2e.composeRule.onNodeWithTag(entryTag, useUnmergedTree = true)
             .performScrollTo()
-            .performTouchInput { longClick() }
+            .performClick()
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ENTRY_ACTIONS), WAIT_MS)
         e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_EDIT_START_TIME, useUnmergedTree = true).performClick()
 
@@ -104,14 +103,14 @@ class CalendarRunningTimerE2eTest {
         val originalHandle = e2e.prepare(E2eFixture.Active(original))
         e2e.launchApp()
 
-        e2e.composeRule.onNodeWithTag("main_nav_calendar", useUnmergedTree = true).performClick()
+        e2e.composeRule.openCalendarFromMenu()
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_CONTENT_READY), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_RUNNING_TIMER), WAIT_MS)
         val entryTag = "week-entry-${requireNotNull(originalHandle.serverId)}"
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(entryTag), WAIT_MS)
         e2e.composeRule.onNodeWithTag(entryTag, useUnmergedTree = true)
             .performScrollTo()
-            .performTouchInput { longClick() }
+            .performClick()
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ENTRY_ACTIONS), WAIT_MS)
         e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_EDIT_START_TIME, useUnmergedTree = true).performClick()
 

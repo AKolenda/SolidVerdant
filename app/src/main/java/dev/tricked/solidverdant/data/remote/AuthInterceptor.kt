@@ -30,6 +30,11 @@ class AuthInterceptor @Inject constructor(private val authDataStore: AuthDataSto
         if (originalRequest.url.encodedPath.contains("/oauth/token")) {
             return chain.proceed(originalRequest)
         }
+        // A caller that already chose credentials (identifying freshly exchanged tokens before
+        // they are stored) must not have them replaced by the stored session.
+        if (originalRequest.header("Authorization") != null) {
+            return chain.proceed(originalRequest)
+        }
 
         // Get access token from DataStore. The read must never throw here: an undecryptable secret
         // (Keystore key lost/invalidated) would otherwise crash every API call. Treat any failure as

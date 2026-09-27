@@ -22,24 +22,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalConfiguration
@@ -53,8 +50,8 @@ import com.github.takahirom.roborazzi.RoborazziComposeOptions
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.size
 import dev.tricked.solidverdant.data.local.AppThemeMode
-import dev.tricked.solidverdant.ui.navigation.MainNavigationBar
-import dev.tricked.solidverdant.ui.navigation.Screen
+import dev.tricked.solidverdant.ui.navigation.LocalMainMenu
+import dev.tricked.solidverdant.ui.navigation.MainMenuController
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 import java.io.File
 import java.util.Locale
@@ -68,11 +65,11 @@ import java.util.Locale
  * code changes required elsewhere.
  */
 enum class ThemeAxis(val id: String, val mode: AppThemeMode) {
-    /** The Verdant light scheme. */
+    /** The default light scheme. */
     LIGHT("light", AppThemeMode.LIGHT),
 
-    /** The "Neo" dark scheme — the cohesive README hero style. */
-    DARK("dark", AppThemeMode.NEO),
+    /** The default dark scheme — the cohesive README hero style. */
+    DARK("dark", AppThemeMode.DARK),
 }
 
 enum class DeviceAxis(val id: String, val widthDp: Int, val heightDp: Int) {
@@ -91,7 +88,7 @@ object ScreenshotMatrix {
     val devices: List<DeviceAxis> = listOf(DeviceAxis.PHONE, DeviceAxis.TABLET)
     val locales: List<LocaleAxis> = listOf(LocaleAxis.ENGLISH, LocaleAxis.JAPANESE)
 
-    /** The cohesive README hero style: Neo dark + phone. */
+    /** The cohesive README hero style: dark + phone. */
     val readmeTheme: ThemeAxis = ThemeAxis.DARK
     val readmeDevice: DeviceAxis = DeviceAxis.PHONE
 }
@@ -121,6 +118,7 @@ object ScreenshotHost {
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    val glyph = MaterialTheme.colorScheme.onBackground
                     Canvas(
                         modifier = Modifier.size(16.dp),
                     ) {
@@ -130,7 +128,7 @@ object ScreenshotHost {
                         val centerX = size.width / 2f
                         val bottom = size.height - 2.dp.toPx()
                         drawArc(
-                            color = Color.White,
+                            color = glyph,
                             startAngle = 225f,
                             sweepAngle = 90f,
                             useCenter = false,
@@ -139,7 +137,7 @@ object ScreenshotHost {
                             style = Stroke(strokeWidth, cap = StrokeCap.Round),
                         )
                         drawArc(
-                            color = Color.White,
+                            color = glyph,
                             startAngle = 225f,
                             sweepAngle = 90f,
                             useCenter = false,
@@ -150,7 +148,7 @@ object ScreenshotHost {
                             ),
                             style = Stroke(strokeWidth, cap = StrokeCap.Round),
                         )
-                        drawCircle(Color.White, dotRadius, Offset(centerX, bottom))
+                        drawCircle(glyph, dotRadius, Offset(centerX, bottom))
                     }
                     Text(
                         text = "87%",
@@ -176,82 +174,43 @@ object ScreenshotHost {
         }
     }
 
-    /** Hosts feature content inside the same app scaffold and bottom navigation used in production. */
+    /**
+     * Hosts feature content the way production does. Menu destinations get their side-menu
+     * [header] (Settings and Reports draw their own), pushed destinations a back-arrow bar from
+     * [pushedTitleRes]; then the content with an optional docked [bottomBar] and new-entry [fab].
+     * The Scaffold's surface supplies the content colour, as the production root Surface does.
+     */
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    fun AppShell(destination: Screen, inboxBadgeCount: Int = 0, content: @Composable () -> Unit) {
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            contentWindowInsets = WindowInsets(0),
-            topBar = {
-                if (destination == Screen.Track) {
-                    TopAppBar(
-                        title = {
-                            Column {
-                                Text(
-                                    text = stringResource(dev.tricked.solidverdant.R.string.time_tracking),
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                Text(
-                                    text = "Alex Morgan",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Text(
-                                    text = "Acme Studio",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = {}) {
-                                Icon(
-                                    imageVector = Icons.Default.Menu,
-                                    contentDescription = stringResource(
-                                        dev.tricked.solidverdant.R.string.settings_menu,
-                                    ),
-                                )
-                            }
-                        },
-                        actions = {
-                            IconButton(onClick = {}) {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = stringResource(
-                                        dev.tricked.solidverdant.R.string.add_time_entry,
-                                    ),
-                                )
-                            }
-                            IconButton(onClick = {}) {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = stringResource(
-                                        dev.tricked.solidverdant.R.string.refresh,
-                                    ),
-                                )
-                            }
-                        },
-                    )
-                } else {
-                    TopAppBar(
-                        title = { Text(stringResource(destination.labelRes)) },
-                    )
-                }
-            },
-            bottomBar = {
-                MainNavigationBar(
-                    currentRoute = destination.route,
-                    inboxBadgeCount = inboxBadgeCount,
-                    onNavigate = {},
-                )
-            },
-        ) { innerPadding ->
-            Surface(
-                modifier = Modifier.fillMaxSize().padding(innerPadding),
-                color = MaterialTheme.colorScheme.background,
-            ) {
-                content()
+    fun AppShell(
+        header: (@Composable () -> Unit)? = null,
+        pushedTitleRes: Int? = null,
+        bottomBar: @Composable () -> Unit = {},
+        fab: @Composable () -> Unit = {},
+        content: @Composable () -> Unit,
+    ) {
+        CompositionLocalProvider(LocalMainMenu provides MainMenuController(open = {})) {
+            Scaffold(
+                topBar = {
+                    when {
+                        pushedTitleRes != null -> TopAppBar(
+                            title = { Text(stringResource(pushedTitleRes)) },
+                            navigationIcon = {
+                                IconButton(onClick = {}) {
+                                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null)
+                                }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+                        )
+                        header != null -> header()
+                    }
+                },
+                bottomBar = bottomBar,
+                floatingActionButton = fab,
+                containerColor = MaterialTheme.colorScheme.background,
+                contentWindowInsets = WindowInsets(0),
+            ) { padding ->
+                Box(Modifier.padding(padding).fillMaxSize()) { content() }
             }
         }
     }

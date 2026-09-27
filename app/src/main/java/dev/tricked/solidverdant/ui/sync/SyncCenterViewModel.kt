@@ -69,7 +69,13 @@ class SyncCenterViewModel @Inject constructor(
                 val pending = operations.filter {
                     it.status == EntrySyncStatus.PENDING || it.status == EntrySyncStatus.RETRYING
                 }
+                val entries = groupByEntry(operations)
                 SyncCenterUiState(
+                    failedEntries = entries.filter { it.status == EntrySyncStatus.FAILED },
+                    conflictEntries = entries.filter { it.status == EntrySyncStatus.CONFLICT },
+                    pendingEntries = entries.filter {
+                        it.status == EntrySyncStatus.PENDING || it.status == EntrySyncStatus.RETRYING
+                    },
                     isLoading = false,
                     organizationId = orgId,
                     // The DAO seeds a sentinel pull timestamp of 0 when a row is created for a
@@ -152,9 +158,12 @@ class SyncCenterViewModel @Inject constructor(
         }
     }
 
-    /** Permanently drop a failed change's queued operation so it stops appearing. */
-    fun discard(entryId: String) {
-        viewModelScope.launch { repository.discardFailedSync(entryId) }
+    /**
+     * Permanently drop every failed operation queued for [entryId] so they stop appearing. Ignored
+     * while a retry or resolution for the same entry is still running.
+     */
+    fun discard(entryId: String): Job = viewModelScope.launch {
+        withActiveRecovery(entryId) { repository.discardFailedSync(entryId) }
     }
 
     /** Manual "Sync now": kick the same background sync the app enqueues after every local edit. */
@@ -194,6 +203,15 @@ data class SyncCenterUiState(
     val failedOutsideOrganizationCount: Int = 0,
     val activeRecoveryEntryIds: Set<String> = emptySet(),
     val topLine: TopLine = TopLine.SYNCED,
+    /**
+     * The same operations as one row per entry, placed by the entry's most urgent status. Retry,
+     * discard and the conflict choices act on the whole entry, so the screen lists entries: a
+     * failed timer shows its start and stop together instead of as two rows that one discard
+     * removes at once.
+     */
+    val failedEntries: List<SyncEntryGroup> = emptyList(),
+    val conflictEntries: List<SyncEntryGroup> = emptyList(),
+    val pendingEntries: List<SyncEntryGroup> = emptyList(),
 ) {
     val pendingCount: Int get() = pending.size
     val failedCount: Int get() = failed.size
@@ -201,4 +219,26 @@ data class SyncCenterUiState(
 
     /** Plain-language headline bucket; the screen maps each to a localized sentence + icon. */
     enum class TopLine { SYNCED, PENDING, FAILURES, CONFLICTS }
+}
+
+/**
+ * Every queued change to one entry, in outbox order. [status] is the most urgent one (a conflict,
+ * then a failure, then a retry), which decides the section the entry is listed in.
+ */
+data class SyncEntryGroup(val entryId: String, val status: EntrySyncStatus, val operations: List<SyncOperation>) {
+    /** Operations a Discard would remove: the dead-lettered ones. */
+    val failedOperations: List<SyncOperation> get() = operations.filter { it.status == EntrySyncStatus.FAILED }
+
+    /** The stored error behind [status], for the plain-language reason. */
+    val error: String? get() = operations.firstOrNull { it.status == status && !it.error.isNullOrBlank() }?.error
+}
+
+/** Groups operations by entry, keeping the order in which entries first appear. */
+internal fun groupByEntry(operations: List<SyncOperation>): List<SyncEntryGroup> =
+    operations.groupBy { it.entryId }.map { (entryId, ops) -> SyncEntryGroup(entryId, mostUrgent(ops), ops) }
+
+private fun mostUrgent(operations: List<SyncOperation>): EntrySyncStatus {
+    val statuses = operations.map { it.status }.toSet()
+    return listOf(EntrySyncStatus.CONFLICT, EntrySyncStatus.FAILED, EntrySyncStatus.RETRYING, EntrySyncStatus.PENDING)
+        .firstOrNull { it in statuses } ?: EntrySyncStatus.SYNCED
 }

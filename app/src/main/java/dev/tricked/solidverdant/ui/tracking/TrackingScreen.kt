@@ -8,14 +8,9 @@ package dev.tricked.solidverdant.ui.tracking
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Build
-import android.provider.Settings
-import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.RepeatMode
@@ -23,222 +18,201 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.SyncProblem
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.automirrored.outlined.CallSplit
+import androidx.compose.material.icons.automirrored.outlined.Label
+import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.automirrored.outlined.Notes
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.AttachMoney
+import androidx.compose.material.icons.outlined.BookmarkAdd
+import androidx.compose.material.icons.outlined.Business
+import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.FolderOff
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Snooze
+import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.SyncProblem
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DateRangePicker
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.TimePicker
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.rememberDrawerState
-import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.produceState
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.core.graphics.toColorInt
-import androidx.core.net.toUri
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import dev.tricked.solidverdant.BuildConfig
+import androidx.compose.ui.window.DialogProperties
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import dev.tricked.solidverdant.R
-import dev.tricked.solidverdant.data.model.Project
+import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Membership
+import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
-import dev.tricked.solidverdant.domain.time.clipTimeEntryToLocalDay
+import dev.tricked.solidverdant.data.model.User
+import dev.tricked.solidverdant.data.repository.EntryTemplate
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.time.formatTimeEntryInstant
 import dev.tricked.solidverdant.domain.time.isCompletedTimeEntry
 import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.domain.time.isWorkTimeEntry
+import dev.tricked.solidverdant.domain.time.parseTimeEntryInstant
 import dev.tricked.solidverdant.domain.time.timeEntryLocalDaySlices
-import dev.tricked.solidverdant.data.repository.TimeEntryRepository
-import dev.tricked.solidverdant.data.repository.EntryTemplate
-import dev.tricked.solidverdant.data.model.User
-import dev.tricked.solidverdant.service.LIVE_UPDATES_API_LEVEL
-import dev.tricked.solidverdant.service.ACTION_MANAGE_APP_PROMOTED_NOTIFICATIONS
+import dev.tricked.solidverdant.service.TimeTrackingNotificationService
+import dev.tricked.solidverdant.ui.components.AppSheet
+import dev.tricked.solidverdant.ui.components.AppTimePickerDialog
+import dev.tricked.solidverdant.ui.components.ConfirmDialog
+import dev.tricked.solidverdant.ui.components.DateRangePickerDialog
+import dev.tricked.solidverdant.ui.components.DestructiveActionRow
+import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
+import dev.tricked.solidverdant.ui.components.EmptyState
+import dev.tricked.solidverdant.ui.components.EntryDatePickerDialog
+import dev.tricked.solidverdant.ui.components.EntryDescriptionField
+import dev.tricked.solidverdant.ui.components.EntryDurationRow
+import dev.tricked.solidverdant.ui.components.EntrySheetHeader
+import dev.tricked.solidverdant.ui.components.EntryTimeRow
+import dev.tricked.solidverdant.ui.components.FilterOption
+import dev.tricked.solidverdant.ui.components.FilterRow
+import dev.tricked.solidverdant.ui.components.GroupedDivider
+import dev.tricked.solidverdant.ui.components.GroupedRow
+import dev.tricked.solidverdant.ui.components.GroupedSection
+import dev.tricked.solidverdant.ui.components.GroupedSwitchRow
+import dev.tricked.solidverdant.ui.components.OptionPickerDialog
+import dev.tricked.solidverdant.ui.components.SegmentedControl
+import dev.tricked.solidverdant.ui.components.SelectorStyle
+import dev.tricked.solidverdant.ui.components.SingleSelectFilterPicker
+import dev.tricked.solidverdant.ui.components.TagsSelector
+import dev.tricked.solidverdant.ui.components.retimedEnd
+import dev.tricked.solidverdant.ui.localization.appLocale
+import dev.tricked.solidverdant.ui.navigation.MainTopBar
 import dev.tricked.solidverdant.ui.templates.FavoriteTemplatesRow
 import dev.tricked.solidverdant.ui.templates.ManageTemplatesViewModel
 import dev.tricked.solidverdant.ui.templates.TemplateDraft
 import dev.tricked.solidverdant.ui.templates.TemplateResolver
 import dev.tricked.solidverdant.ui.templates.templateDisplayLabel
-import androidx.compose.runtime.collectAsState
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import dev.tricked.solidverdant.data.local.AppThemeMode
-import dev.tricked.solidverdant.ui.components.ProjectTaskDropdown as SharedProjectTaskDropdown
-import dev.tricked.solidverdant.ui.components.EntryDateFieldButton
-import dev.tricked.solidverdant.ui.components.EntryDatePickerDialog
-import dev.tricked.solidverdant.ui.components.retimedEnd
-import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
-import dev.tricked.solidverdant.ui.components.SectionCard
-import dev.tricked.solidverdant.ui.components.SearchableSingleSelectDialog
-import dev.tricked.solidverdant.ui.components.SyncChip
-import dev.tricked.solidverdant.ui.components.TagsSelector
-import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.ui.theme.syncFailed
 import dev.tricked.solidverdant.ui.theme.syncPending
-import dev.tricked.solidverdant.util.IsoTimes
 import dev.tricked.solidverdant.util.NotificationPermissionHelper
-import dev.tricked.solidverdant.service.TimeTrackingNotificationService
-import dev.tricked.solidverdant.service.canPostPromotedNotifications
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.time.LocalDate
-import java.time.ZonedDateTime
-import java.time.ZoneId
-import java.time.Instant
-import java.time.ZoneOffset
-import java.time.DayOfWeek
-import java.time.format.DateTimeFormatter
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import java.time.Duration
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
-import java.time.format.TextStyle
 import java.util.Locale
+import dev.tricked.solidverdant.ui.components.ProjectTaskDropdown as SharedProjectTaskDropdown
 
 /**
  * Tracking screen displaying current time tracking state and history
@@ -249,31 +223,14 @@ import java.util.Locale
 @Composable
 fun TrackingScreen(
     user: User?,
-    memberships: List<Membership>,
     currentMembership: Membership?,
-    serverEndpoint: String,
-    clientId: String,
     uiState: TrackingUiState,
     elapsedSeconds: StateFlow<Long> = MutableStateFlow(uiState.elapsedSeconds),
-    alwaysShowNotifications: Boolean,
-    appTheme: AppThemeMode,
-    optimisticRefresh: Boolean,
-    liveUpdateEnabled: Boolean,
     autoClearEntryFieldsAfterStop: Boolean,
-    clearDescriptionAfterStop: Boolean,
     longTimerHours: Int,
     editActiveEntryRequested: Boolean,
     onEditActiveEntryConsumed: () -> Unit,
-    onAlwaysShowNotificationsChange: (Boolean) -> Unit,
-    onAppThemeChange: (AppThemeMode) -> Unit,
-    onOptimisticRefreshChange: (Boolean) -> Unit,
-    onLiveUpdateEnabledChange: (Boolean) -> Unit,
-    onAutoClearEntryFieldsAfterStopChange: (Boolean) -> Unit,
-    onClearDescriptionAfterStopChange: (Boolean) -> Unit,
-    onLongTimerHoursChange: (Int) -> Unit,
     onRefresh: () -> Unit,
-    onLogout: () -> Unit,
-    onMembershipChange: (Membership) -> Unit,
     onStartTracking: () -> Unit,
     onStopTracking: () -> Unit,
     onPauseTracking: () -> Unit,
@@ -284,7 +241,6 @@ fun TrackingScreen(
     onResetEntryFields: () -> Unit,
     onTagsChange: (List<String>) -> Unit,
     onBillableChange: (Boolean) -> Unit,
-    onUpdateCurrentEntry: () -> Unit,
     onUpdatePastEntry: (TimeEntry, String?, String?, String?, List<String>, Boolean, String, String?) -> Unit,
     onCreateEntry: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
     onDeleteEntry: (String) -> Unit,
@@ -295,68 +251,77 @@ fun TrackingScreen(
     onRetrySync: () -> Unit,
     onRetrySyncEntry: (String) -> Unit,
     onOpenSyncCenter: () -> Unit,
-    onOpenPrivacy: () -> Unit = {},
     onLoadMoreEntries: () -> Unit,
     onLoadNewerEntries: () -> Unit,
     onJumpToDate: (LocalDate) -> Unit,
     onHistoryJumpConsumed: () -> Unit,
     onClearError: () -> Unit = {},
+    // The start sheet's draft, read only by its form so typing does not recompose the screen.
+    entryDraft: () -> EntryDraft = { uiState.entryDraft() },
+    // Pause or Stop tapped in the running entry's details, with that sheet's pending fields.
+    onStopTrackingWithEdits: (RunningEntryEdits) -> Unit = { onStopTracking() },
+    onPauseTrackingWithEdits: (RunningEntryEdits) -> Unit = { onPauseTracking() },
+    // A history entry's play button: starts it, first stopping a running or ending a paused timer.
+    // Without it the button is offered only while no timer runs.
+    onContinueEntry: ((TimeEntry) -> Unit)? = null,
+    // Favorites & templates (gap analysis #1, #9). The template ViewModel resolves the current
+    // organization itself; its catalogue includes archived/done items so availability can be shown.
+    templateViewModel: ManageTemplatesViewModel = hiltViewModel(),
 ) {
     var showEditDialog by remember { mutableStateOf<TimeEntry?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
     var hasUserScrolledHistory by remember { mutableStateOf(false) }
     var calendarInitialDate by remember { mutableStateOf<LocalDate?>(null) }
     var historyFilter by remember { mutableStateOf(HistoryFilter()) }
-    var deletedEntry by remember { mutableStateOf<TimeEntry?>(null) }
+    // Search lives behind the header's search button, not in the history list.
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    var filterOptionsOpen by remember { mutableStateOf(false) }
+    var deletedEntries by remember { mutableStateOf<List<TimeEntry>>(emptyList()) }
+    // Entries waiting for the delete confirmation: one entry, or a whole stack.
+    var pendingDelete by remember { mutableStateOf<List<TimeEntry>>(emptyList()) }
     val snackbarHostState = remember { SnackbarHostState() }
     var longTimerSnoozedUntil by remember { mutableLongStateOf(0L) }
     val context = LocalContext.current
-    val liveUpdatesSupported = Build.VERSION.SDK_INT >= LIVE_UPDATES_API_LEVEL
-    var systemLiveUpdatesEnabled by remember(context, liveUpdatesSupported) {
-        mutableStateOf(canPostPromotedNotifications(context))
-    }
-    val lifecycleOwner = LocalLifecycleOwner.current
-
-    DisposableEffect(context, lifecycleOwner, liveUpdatesSupported) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                systemLiveUpdatesEnabled = canPostPromotedNotifications(context)
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
     val templatesSavedMessage = stringResource(R.string.templates_saved)
     val entryDeletedMessage = stringResource(R.string.entry_deleted)
     val conflictEditLockedMessage = stringResource(R.string.sync_conflict_edit_locked)
+    val noTimerRunningMessage = stringResource(R.string.edit_active_entry_no_timer)
     val undoLabel = stringResource(R.string.undo)
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    val wideHistoryListState = rememberLazyListState()
-    val compactListState = rememberLazyListState()
-    val routineSyncInProgress = uiState.isLoading || uiState.isRefreshing || uiState.syncOperations.any { operation ->
-        operation.status == TimeEntryRepository.EntrySyncStatus.PENDING ||
-            operation.status == TimeEntryRepository.EntrySyncStatus.RETRYING
-    }
+    val historyListState = rememberLazyListState()
+    // Read only where the clock is drawn, so the per-second tick redraws just that text.
+    val elapsed = elapsedSeconds.collectAsState()
+    val readElapsed: () -> Long = { elapsed.value }
+    val routineSyncInProgress = uiState.isLoading ||
+        uiState.isRefreshing ||
+        uiState.syncOperations.any { operation ->
+            operation.status == TimeEntryRepository.EntrySyncStatus.PENDING ||
+                operation.status == TimeEntryRepository.EntrySyncStatus.RETRYING
+        }
 
-    // Favorites & templates (gap analysis #1, #9). The template ViewModel resolves the current
-    // organization itself; its catalogue includes archived/done items so availability can be shown.
-    val templateViewModel: ManageTemplatesViewModel = hiltViewModel()
     val templateState by templateViewModel.uiState.collectAsState()
     val onSaveTemplateFromForm: (TemplateDraft) -> Unit = { draft ->
         templateViewModel.saveNewTemplate(draft)
         scope.launch { snackbarHostState.showSnackbar(templatesSavedMessage) }
     }
 
-    LaunchedEffect(editActiveEntryRequested, uiState.currentTimeEntry) {
-        if (editActiveEntryRequested) {
-            val entry = uiState.currentTimeEntry ?: return@LaunchedEffect
-            onEditActiveEntryConsumed()
-            if (entry.id in uiState.conflictedEntryIds) {
-                snackbarHostState.showSnackbar(conflictEditLockedMessage, withDismissAction = true)
-            } else {
-                showEditDialog = entry
+    LaunchedEffect(editActiveEntryRequested, uiState.currentTimeEntry, uiState.hasLoadedTimeEntries) {
+        if (!editActiveEntryRequested) return@LaunchedEffect
+        val entry = uiState.currentTimeEntry
+        if (entry == null) {
+            // The timer stopped before the request (the notification's "Adjust end time") was
+            // handled. Drop it once the timer state is known, or it would open the next timer.
+            if (uiState.hasLoadedTimeEntries) {
+                onEditActiveEntryConsumed()
+                snackbarHostState.showSnackbar(noTimerRunningMessage, withDismissAction = true)
             }
+            return@LaunchedEffect
+        }
+        onEditActiveEntryConsumed()
+        if (entry.id in uiState.conflictedEntryIds) {
+            snackbarHostState.showSnackbar(conflictEditLockedMessage, withDismissAction = true)
+        } else {
+            showEditDialog = entry
         }
     }
 
@@ -367,28 +332,41 @@ fun TrackingScreen(
     }
 
     // Roadmap #13: after a duplicate/split the VM emits the new entry's id; open it for editing
-    // once it surfaces in the observed list, then consume the one-shot signal.
-    LaunchedEffect(uiState.entryToEditId, uiState.timeEntries) {
+    // once it surfaces in the observed list, then consume the one-shot signal. A copy that does not
+    // show up soon (its id changed on sync, or it lies outside the loaded window) is given up rather
+    // than opened later on its own; leaving Time Tracker gives it up too.
+    val currentTimeEntries by rememberUpdatedState(uiState.timeEntries)
+    val currentConflictedIds by rememberUpdatedState(uiState.conflictedEntryIds)
+    val consumeEntryToEdit by rememberUpdatedState(onEntryToEditConsumed)
+    LaunchedEffect(uiState.entryToEditId) {
         val id = uiState.entryToEditId ?: return@LaunchedEffect
-        uiState.timeEntries.firstOrNull { it.id == id }?.let {
-            showEditDialog = it
-            onEntryToEditConsumed()
+        val entry = withTimeoutOrNull(ENTRY_TO_EDIT_WAIT_MS) {
+            snapshotFlow { currentTimeEntries.firstOrNull { it.id == id } }.filterNotNull().first()
         }
+        consumeEntryToEdit()
+        when {
+            entry == null -> Unit
+            entry.id in currentConflictedIds -> snackbarHostState.showSnackbar(conflictEditLockedMessage, withDismissAction = true)
+            else -> showEditDialog = entry
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose { consumeEntryToEdit() }
     }
 
     LaunchedEffect(historyFilter.startDate) {
         historyFilter.startDate?.let(onJumpToDate)
     }
 
-    LaunchedEffect(deletedEntry) {
-        val entry = deletedEntry ?: return@LaunchedEffect
+    LaunchedEffect(deletedEntries) {
+        val entries = deletedEntries.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
         val result = snackbarHostState.showSnackbar(
             message = entryDeletedMessage,
             actionLabel = undoLabel,
             withDismissAction = true,
         )
-        if (result == SnackbarResult.ActionPerformed) onUndoDelete(entry)
-        deletedEntry = null
+        if (result == SnackbarResult.ActionPerformed) entries.forEach(onUndoDelete)
+        deletedEntries = emptyList()
     }
     val historyScrollConnection = remember(onLoadMoreEntries) {
         object : NestedScrollConnection {
@@ -401,18 +379,11 @@ fun TrackingScreen(
         }
     }
 
-    LaunchedEffect(wideHistoryListState, uiState.timeEntries.size, uiState.hasMoreTimeEntries) {
+    LaunchedEffect(historyListState, uiState.timeEntries.size, uiState.hasMoreTimeEntries) {
         snapshotFlow {
-            val info = wideHistoryListState.layoutInfo
-            hasUserScrolledHistory && info.totalItemsCount > 0 &&
-                (info.visibleItemsInfo.lastOrNull()?.index ?: -1) >=
-                info.totalItemsCount - HISTORY_PREFETCH_ITEMS
-        }.filter { it }.collect { onLoadMoreEntries() }
-    }
-    LaunchedEffect(compactListState, uiState.timeEntries.size, uiState.hasMoreTimeEntries) {
-        snapshotFlow {
-            val info = compactListState.layoutInfo
-            hasUserScrolledHistory && info.totalItemsCount > 0 &&
+            val info = historyListState.layoutInfo
+            hasUserScrolledHistory &&
+                info.totalItemsCount > 0 &&
                 (info.visibleItemsInfo.lastOrNull()?.index ?: -1) >=
                 info.totalItemsCount - HISTORY_PREFETCH_ITEMS
         }.filter { it }.collect { onLoadMoreEntries() }
@@ -431,31 +402,27 @@ fun TrackingScreen(
         }
     }
     LaunchedEffect(
-        wideHistoryListState,
+        historyListState,
         uiState.timeEntries.size,
-        uiState.canLoadNewerHistory
+        uiState.canLoadNewerHistory,
+        uiState.historyJumpDate,
     ) {
+        // A jump publishes its window before the list scrolls to the day; until then the list
+        // still sits at the top and would ask for the newer page straight away.
+        if (uiState.historyJumpDate != null) return@LaunchedEffect
         snapshotFlow {
-            hasUserScrolledHistory && uiState.canLoadNewerHistory &&
-                (wideHistoryListState.layoutInfo.visibleItemsInfo.firstOrNull()?.index
-                    ?: Int.MAX_VALUE) <= HISTORY_PREFETCH_ITEMS
-        }.filter { it }.collect { onLoadNewerEntries() }
-    }
-    LaunchedEffect(
-        compactListState,
-        uiState.timeEntries.size,
-        uiState.canLoadNewerHistory
-    ) {
-        snapshotFlow {
-            hasUserScrolledHistory && uiState.canLoadNewerHistory &&
-                (compactListState.layoutInfo.visibleItemsInfo.firstOrNull()?.index
-                    ?: Int.MAX_VALUE) <= HISTORY_PREFETCH_ITEMS
+            hasUserScrolledHistory &&
+                uiState.canLoadNewerHistory &&
+                (
+                    historyListState.layoutInfo.visibleItemsInfo.firstOrNull()?.index
+                        ?: Int.MAX_VALUE
+                    ) <= HISTORY_PREFETCH_ITEMS
         }.filter { it }.collect { onLoadNewerEntries() }
     }
 
     // Permission launcher for notification permission (Android 13+)
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
+        contract = ActivityResultContracts.RequestPermission(),
     ) { isGranted ->
         // Permission result is handled, no action needed
     }
@@ -466,687 +433,344 @@ fun TrackingScreen(
     // "Always show notifications" toggle opt-in (see onCheckedChange on that Switch). The
     // persistent notification still shows normally if permission is already granted.
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ModalDrawerSheet {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(16.dp)
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState())
+    val timerActive = uiState.isTracking || uiState.isPaused
+    var fabExpanded by rememberSaveable { mutableStateOf(false) }
+    var showStartTimerSheet by rememberSaveable { mutableStateOf(false) }
+    // Starting from any surface (sheet, favourite, history play button, notification) closes the
+    // start controls; the running timer then docks at the bottom.
+    LaunchedEffect(timerActive) {
+        if (timerActive) {
+            fabExpanded = false
+            showStartTimerSheet = false
+        }
+    }
+    BackHandler(enabled = fabExpanded) { fabExpanded = false }
+    // History is newest first, so the last described entry is near the top: stop at the first.
+    val serverLastEntry = remember(uiState.timeEntries) {
+        uiState.timeEntries.firstOrNull { isCompletedTimeEntry(it) && !it.description.isNullOrBlank() }
+    }
+    val lastEntry = remember(serverLastEntry, uiState.cachedContinueEntry, currentMembership) {
+        serverLastEntry ?: uiState.cachedContinueEntry?.takeIf {
+            it.organizationId == currentMembership?.organizationId
+        }
+    }
+    val continueEntry: (TimeEntry) -> Unit = { entry ->
+        onDescriptionChange(entry.description ?: "")
+        onProjectChange(entry.projectId)
+        onTaskChange(entry.taskId)
+        onTagsChange(entry.tags.map { it.id })
+        onBillableChange(entry.billable)
+        onStartTracking()
+    }
+    val showConflictLocked: () -> Unit = {
+        scope.launch { snackbarHostState.showSnackbar(conflictEditLockedMessage, withDismissAction = true) }
+    }
+    val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+    Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing.only(
+            WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
+        ),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            Column {
+                TimeTrackerTopBar(
+                    searchOpen = searchOpen,
+                    onSearch = { searchOpen = true },
+                    syncing = routineSyncInProgress,
+                    onRefresh = onRefresh,
+                    onRequestNotifications = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        !NotificationPermissionHelper.hasNotificationPermission(context)
                     ) {
-                        user?.let { account ->
-                            var profileImageFailed by remember(account.profilePhotoUrl) { mutableStateOf(false) }
-                            val profileDescription = stringResource(R.string.profile_picture)
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (account.profilePhotoUrl.isNotBlank() && !profileImageFailed) {
-                                    AsyncImage(
-                                        model = account.profilePhotoUrl,
-                                        contentDescription = profileDescription,
-                                        onError = { profileImageFailed = true },
-                                        modifier = Modifier.size(48.dp).clip(CircleShape)
-                                    )
-                                } else {
-                                    Surface(
-                                        modifier = Modifier.size(48.dp).semantics { contentDescription = profileDescription },
-                                        shape = CircleShape,
-                                        color = MaterialTheme.colorScheme.primaryContainer
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Text(
-                                                account.name.split(Regex("\\s+")).mapNotNull { it.firstOrNull() }
-                                                    .take(2).joinToString("").uppercase(),
-                                                style = MaterialTheme.typography.titleMedium
-                                            )
-                                        }
-                                    }
-                                }
-                                Column(Modifier.padding(start = 12.dp)) {
-                                    Text(account.name, style = MaterialTheme.typography.titleMedium)
-                                    Text(account.email, style = MaterialTheme.typography.bodySmall)
-                                    val locale = appLocale()
-                                    val weekStart = remember(account.weekStart, locale) {
-                                        runCatching { DayOfWeek.valueOf(account.weekStart.uppercase()) }
-                                            .getOrNull()?.getDisplayName(TextStyle.FULL, locale)
-                                    }
-                                    val profileDetails = listOfNotNull(
-                                        account.timezone.takeIf { it.isNotBlank() }, weekStart,
-                                    ).joinToString(" · ")
-                                    if (profileDetails.isNotBlank()) {
-                                        Text(
-                                            profileDetails,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        Text(
-                            text = stringResource(R.string.settings_menu),
-                            style = MaterialTheme.typography.headlineSmall,
-                            modifier = Modifier.padding(bottom = 16.dp)
-                        )
-
-                        OutlinedButton(
-                            onClick = {
-                                val appUri = "package:${context.packageName}".toUri()
-                                val languageIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                    Intent(Settings.ACTION_APP_LOCALE_SETTINGS, appUri)
-                                } else {
-                                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, appUri)
-                                }
-                                runCatching { context.startActivity(languageIntent) }
-                                    .onFailure {
-                                        context.startActivity(
-                                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, appUri)
-                                        )
-                                    }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Language,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(stringResource(R.string.choose_language))
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        OutlinedButton(
-                            onClick = {
-                                scope.launch { drawerState.close() }
-                                onOpenPrivacy()
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Lock,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(stringResource(R.string.privacy_menu_entry))
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        HorizontalDivider()
-                        Text(
-                            stringResource(R.string.long_timer_warning),
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(top = 16.dp),
-                        )
-                        Text(
-                            pluralStringResource(R.plurals.long_timer_warning_description, longTimerHours, longTimerHours),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            LONG_TIMER_OPTIONS.forEach { hours ->
-                                FilterChip(
-                                    selected = longTimerHours == hours,
-                                    onClick = { onLongTimerHoursChange(hours) },
-                                    label = { Text(pluralStringResource(R.plurals.hours_short, hours, hours)) },
-                                )
-                            }
-                        }
-                        HorizontalDivider()
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Text(
-                            text = stringResource(R.string.server_information),
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                        Text(
-                            text = stringResource(R.string.server_endpoint),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                        Text(
-                            text = serverEndpoint,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = Dimens.MinTouchTarget)
-                                .clickable(role = Role.Button) {
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    clipboard.setPrimaryClip(ClipData.newPlainText("Server endpoint", serverEndpoint))
-                                    Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
-                                }
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                                .wrapContentHeight()
-                        )
-                        Text(
-                            text = stringResource(R.string.client_id),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                        Text(
-                            text = clientId,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = Dimens.MinTouchTarget)
-                                .clickable(role = Role.Button) {
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    clipboard.setPrimaryClip(ClipData.newPlainText("Client ID", clientId))
-                                    Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
-                                }
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                                .wrapContentHeight()
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-                        HorizontalDivider()
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.always_show_notifications),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    text = stringResource(R.string.always_show_notifications_description),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Switch(
-                                checked = alwaysShowNotifications,
-                                onCheckedChange = { enabled ->
-                                    // SV-014: request POST_NOTIFICATIONS only when the user opts in here,
-                                    // never automatically when tracking starts.
-                                    if (enabled && !NotificationPermissionHelper.hasNotificationPermission(context)) {
-                                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                    }
-                                    onAlwaysShowNotificationsChange(enabled)
-                                }
-                            )
-                        }
-
-                        if (liveUpdatesSupported) {
-                            HorizontalDivider()
-                            LiveUpdateSettingRow(
-                                enabled = liveUpdateEnabled,
-                                systemEnabled = systemLiveUpdatesEnabled,
-                                onEnabledChange = { enabled ->
-                                    if (enabled && !NotificationPermissionHelper.hasNotificationPermission(context)) {
-                                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                    }
-                                    onLiveUpdateEnabledChange(enabled)
-                                },
-                                onOpenSystemSettings = {
-                                    val intent = Intent(ACTION_MANAGE_APP_PROMOTED_NOTIFICATIONS).apply {
-                                        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                                    }
-                                    runCatching { context.startActivity(intent) }.onFailure {
-                                        context.startActivity(
-                                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(
-                                                Settings.EXTRA_APP_PACKAGE,
-                                                context.packageName,
-                                            ),
-                                        )
-                                    }
-                                },
-                            )
-                        }
-
-                        HorizontalDivider()
-                        AutoClearEntryFieldsSettings(
-                            autoClearEntryFieldsAfterStop = autoClearEntryFieldsAfterStop,
-                            clearDescriptionAfterStop = clearDescriptionAfterStop,
-                            onAutoClearEntryFieldsAfterStopChange = onAutoClearEntryFieldsAfterStopChange,
-                            onClearDescriptionAfterStopChange = onClearDescriptionAfterStopChange,
-                        )
-
-                        HorizontalDivider()
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(stringResource(R.string.optimistic_refresh), style = MaterialTheme.typography.bodyLarge)
-                                Text(
-                                    stringResource(R.string.optimistic_refresh_description),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Switch(checked = optimisticRefresh, onCheckedChange = onOptimisticRefreshChange)
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-                        HorizontalDivider()
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Text(
-                            text = stringResource(R.string.theme),
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                        Text(
-                            text = stringResource(R.string.theme_description),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                        FlowRow(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            AppThemeMode.entries.forEach { theme ->
-                                val label = when (theme) {
-                                    AppThemeMode.SYSTEM -> R.string.theme_system
-                                    AppThemeMode.LIGHT -> R.string.theme_light
-                                    AppThemeMode.NEO -> R.string.theme_neo
-                                }
-                                FilterChip(
-                                    selected = appTheme == theme,
-                                    onClick = { onAppThemeChange(theme) },
-                                    label = { Text(stringResource(label)) }
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-                        HorizontalDivider()
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // About / Verification section
-                        AboutSection(context = context)
-                    }
-
-                    // Keep logout visible without turning the drawer footer into a large block.
-                    TextButton(
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            onLogout()
+                        { notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
+                    } else {
+                        null
+                    },
+                )
+                if (searchOpen) {
+                    HistorySearchBar(
+                        filter = historyFilter,
+                        onChange = { historyFilter = it },
+                        onOpenOptions = { filterOptionsOpen = true },
+                        onClose = {
+                            searchOpen = false
+                            historyFilter = HistoryFilter()
                         },
-                        modifier = Modifier
-                            .align(Alignment.End)
-                            .testTag(TrackingTestTags.LOGOUT_BUTTON)
-                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.logout),
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+                    )
                 }
             }
-        }
-    ) {
-        Scaffold(
-            contentWindowInsets = WindowInsets.safeDrawing.only(
-                WindowInsetsSides.Top + WindowInsetsSides.Horizontal
-            ),
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            topBar = {
-                TopAppBar(
-                    title = {
-                        TrackingAppBarTitle(
-                            userName = user?.name,
-                            organizationName = currentMembership?.organization?.name,
-                            canSwitchOrganization = memberships.size > 1 &&
-                                !uiState.isTracking && !uiState.isPaused,
-                            memberships = memberships,
-                            currentMembershipId = currentMembership?.id,
-                            onMembershipChange = onMembershipChange,
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(
-                            onClick = { scope.launch { drawerState.open() } },
-                            modifier = Modifier.testTag(TrackingTestTags.SETTINGS_BUTTON),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Menu,
-                                contentDescription = stringResource(R.string.settings_menu)
-                            )
+        },
+        bottomBar = {
+            if (timerActive) {
+                ActiveTimerBar(
+                    uiState = uiState,
+                    elapsedSeconds = readElapsed,
+                    onStop = onStopTracking,
+                    onPause = onPauseTracking,
+                    onResume = onResumeTracking,
+                    onEditActiveEntry = {
+                        uiState.currentTimeEntry?.let { entry ->
+                            if (entry.id in uiState.conflictedEntryIds) showConflictLocked() else showEditDialog = entry
                         }
                     },
-                    actions = {
-                        IconButton(
-                            onClick = { showAddDialog = true },
-                            modifier = Modifier.testTag(TrackingTestTags.ADD_ENTRY_BUTTON),
-                        ) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = stringResource(R.string.add_time_entry)
-                            )
-                        }
-                        // Notification permission button (Android 13+) - only show if not granted
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                            !NotificationPermissionHelper.hasNotificationPermission(context)
-                        ) {
-                            IconButton(
-                                onClick = {
-                                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Notifications,
-                                    contentDescription = stringResource(R.string.enable_notifications)
-                                )
-                            }
-                        }
-                        val syncTransition = rememberInfiniteTransition(label = "sync")
-                        val syncRotation by syncTransition.animateFloat(
-                            initialValue = 0f,
-                            targetValue = if (routineSyncInProgress) FULL_ROTATION_DEGREES else 0f,
-                            animationSpec = infiniteRepeatable(tween(SYNC_ROTATION_DURATION_MS), RepeatMode.Restart),
-                            label = "sync rotation"
-                        )
-                        IconButton(
-                            onClick = onRefresh,
-                            modifier = Modifier.testTag(TrackingTestTags.REFRESH_BUTTON),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = stringResource(
-                                    if (routineSyncInProgress) R.string.syncing else R.string.refresh,
-                                ),
-                                modifier = Modifier.rotate(syncRotation)
-                            )
-                        }
-                    }
                 )
-            },
-            containerColor = MaterialTheme.colorScheme.surface
-        ) { paddingValues ->
-            PullToRefreshBox(
-                isRefreshing = uiState.isRefreshing,
-                onRefresh = onRefresh,
-                modifier = Modifier.padding(paddingValues)
+            }
+        },
+        floatingActionButton = {
+            TimerFab(
+                timerActive = timerActive,
+                expanded = fabExpanded,
+                onExpandedChange = { fabExpanded = it },
+                onStartTimer = { showStartTimerSheet = true },
+                onAddManual = { showAddDialog = true },
+                // Without the docked timer the button sits directly above the system navigation bar.
+                modifier = if (timerActive) Modifier else Modifier.navigationBarsPadding(),
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background,
+    ) { paddingValues ->
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier.padding(paddingValues),
+        ) {
+            // The sync-status search option is the only part of the list that depends on the outbox.
+            val filterSyncOperations = uiState.syncOperations.takeIf { historyFilter.syncStatus != null }
+            val historySnapshot by produceState(
+                initialValue = HistorySnapshot.Empty,
+                uiState.timeEntries,
+                uiState.projects,
+                uiState.tasks,
+                uiState.clients,
+                historyFilter,
+                filterSyncOperations,
+                uiState.zone,
+                uiState.firstDayOfWeek,
             ) {
-                val serverLastEntry = remember(uiState.timeEntries) {
-                    uiState.timeEntries
-                        .filter { isCompletedTimeEntry(it) && !it.description.isNullOrBlank() }
-                        .maxByOrNull { it.start }
+                val entries = uiState.timeEntries
+                val filter = historyFilter
+                value = withContext(Dispatchers.Default) {
+                    val filtered = EntryTrustRules.filter(
+                        entries = entries,
+                        filter = filter,
+                        projects = uiState.projects,
+                        tasks = uiState.tasks,
+                        clients = uiState.clients,
+                        syncOperations = filterSyncOperations.orEmpty(),
+                        zone = uiState.zone,
+                    )
+                    val now = Instant.now()
+                    // Running entries are left to the docked timer, except when searching for them.
+                    val items = buildHistoryListItems(
+                        days = groupEntriesByLocalDay(filtered, uiState.zone, now, includeRunning = filter.runningOnly),
+                        firstDayOfWeek = uiState.firstDayOfWeek,
+                        today = LocalDate.now(uiState.zone),
+                        zone = uiState.zone,
+                        now = now,
+                        includeRunning = filter.runningOnly,
+                    )
+                    HistorySnapshot(items = items, entries = entries, filter = filter)
                 }
-                val lastEntry = remember(serverLastEntry, uiState.cachedContinueEntry, currentMembership) {
-                    serverLastEntry ?: uiState.cachedContinueEntry?.takeIf {
-                        it.organizationId == currentMembership?.organizationId
-                    }
+            }
+            val historyListItems = historySnapshot.items
+            // Built off the main thread, the list can briefly lag the entries it is shown with.
+            val historyIsCurrent = historySnapshot.entries == uiState.timeEntries && historySnapshot.filter == historyFilter
+            // The Review checks, shown on each entry's card.
+            val reviewIssues by produceState(emptyMap<String, Set<EntryReviewIssue>>(), uiState.timeEntries, longTimerHours) {
+                value = withContext(Dispatchers.Default) {
+                    EntryTrustRules.reviewIssues(uiState.timeEntries, Duration.ofHours(longTimerHours.toLong()))
                 }
-                val preparedHistory by produceState(
-                    initialValue = PreparedHistory.Empty,
-                    uiState.timeEntries, uiState.projects, uiState.tasks, uiState.clients,
-                    historyFilter, uiState.zone,
-                ) {
-                    value = withContext(Dispatchers.Default) {
-                        val filtered = EntryTrustRules.filter(
-                            entries = uiState.timeEntries,
-                            filter = historyFilter,
-                            projects = uiState.projects,
-                            tasks = uiState.tasks,
-                            clients = uiState.clients,
-                            syncOperations = uiState.syncOperations,
-                            zone = uiState.zone,
-                        )
-                        val grouped = groupCompletedEntriesByLocalDay(
-                            filtered,
-                            uiState.zone,
-                            Instant.now(),
-                        )
-                        val days = grouped.mapNotNull { (date, entries) ->
-                            if (entries.isEmpty()) null else HistoryDay(
-                                date = date,
-                                entries = entries,
-                                groups = historyEntryGroups(entries),
-                            )
-                        }
-                        PreparedHistory(
-                            groupedEntries = grouped,
-                            listItems = buildList {
-                                days.forEach { day ->
-                                    add(HistoryListItem.Header(day))
-                                    day.groups.forEach { add(HistoryListItem.Group(day.date, it)) }
-                                }
-                            },
-                        )
-                    }
+            }
+            val historyProjectsById = remember(uiState.projects) { uiState.projects.associateBy { it.id } }
+            val historyTasksById = remember(uiState.tasks) { uiState.tasks.associateBy { it.id } }
+            val historyClientsById = remember(uiState.clients) { uiState.clients.associateBy { it.id } }
+            val visibleSyncOperations = remember(uiState.syncOperations, uiState.syncStatusVisible) {
+                if (uiState.syncStatusVisible) uiState.syncOperations else emptyList()
+            }
+            val syncStatusByEntryId = remember(visibleSyncOperations) {
+                worstSyncStatusByEntryId(visibleSyncOperations)
+            }
+            val showSyncCenter = uiState.syncStatusVisible && uiState.syncOperations.isNotEmpty()
+            val onHistoryEdit = remember(uiState.conflictedEntryIds) {
+                { entry: TimeEntry ->
+                    if (entry.id in uiState.conflictedEntryIds) showConflictLocked() else showEditDialog = entry
                 }
-                val groupedEntries = preparedHistory.groupedEntries
-                val historyListItems = preparedHistory.listItems
-                val historyProjectsById = remember(uiState.projects) { uiState.projects.associateBy { it.id } }
-                val historyTasksById = remember(uiState.tasks) { uiState.tasks.associateBy { it.id } }
-                val visibleSyncOperations = remember(uiState.syncOperations, uiState.syncStatusVisible) {
-                    if (uiState.syncStatusVisible) uiState.syncOperations else emptyList()
+            }
+            val requestDelete = remember(uiState.conflictedEntryIds) {
+                { entries: List<TimeEntry> ->
+                    if (entries.any { it.id in uiState.conflictedEntryIds }) showConflictLocked() else pendingDelete = entries
                 }
-                val syncStatusByEntryId = remember(visibleSyncOperations) {
-                    worstSyncStatusByEntryId(visibleSyncOperations)
-                }
-                val showConflictLocked: () -> Unit = {
-                    scope.launch { snackbarHostState.showSnackbar(conflictEditLockedMessage, withDismissAction = true) }
-                }
-                val onHistoryEdit = remember(uiState.conflictedEntryIds) {
-                    { entry: TimeEntry ->
-                        if (entry.id in uiState.conflictedEntryIds) showConflictLocked() else showEditDialog = entry
-                    }
-                }
-                val onHistoryDelete = remember(uiState.conflictedEntryIds) {
-                    { entry: TimeEntry ->
-                        if (entry.id in uiState.conflictedEntryIds) {
-                            showConflictLocked()
-                        } else {
-                            deletedEntry = entry
-                            onDeleteEntry(entry.id)
-                        }
-                    }
-                }
-                val onHistoryDateClick = remember<(LocalDate) -> Unit> { { date -> calendarInitialDate = date } }
+            }
+            val onHistoryDelete = remember(requestDelete) { { entry: TimeEntry -> requestDelete(listOf(entry)) } }
+            val onHistoryDateClick = remember<(LocalDate) -> Unit> { { date -> calendarInitialDate = date } }
 
-                LaunchedEffect(uiState.historyJumpDate, groupedEntries) {
-                    val target = uiState.historyJumpDate ?: return@LaunchedEffect
-                    val historyIndex = historyHeaderIndex(target, groupedEntries)
-                    if (historyIndex >= 0) {
-                        val primaryItemCount = 2 +
-                            (if (uiState.error != null) 1 else 0) +
-                            (if (!uiState.isTracking && !uiState.isPaused && lastEntry != null) 1 else 0)
-                        compactListState.scrollToItem(primaryItemCount + historyIndex)
-                        wideHistoryListState.scrollToItem(1 + historyIndex)
-                    }
-                    onHistoryJumpConsumed()
+            LaunchedEffect(uiState.historyJumpDate, historySnapshot) {
+                val target = uiState.historyJumpDate ?: return@LaunchedEffect
+                val historyIndex = historyJumpHeaderIndex(target, historySnapshot.items, historySnapshot.entries, uiState.timeEntries)
+                    ?: return@LaunchedEffect
+                if (historyIndex >= 0) {
+                    // The long-timer warning row, then the sync card when shown.
+                    val leadingItemCount = 1 + (if (showSyncCenter) 1 else 0)
+                    historyListState.scrollToItem(leadingItemCount + historyIndex)
                 }
+                onHistoryJumpConsumed()
+            }
 
-                BoxWithConstraints(Modifier.fillMaxSize()) {
-                    val wideLayout = maxWidth >= 840.dp
-                    val primaryContent: LazyListScope.() -> Unit = {
-                        item { Spacer(Modifier.height(8.dp)) }
-                        item {
-                            val elapsed by elapsedSeconds.collectAsState()
-                            TrackingControls(
-                                uiState = uiState,
-                                elapsedSeconds = elapsed,
-                                onDescriptionChange = onDescriptionChange,
-                                onProjectChange = onProjectChange,
-                                onTaskChange = onTaskChange,
-                                onResetEntryFields = onResetEntryFields,
-                                autoClearEntryFieldsAfterStop = autoClearEntryFieldsAfterStop,
-                                onTagsChange = onTagsChange,
-                                onBillableChange = onBillableChange,
-                                onStart = onStartTracking,
-                                onStop = onStopTracking,
-                                onPause = onPauseTracking,
-                                onResume = onResumeTracking,
-                                onUpdate = onUpdateCurrentEntry,
-                                onEditActiveEntry = {
-                                    uiState.currentTimeEntry?.let { entry ->
-                                        if (entry.id in uiState.conflictedEntryIds) showConflictLocked() else showEditDialog = entry
-                                    }
-                                },
-                            )
-                        }
+            // Grouped sections carry their own horizontal inset.
+            val sectionInset = Modifier.fillMaxWidth().padding(vertical = Dimens.Space8)
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                CompositionLocalProvider(LocalLongEntryHours provides longTimerHours) {
+                    LazyColumn(
+                        state = historyListState,
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .widthIn(max = Dimens.ContentMaxWidth)
+                            .fillMaxWidth()
+                            .testTag(TrackingTestTags.HISTORY_LIST)
+                            .nestedScroll(historyScrollConnection),
+                        contentPadding = PaddingValues(
+                            bottom = Dimens.FabClearance + if (timerActive) 0.dp else navigationBarInset,
+                        ),
+                    ) {
                         item(key = "long_timer_warning") {
-                            val elapsed by elapsedSeconds.collectAsState()
-                            if (uiState.isTracking && elapsed >= longTimerHours * SECONDS_PER_HOUR_LONG &&
-                                elapsed >= longTimerSnoozedUntil) {
+                            // Recomposes when the warning appears or goes, not on every tick.
+                            val showWarning by remember(uiState.isTracking, longTimerHours) {
+                                derivedStateOf {
+                                    uiState.isTracking &&
+                                        elapsed.value >= longTimerHours * SECONDS_PER_HOUR_LONG &&
+                                        elapsed.value >= longTimerSnoozedUntil
+                                }
+                            }
+                            if (showWarning) {
                                 LongTimerWarning(
+                                    modifier = sectionInset,
                                     hours = longTimerHours,
                                     onStop = onStopTracking,
                                     onKeepRunning = {
-                                        longTimerSnoozedUntil = elapsed + SECONDS_PER_HOUR_LONG
+                                        longTimerSnoozedUntil = elapsed.value + SECONDS_PER_HOUR_LONG
                                         TimeTrackingNotificationService.snoozeLongTimerWarning(context)
                                     },
                                     onAdjust = { uiState.currentTimeEntry?.let { showEditDialog = it } },
                                 )
                             }
                         }
-                        if (!uiState.isTracking && !uiState.isPaused &&
-                            templateState.quickStart.isNotEmpty()
-                        ) {
-                            item(key = "favorites_quick_start") {
-                                FavoriteTemplatesRow(
-                                    templates = templateState.quickStart,
-                                    projects = templateState.projects,
-                                    tasks = templateState.tasks,
-                                    tags = templateState.tags,
-                                    onStart = { start ->
-                                        onDescriptionChange(start.description ?: "")
-                                        onProjectChange(start.projectId)
-                                        onTaskChange(start.taskId)
-                                        onTagsChange(start.tagIds)
-                                        onBillableChange(start.billable)
-                                        onStartTracking()
-                                    },
+                        if (showSyncCenter) {
+                            item(key = "sync_center") {
+                                SyncCenter(
+                                    operations = uiState.syncOperations,
+                                    onRetry = onRetrySync,
+                                    onRetryEntry = onRetrySyncEntry,
+                                    onOpenSyncCenter = onOpenSyncCenter,
+                                    modifier = sectionInset,
                                 )
                             }
                         }
-                        if (!uiState.isTracking && !uiState.isPaused && lastEntry != null) {
-                            item(key = "continue_last") {
-                                ContinueLastEntryButton(
-                                    entry = lastEntry,
-                                    projects = uiState.projects,
-                                    onContinue = {
-                                        onDescriptionChange(lastEntry.description ?: "")
-                                        onProjectChange(lastEntry.projectId)
-                                        onTaskChange(lastEntry.taskId)
-                                        onTagsChange(lastEntry.tags.map { it.id })
-                                        onBillableChange(lastEntry.billable)
-                                        onStartTracking()
-                                    }
-                                )
-                            }
-                        }
+                        trackingHistoryItems(
+                            uiState = uiState,
+                            historyItems = historyListItems,
+                            projectsById = historyProjectsById,
+                            tasksById = historyTasksById,
+                            clientsById = historyClientsById,
+                            syncStatusByEntryId = syncStatusByEntryId,
+                            onEdit = onHistoryEdit,
+                            onDelete = onHistoryDelete,
+                            onDateClick = onHistoryDateClick,
+                            onRetrySync = { onRetrySyncEntry(it.id) },
+                            onContinue = onContinueEntry ?: continueEntry.takeIf { !timerActive },
+                            onDuplicate = { onDuplicateEntry(it.id) },
+                            onDeleteStack = requestDelete,
+                            reviewIssues = reviewIssues,
+                            showNoMatches = historyIsCurrent &&
+                                historyListItems.isEmpty() &&
+                                uiState.timeEntries.isNotEmpty() &&
+                                (historyFilter.query.isNotBlank() || historyFilter.activeOptionsCount() > 0),
+                        )
                     }
-
-                    if (wideLayout) {
-                        Row(Modifier.fillMaxSize()) {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .weight(WIDE_PRIMARY_WEIGHT)
-                                    .fillMaxSize()
-                                    .testTag(TrackingTestTags.PRIMARY_LIST)
-                                    .padding(horizontal = 24.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                                content = primaryContent
-                            )
-                            VerticalDivider(
-                                modifier = Modifier.fillMaxHeight(),
-                                color = MaterialTheme.colorScheme.outlineVariant
-                            )
-                            LazyColumn(
-                                state = wideHistoryListState,
-                                modifier = Modifier
-                                    .weight(WIDE_HISTORY_WEIGHT)
-                                    .fillMaxSize()
-                                    .testTag(TrackingTestTags.HISTORY_LIST)
-                                    .nestedScroll(historyScrollConnection)
-                                    .padding(horizontal = 24.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                item { Spacer(Modifier.height(8.dp)) }
-                                item(key = "history_filters") { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
-                                if (uiState.syncStatusVisible && uiState.syncOperations.isNotEmpty()) {
-                                    item {
-                                        SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter)
-                                    }
-                                }
-                                trackingHistoryItems(
-                                    uiState = uiState,
-                                    historyItems = historyListItems,
-                                    projectsById = historyProjectsById,
-                                    tasksById = historyTasksById,
-                                    syncStatusByEntryId = syncStatusByEntryId,
-                                    onEdit = onHistoryEdit,
-                                    onDelete = onHistoryDelete,
-                                    onDateClick = onHistoryDateClick,
-                                    onRetrySync = { onRetrySyncEntry(it.id) }
-                                )
-                                item { Spacer(Modifier.height(16.dp)) }
-                            }
-                        }
-                    } else {
-                        LazyColumn(
-                            state = compactListState,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .testTag(TrackingTestTags.HISTORY_LIST)
-                                .nestedScroll(historyScrollConnection)
-                                .padding(horizontal = 16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            primaryContent()
-                            item(key = "history_filters") { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
-                            if (uiState.syncStatusVisible && uiState.syncOperations.isNotEmpty()) {
-                                item {
-                                    SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter)
-                                }
-                            }
-                            trackingHistoryItems(
-                                uiState = uiState,
-                                historyItems = historyListItems,
-                                projectsById = historyProjectsById,
-                                tasksById = historyTasksById,
-                                syncStatusByEntryId = syncStatusByEntryId,
-                                onEdit = onHistoryEdit,
-                                onDelete = onHistoryDelete,
-                                onDateClick = onHistoryDateClick,
-                                onRetrySync = { onRetrySyncEntry(it.id) }
-                            )
-                            item { Spacer(Modifier.height(16.dp)) }
-                        }
-                    }
+                }
+                if (fabExpanded) {
+                    val closeLabel = stringResource(R.string.timer_fab_close)
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.scrim.copy(alpha = FAB_SCRIM_ALPHA))
+                            .clickable(onClickLabel = closeLabel) { fabExpanded = false },
+                    )
                 }
             }
         }
+    }
+
+    if (filterOptionsOpen) {
+        HistoryFiltersSheet(
+            filter = historyFilter,
+            uiState = uiState,
+            onChange = { historyFilter = it },
+            onDismiss = { filterOptionsOpen = false },
+        )
+    }
+
+    if (showStartTimerSheet && !timerActive) {
+        val startAndClose: (() -> Unit) -> Unit = { start ->
+            showStartTimerSheet = false
+            start()
+        }
+        StartTimerSheet(onDismiss = { showStartTimerSheet = false }) {
+            StartTimerForm(
+                uiState = uiState,
+                draft = entryDraft(),
+                onDescriptionChange = onDescriptionChange,
+                onProjectChange = onProjectChange,
+                onTaskChange = onTaskChange,
+                onResetEntryFields = onResetEntryFields,
+                autoClearEntryFieldsAfterStop = autoClearEntryFieldsAfterStop,
+                onTagsChange = onTagsChange,
+                onBillableChange = onBillableChange,
+                onStart = { startAndClose(onStartTracking) },
+            )
+            if (lastEntry != null || templateState.quickStart.isNotEmpty()) {
+                // One-tap starts: the last entry, then the favourite and recent templates.
+                GroupedSection(header = stringResource(R.string.start_timer_shortcuts)) {
+                    lastEntry?.let { entry ->
+                        ContinueLastEntryRow(
+                            entry = entry,
+                            projects = uiState.projects,
+                            tasks = uiState.tasks,
+                            onContinue = { startAndClose { continueEntry(entry) } },
+                        )
+                    }
+                    FavoriteTemplatesRow(
+                        templates = templateState.quickStart,
+                        projects = templateState.projects,
+                        tasks = templateState.tasks,
+                        tags = templateState.tags,
+                        leadingDivider = lastEntry != null,
+                        onStart = { start ->
+                            startAndClose {
+                                onDescriptionChange(start.description ?: "")
+                                onProjectChange(start.projectId)
+                                onTaskChange(start.taskId)
+                                onTagsChange(start.tagIds)
+                                onBillableChange(start.billable)
+                                onStartTracking()
+                            }
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    if (pendingDelete.isNotEmpty()) {
+        val entries = pendingDelete
+        DeleteEntriesDialog(
+            count = entries.size,
+            onConfirm = {
+                pendingDelete = emptyList()
+                deletedEntries = entries
+                entries.forEach { onDeleteEntry(it.id) }
+            },
+            onDismiss = { pendingDelete = emptyList() },
+        )
     }
 
     // Edit dialog
@@ -1170,20 +794,40 @@ fun TrackingScreen(
             saveEnabled = entry.id !in uiState.conflictedEntryIds,
             onDuplicate = { onDuplicateEntry(entry.id) },
             onSplit = { atIso -> onSplitEntry(entry.id, atIso) },
+            onDelete = {
+                deletedEntries = listOf(entry)
+                onDeleteEntry(entry.id)
+            },
+            // The running timer's details keep its clock and controls on top. Pause
+            // and Stop commit the sheet's pending fields and close it: the entry has ended, and a
+            // later Save of the running copy must not bring the timer back.
+            runningControls = if (uiState.currentTimeEntry?.let { isSameRunningEntry(it, entry) } == true) {
+                { pendingEdits ->
+                    RunningTimerControls(
+                        elapsedSeconds = readElapsed,
+                        isPaused = uiState.isPaused,
+                        enabled = !uiState.isMutating,
+                        onPause = {
+                            showEditDialog = null
+                            onPauseTrackingWithEdits(pendingEdits())
+                        },
+                        onResume = onResumeTracking,
+                        onStop = {
+                            showEditDialog = null
+                            onStopTrackingWithEdits(pendingEdits())
+                        },
+                    )
+                }
+            } else {
+                null
+            },
         )
     }
 
     // Add-entry dialog
     if (showAddDialog) {
         val suggestedStart = remember(uiState.timeEntries, uiState.zone) {
-            val now = ZonedDateTime.now(uiState.zone)
-            uiState.timeEntries
-                .mapNotNull { it.end }
-                .mapNotNull { runCatching { ZonedDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME) }.getOrNull() }
-                .maxOrNull()
-                ?.withZoneSameInstant(uiState.zone)
-                ?.takeIf { it.toLocalDate() == now.toLocalDate() && it.isBefore(now) }
-                ?: now.minusHours(1)
+            suggestedManualEntryStart(uiState.timeEntries, ZonedDateTime.now(uiState.zone))
         }
         TimeEntryFormSheet(
             entry = null,
@@ -1208,564 +852,551 @@ fun TrackingScreen(
 
     calendarInitialDate?.let { initialDate ->
         androidx.compose.runtime.key(initialDate) {
-            val datePickerState = rememberDatePickerState(
-                initialSelectedDateMillis = initialDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
-            )
-            DatePickerDialog(
-                onDismissRequest = { calendarInitialDate = null },
-                confirmButton = {
-                    TextButton(onClick = {
-                        datePickerState.selectedDateMillis?.let { millis ->
-                            onJumpToDate(Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate())
-                        }
-                        calendarInitialDate = null
-                    }) { Text(stringResource(R.string.jump_to_date)) }
+            EntryDatePickerDialog(
+                initialDate = initialDate,
+                onDismiss = { calendarInitialDate = null },
+                onConfirm = { date ->
+                    calendarInitialDate = null
+                    onJumpToDate(date)
                 },
-                dismissButton = {
-                    TextButton(onClick = { calendarInitialDate = null }) {
-                        Text(stringResource(R.string.cancel))
-                    }
-                }
-            ) { DatePicker(state = datePickerState) }
+                confirmLabel = stringResource(R.string.jump_to_date),
+            )
         }
     }
 
     uiState.historyJumpTarget?.let { targetDate ->
-        Dialog(onDismissRequest = { }) {
-            Surface(shape = RoundedCornerShape(20.dp), tonalElevation = 6.dp) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Text(
-                        text = stringResource(
-                            R.string.finding_date_entries,
-                            formatDate(targetDate, LocalContext.current, uiState.zone, appLocale())
-                        ),
-                        style = MaterialTheme.typography.titleMedium
-                    )
+        // A progress dialog in the app's dialog style; it closes itself when the jump finishes.
+        AlertDialog(
+            onDismissRequest = { },
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+            confirmButton = { },
+            title = {
+                Text(
+                    stringResource(
+                        R.string.finding_date_entries,
+                        formatDate(targetDate, LocalContext.current, uiState.zone, appLocale()),
+                    ),
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(Dimens.Space16)) {
                     LinearProgressIndicator(
                         progress = { uiState.historyJumpProgress ?: 0f },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
                         text = uiState.historyRateLimitWaitSeconds?.let { seconds ->
                             pluralStringResource(R.plurals.rate_limit_wait, seconds, seconds)
                         } ?: stringResource(R.string.finding_date_hint),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** Settings control for Android 16+ promoted ongoing timer notifications. */
-@Composable
-internal fun LiveUpdateSettingRow(
-    enabled: Boolean,
-    systemEnabled: Boolean,
-    onEnabledChange: (Boolean) -> Unit,
-    onOpenSystemSettings: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Dimens.Space16, vertical = Dimens.Space8),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.live_timer_updates),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Text(
-                    text = stringResource(R.string.live_timer_updates_description),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(
-                checked = enabled,
-                onCheckedChange = onEnabledChange,
-                modifier = Modifier
-                    .testTag(TrackingTestTags.LIVE_UPDATE_SWITCH)
-                    .heightIn(min = Dimens.MinTouchTarget),
-            )
-        }
-        if (enabled && !systemEnabled) {
-            Text(
-                text = stringResource(R.string.live_timer_updates_android_disabled),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = Dimens.Space4),
-            )
-            TextButton(
-                onClick = onOpenSystemSettings,
-                modifier = Modifier.heightIn(min = Dimens.MinTouchTarget),
-            ) {
-                Text(stringResource(R.string.live_timer_updates_open_settings))
-            }
-        }
-    }
-}
-
-/** Full field clearing plus the description-only fallback shown when full clearing is disabled. */
-@Composable
-internal fun AutoClearEntryFieldsSettings(
-    autoClearEntryFieldsAfterStop: Boolean,
-    clearDescriptionAfterStop: Boolean,
-    onAutoClearEntryFieldsAfterStopChange: (Boolean) -> Unit,
-    onClearDescriptionAfterStopChange: (Boolean) -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Dimens.Space16, vertical = Dimens.Space12),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.auto_clear_entry_fields_after_stop),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Text(
-                    text = stringResource(R.string.auto_clear_entry_fields_after_stop_description),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(
-                checked = autoClearEntryFieldsAfterStop,
-                onCheckedChange = onAutoClearEntryFieldsAfterStopChange,
-                modifier = Modifier
-                    .testTag(TrackingTestTags.AUTO_CLEAR_FIELDS_SWITCH)
-                    .heightIn(min = Dimens.MinTouchTarget),
-            )
-        }
-
-        AnimatedVisibility(
-            visible = !autoClearEntryFieldsAfterStop,
-            enter = fadeIn() + expandVertically(),
-            exit = fadeOut() + shrinkVertically(),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        start = Dimens.Space32,
-                        top = Dimens.Space8,
-                        end = Dimens.Space16,
-                        bottom = Dimens.Space12,
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.clear_description_after_stop),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    Text(
-                        text = stringResource(R.string.clear_description_after_stop_description),
-                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Switch(
-                    checked = clearDescriptionAfterStop,
-                    onCheckedChange = onClearDescriptionAfterStopChange,
-                    modifier = Modifier
-                        .testTag(TrackingTestTags.CLEAR_DESCRIPTION_AFTER_STOP_SWITCH)
-                        .heightIn(min = Dimens.MinTouchTarget),
-                )
+            },
+        )
+    }
+}
+
+/**
+ * The day header a history jump to [target] scrolls to (-1 when the list has no day), or null to
+ * wait: the jump replaces the window, and until the list is rebuilt from those entries, [builtFrom]
+ * is the previous window, where the header would point somewhere else. A jump to a day already
+ * loaded fetches the same entries again; that equal list is not rebuilt, so it compares by content.
+ */
+internal fun historyJumpHeaderIndex(
+    target: LocalDate,
+    items: List<HistoryListItem>,
+    builtFrom: List<TimeEntry>?,
+    currentEntries: List<TimeEntry>,
+): Int? = if (builtFrom != currentEntries) null else historyHeaderIndex(target, items)
+
+/** The history list and the entries and filter it was built from, to tell a lagging build apart. */
+@Immutable
+private class HistorySnapshot(val items: List<HistoryListItem>, val entries: List<TimeEntry>?, val filter: HistoryFilter?) {
+    companion object {
+        val Empty = HistorySnapshot(items = emptyList(), entries = null, filter = null)
+    }
+}
+
+/**
+ * Where a new manual entry starts: the latest end today that is already past, else an hour ago.
+ * History is newest first, so the scan stops at entries that started before yesterday; parsing
+ * every entry's end whenever the sheet opens was measurable with a long history.
+ */
+internal fun suggestedManualEntryStart(entries: List<TimeEntry>, now: ZonedDateTime): ZonedDateTime {
+    val scanFrom = now.toLocalDate().minusDays(1).atStartOfDay(now.zone).toInstant()
+    var latestEnd: Instant? = null
+    for (entry in entries) {
+        val start = parseTimeEntryInstant(entry.start) ?: continue
+        if (start < scanFrom) break
+        val end = entry.end?.let(::parseTimeEntryInstant) ?: continue
+        if (latestEnd == null || end > latestEnd) latestEnd = end
+    }
+    return latestEnd?.atZone(now.zone)
+        ?.takeIf { it.toLocalDate() == now.toLocalDate() && it.isBefore(now) }
+        ?: now.minusHours(1)
+}
+
+/** How many search options beyond the text query are active; shown on the filter button. */
+private fun HistoryFilter.activeOptionsCount(): Int = listOfNotNull(
+    billable, runningOnly.takeIf { it },
+    syncStatus, startDate, endDate, clientId, projectId, taskId, tagId,
+    missingProjectOnly.takeIf { it }, missingDescriptionOnly.takeIf { it },
+    needsCategorization.takeIf { it },
+).size
+
+/**
+ * The search bar under the Time Tracker header, opened from its search button: the query, a filter
+ * button (with the active option count) that opens the options sheet, and close, which clears both.
+ */
+@Composable
+private fun HistorySearchBar(filter: HistoryFilter, onChange: (HistoryFilter) -> Unit, onOpenOptions: () -> Unit, onClose: () -> Unit) {
+    val activeOptions = filter.activeOptionsCount()
+    val transparent = Color.Transparent
+    Surface(color = MaterialTheme.colorScheme.surface) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = Dimens.Space4, end = Dimens.Space4, bottom = Dimens.Space4),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextField(
+                value = filter.query,
+                onValueChange = { onChange(filter.copy(query = it)) },
+                placeholder = { Text(stringResource(R.string.search_history)) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                singleLine = true,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = transparent,
+                    unfocusedContainerColor = transparent,
+                    focusedIndicatorColor = transparent,
+                    unfocusedIndicatorColor = transparent,
+                ),
+                modifier = Modifier.weight(1f).testTag(TrackingTestTags.FILTER_SEARCH_FIELD),
+            )
+            IconButton(onClick = onOpenOptions, modifier = Modifier.testTag(TrackingTestTags.FILTER_OPEN_BUTTON)) {
+                BadgedBox(badge = { if (activeOptions > 0) Badge { Text(activeOptions.toString()) } }) {
+                    Icon(
+                        Icons.Default.FilterList,
+                        contentDescription = if (activeOptions > 0) {
+                            pluralStringResource(R.plurals.active_filters_count, activeOptions, activeOptions)
+                        } else {
+                            stringResource(R.string.search_options)
+                        },
+                    )
+                }
+            }
+            IconButton(onClick = onClose, modifier = Modifier.testTag(TrackingTestTags.SEARCH_CLOSE_BUTTON)) {
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_search))
             }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+/** The date choices of the search options; Custom opens the range picker. */
+private enum class HistoryDateChoice { ANY, TODAY, WEEK, CUSTOM }
+
+private fun HistoryFilter.dateChoice(today: LocalDate): HistoryDateChoice = when {
+    startDate == null && endDate == null -> HistoryDateChoice.ANY
+    startDate == today && endDate == today -> HistoryDateChoice.TODAY
+    startDate == today.minusDays(LAST_7_DAYS_OFFSET) && endDate == today -> HistoryDateChoice.WEEK
+    else -> HistoryDateChoice.CUSTOM
+}
+
+/**
+ * The search options in a sheet, laid out like the entry form: a Date section, the catalogue
+ * filters as full-width rows that open the same searchable pickers, then billable and the status
+ * checks as switches.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 @Suppress("LongMethod")
-private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onChange: (HistoryFilter) -> Unit) {
-    var optionsExpanded by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
-    var showDateRangePicker by remember { mutableStateOf(false) }
-    val activeOptionsCount = listOfNotNull(
-        filter.billable, filter.runningOnly.takeIf { it },
-        filter.syncStatus, filter.startDate, filter.endDate, filter.clientId, filter.projectId, filter.taskId, filter.tagId,
-        filter.missingProjectOnly.takeIf { it }, filter.missingDescriptionOnly.takeIf { it },
-        filter.needsCategorization.takeIf { it },
-    ).size
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
-        OutlinedTextField(
-            value = filter.query,
-            onValueChange = { onChange(filter.copy(query = it)) },
-            label = { Text(stringResource(R.string.search_history)) },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            trailingIcon = if (filter.query.isNotBlank()) {
-                {
-                    IconButton(onClick = { onChange(filter.copy(query = "")) }) {
-                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_search))
-                    }
-                }
-            } else {
-                null
-            },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.FILTER_SEARCH_FIELD),
-        )
-        OutlinedButton(
-            onClick = { optionsExpanded = !optionsExpanded },
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag(
-                    if (optionsExpanded) TrackingTestTags.FILTER_CLOSE_BUTTON else TrackingTestTags.FILTER_OPEN_BUTTON,
-                ),
-        ) {
-            Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(Dimens.IconMedium))
-            Spacer(Modifier.width(Dimens.Space8))
-            Text(
-                stringResource(if (optionsExpanded) R.string.hide_search_options else R.string.search_options),
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (activeOptionsCount > 0) {
-                Text(
-                    pluralStringResource(R.plurals.active_filters_count, activeOptionsCount, activeOptionsCount),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        AnimatedVisibility(
-            visible = optionsExpanded,
-            enter = fadeIn(tween(FILTER_ENTER_DURATION_MS)) + expandVertically(tween(FILTER_EXPAND_DURATION_MS)),
-            exit = fadeOut(tween(FILTER_EXIT_DURATION_MS)) + shrinkVertically(tween(FILTER_COLLAPSE_DURATION_MS)),
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = filter.billable == true,
-                onClick = { onChange(filter.copy(billable = if (filter.billable == true) null else true)) },
-                label = { Text(stringResource(R.string.billable)) },
-            )
-            FilterChip(
-                selected = filter.billable == false,
-                onClick = { onChange(filter.copy(billable = if (filter.billable == false) null else false)) },
-                label = { Text(stringResource(R.string.non_billable)) },
-            )
-            FilterChip(
-                selected = filter.runningOnly,
-                onClick = { onChange(filter.copy(runningOnly = !filter.runningOnly)) },
-                label = { Text(stringResource(R.string.running_entries)) },
-            )
-            FilterChip(
-                selected = filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED,
-                onClick = {
-                    val toggled = if (filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED) {
-                        null
-                    } else {
-                        TimeEntryRepository.EntrySyncStatus.FAILED
-                    }
-                    onChange(filter.copy(syncStatus = toggled))
-                },
-                label = { Text(stringResource(R.string.sync_failed)) },
-            )
-            val today = LocalDate.now(uiState.zone)
-            FilterChip(
-                selected = filter.startDate == today && filter.endDate == today,
-                onClick = { onChange(filter.copy(startDate = today, endDate = today)) },
-                label = { Text(stringResource(R.string.today)) },
-            )
-            FilterChip(
-                selected = filter.startDate == today.minusDays(LAST_7_DAYS_OFFSET) && filter.endDate == today,
-                onClick = { onChange(filter.copy(startDate = today.minusDays(LAST_7_DAYS_OFFSET), endDate = today)) },
-                label = { Text(stringResource(R.string.stats_last_7_days)) },
-            )
-            FilterChip(
-                selected = filter.startDate != null && filter.endDate != null &&
-                    !(filter.startDate == today && filter.endDate == today) &&
-                    !(filter.startDate == today.minusDays(LAST_7_DAYS_OFFSET) && filter.endDate == today),
-                onClick = { showDateRangePicker = true },
-                label = { Text(stringResource(R.string.stats_custom)) },
-            )
-            FilterChip(
-                selected = filter.needsCategorization,
-                onClick = { onChange(filter.copy(needsCategorization = !filter.needsCategorization)) },
-                label = { Text(stringResource(R.string.needs_categorization)) },
-            )
-            FilterChip(
-                selected = filter.missingProjectOnly,
-                onClick = { onChange(filter.copy(missingProjectOnly = !filter.missingProjectOnly)) },
-                label = { Text(stringResource(R.string.without_project)) },
-            )
-            FilterChip(
-                selected = filter.missingDescriptionOnly,
-                onClick = { onChange(filter.copy(missingDescriptionOnly = !filter.missingDescriptionOnly)) },
-                label = { Text(stringResource(R.string.without_description)) },
-            )
-            if (filter != HistoryFilter()) {
-                TextButton(onClick = { onChange(HistoryFilter()) }) { Text(stringResource(R.string.clear_filters)) }
-            }
-                }
-                FilterDropdown(
-            label = stringResource(R.string.client),
-            selectedId = filter.clientId,
-            options = uiState.clients.map { it.id to it.name },
-            onSelect = { onChange(filter.copy(clientId = it, projectId = null, taskId = null)) },
-        )
-                FilterDropdown(
-            label = stringResource(R.string.project),
-            selectedId = filter.projectId,
-            options = uiState.projects.filter { filter.clientId == null || it.clientId == filter.clientId }.map { it.id to it.name },
-            onSelect = { onChange(filter.copy(projectId = it, taskId = null)) },
-        )
-                if (filter.projectId != null) {
-            FilterDropdown(
-                label = stringResource(R.string.task),
-                selectedId = filter.taskId,
-                options = uiState.tasks.filter { it.projectId == filter.projectId }.map { it.id to it.name },
-                onSelect = { onChange(filter.copy(taskId = it)) },
-            )
-                }
-                FilterDropdown(
-            label = stringResource(R.string.tags),
-            selectedId = filter.tagId,
-            options = uiState.tags.map { it.id to it.name },
-            onSelect = { onChange(filter.copy(tagId = it)) },
-                )
-            }
-        }
-    }
-    if (showDateRangePicker) {
-        val pickerState = rememberDateRangePickerState(
-            initialSelectedStartDateMillis = filter.startDate?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
-            initialSelectedEndDateMillis = filter.endDate?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
-        )
-        DatePickerDialog(
-            onDismissRequest = { showDateRangePicker = false },
-            confirmButton = {
-                TextButton(
-                    enabled = pickerState.selectedStartDateMillis != null && pickerState.selectedEndDateMillis != null,
-                    onClick = {
-                        val start = pickerState.selectedStartDateMillis?.let(::utcDateOf)
-                        val end = pickerState.selectedEndDateMillis?.let(::utcDateOf)
-                        if (start != null && end != null) onChange(filter.copy(startDate = start, endDate = end))
-                        showDateRangePicker = false
-                    },
-                ) { Text(stringResource(R.string.apply)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDateRangePicker = false }) { Text(stringResource(R.string.cancel)) }
-            },
-        ) { DateRangePicker(state = pickerState) }
-    }
-}
-
-@Composable
-private fun FilterDropdown(
-    label: String,
-    selectedId: String?,
-    options: List<Pair<String, String>>,
-    onSelect: (String?) -> Unit,
+internal fun HistoryFiltersSheet(
+    filter: HistoryFilter,
+    uiState: TrackingUiState,
+    onChange: (HistoryFilter) -> Unit,
+    onDismiss: () -> Unit,
 ) {
-    if (options.isEmpty()) return
-    var expanded by remember { mutableStateOf(false) }
-    FilterChip(
-        selected = selectedId != null,
-        onClick = { expanded = true },
-        label = {
-            Text(
-                options.firstOrNull { it.first == selectedId }?.second ?: label,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+    var showDateRangePicker by remember { mutableStateOf(false) }
+    var openPicker by remember { mutableStateOf<HistoryFilterPicker?>(null) }
+    val today = LocalDate.now(uiState.zone)
+    val clients = remember(uiState.clients) { uiState.clients.map { FilterOption(it.id, it.name) } }
+    val projects = remember(uiState.projects, filter.clientId) {
+        uiState.projects
+            .filter { filter.clientId == null || it.clientId == filter.clientId }
+            .map { FilterOption(it.id, it.name) }
+    }
+    val tasks = remember(uiState.tasks, filter.projectId) {
+        uiState.tasks.filter { it.projectId == filter.projectId }.map { FilterOption(it.id, it.name) }
+    }
+    val tags = remember(uiState.tags) { uiState.tags.map { FilterOption(it.id, it.name) } }
+    val all = stringResource(R.string.filter_all)
+    fun nameOf(options: List<FilterOption>, id: String?) = options.firstOrNull { it.id == id }?.name ?: all
+
+    AppSheet(
+        title = stringResource(R.string.search_options),
+        onDismiss = onDismiss,
+        titleAction = {
+            if (filter.activeOptionsCount() > 0) {
+                TextButton(onClick = { onChange(HistoryFilter(query = filter.query)) }) {
+                    Text(stringResource(R.string.clear_filters))
+                }
+            }
         },
-    )
-    if (expanded) {
-        SearchableSingleSelectDialog(
-            title = label,
-            searchPlaceholder = stringResource(R.string.search_items, label),
-            allLabel = stringResource(R.string.all_items, label),
-            options = options,
-            selectedId = selectedId,
-            onSelect = onSelect,
-            onDismiss = { expanded = false },
+        onDone = onDismiss,
+        doneTestTag = TrackingTestTags.FILTER_CLOSE_BUTTON,
+    ) {
+        val dateChoice = filter.dateChoice(today)
+        GroupedSection(header = stringResource(R.string.filter_section_date)) {
+            SegmentedControl(
+                options = HistoryDateChoice.entries,
+                selected = dateChoice,
+                onSelect = { choice ->
+                    when (choice) {
+                        HistoryDateChoice.ANY -> onChange(filter.copy(startDate = null, endDate = null))
+                        HistoryDateChoice.TODAY -> onChange(filter.copy(startDate = today, endDate = today))
+                        HistoryDateChoice.WEEK -> onChange(
+                            filter.copy(startDate = today.minusDays(LAST_7_DAYS_OFFSET), endDate = today),
+                        )
+                        HistoryDateChoice.CUSTOM -> showDateRangePicker = true
+                    }
+                },
+                label = { choice ->
+                    stringResource(
+                        when (choice) {
+                            HistoryDateChoice.ANY -> R.string.filter_any_time
+                            HistoryDateChoice.TODAY -> R.string.today
+                            HistoryDateChoice.WEEK -> R.string.filter_week_short
+                            HistoryDateChoice.CUSTOM -> R.string.stats_custom
+                        },
+                    )
+                },
+                modifier = Modifier.padding(horizontal = Dimens.Space8, vertical = Dimens.Space4),
+            )
+            val start = filter.startDate
+            val end = filter.endDate
+            if (dateChoice == HistoryDateChoice.CUSTOM && start != null && end != null) {
+                val locale = appLocale()
+                val formatter = remember(locale) {
+                    DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM).withLocale(locale)
+                }
+                GroupedDivider()
+                GroupedRow(
+                    title = "${start.format(formatter)} – ${end.format(formatter)}",
+                    leadingIcon = Icons.Outlined.DateRange,
+                    onClick = { showDateRangePicker = true },
+                )
+            }
+        }
+
+        GroupedSection(header = stringResource(R.string.filter_section_details)) {
+            FilterRow(
+                label = stringResource(R.string.client),
+                icon = Icons.Outlined.Business,
+                value = nameOf(clients, filter.clientId),
+                onClick = { openPicker = HistoryFilterPicker.CLIENT },
+            )
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            FilterRow(
+                label = stringResource(R.string.project),
+                icon = Icons.Outlined.Folder,
+                value = nameOf(projects, filter.projectId),
+                onClick = { openPicker = HistoryFilterPicker.PROJECT },
+            )
+            if (filter.projectId != null) {
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                FilterRow(
+                    label = stringResource(R.string.task),
+                    icon = Icons.AutoMirrored.Outlined.List,
+                    value = nameOf(tasks, filter.taskId),
+                    onClick = { openPicker = HistoryFilterPicker.TASK },
+                )
+            }
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            FilterRow(
+                label = stringResource(R.string.tags),
+                icon = Icons.AutoMirrored.Outlined.Label,
+                value = nameOf(tags, filter.tagId),
+                onClick = { openPicker = HistoryFilterPicker.TAG },
+            )
+        }
+
+        GroupedSection(header = stringResource(R.string.filter_section_status)) {
+            val billableOptions = listOf(null, true, false)
+            SegmentedControl(
+                options = billableOptions,
+                selected = filter.billable,
+                onSelect = { onChange(filter.copy(billable = it)) },
+                label = { billable ->
+                    stringResource(
+                        when (billable) {
+                            null -> R.string.filter_all
+                            true -> R.string.billable
+                            false -> R.string.non_billable
+                        },
+                    )
+                },
+                modifier = Modifier.padding(horizontal = Dimens.Space8, vertical = Dimens.Space4),
+            )
+            GroupedDivider()
+            GroupedSwitchRow(
+                title = stringResource(R.string.running_entries),
+                leadingIcon = Icons.Outlined.Timer,
+                checked = filter.runningOnly,
+                onCheckedChange = { onChange(filter.copy(runningOnly = it)) },
+            )
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            GroupedSwitchRow(
+                title = stringResource(R.string.filter_failed_sync),
+                leadingIcon = Icons.Outlined.SyncProblem,
+                checked = filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED,
+                onCheckedChange = { failed ->
+                    onChange(filter.copy(syncStatus = TimeEntryRepository.EntrySyncStatus.FAILED.takeIf { failed }))
+                },
+            )
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            GroupedSwitchRow(
+                title = stringResource(R.string.needs_categorization),
+                leadingIcon = Icons.Outlined.Category,
+                checked = filter.needsCategorization,
+                onCheckedChange = { onChange(filter.copy(needsCategorization = it)) },
+            )
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            GroupedSwitchRow(
+                title = stringResource(R.string.without_project),
+                leadingIcon = Icons.Outlined.FolderOff,
+                checked = filter.missingProjectOnly,
+                onCheckedChange = { onChange(filter.copy(missingProjectOnly = it)) },
+            )
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            GroupedSwitchRow(
+                title = stringResource(R.string.without_description),
+                leadingIcon = Icons.AutoMirrored.Outlined.Notes,
+                checked = filter.missingDescriptionOnly,
+                onCheckedChange = { onChange(filter.copy(missingDescriptionOnly = it)) },
+            )
+        }
+    }
+
+    when (openPicker) {
+        HistoryFilterPicker.CLIENT -> SingleSelectFilterPicker(
+            title = stringResource(R.string.client),
+            options = clients,
+            selectedId = filter.clientId,
+            onSelect = { onChange(filter.copy(clientId = it, projectId = null, taskId = null)) },
+            onDismiss = { openPicker = null },
+        )
+        HistoryFilterPicker.PROJECT -> SingleSelectFilterPicker(
+            title = stringResource(R.string.project),
+            options = projects,
+            selectedId = filter.projectId,
+            onSelect = { onChange(filter.copy(projectId = it, taskId = null)) },
+            onDismiss = { openPicker = null },
+        )
+        HistoryFilterPicker.TASK -> SingleSelectFilterPicker(
+            title = stringResource(R.string.task),
+            options = tasks,
+            selectedId = filter.taskId,
+            onSelect = { onChange(filter.copy(taskId = it)) },
+            onDismiss = { openPicker = null },
+        )
+        HistoryFilterPicker.TAG -> SingleSelectFilterPicker(
+            title = stringResource(R.string.tags),
+            options = tags,
+            selectedId = filter.tagId,
+            onSelect = { onChange(filter.copy(tagId = it)) },
+            onDismiss = { openPicker = null },
+        )
+        null -> Unit
+    }
+
+    if (showDateRangePicker) {
+        DateRangePickerDialog(
+            initialStart = filter.startDate,
+            initialEnd = filter.endDate,
+            onDismiss = { showDateRangePicker = false },
+            onConfirm = { start, end ->
+                onChange(filter.copy(startDate = start, endDate = end))
+                showDateRangePicker = false
+            },
         )
     }
 }
 
+private enum class HistoryFilterPicker { CLIENT, PROJECT, TASK, TAG }
+
+/**
+ * The Time Tracker's sync status, as a grouped section: the summary with Retry when changes can be
+ * retried, one row per change that failed, and a row into the sync details.
+ */
 @Composable
 private fun SyncCenter(
     operations: List<TimeEntryRepository.SyncOperation>,
     onRetry: () -> Unit,
     onRetryEntry: (String) -> Unit,
     onOpenSyncCenter: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val failed = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.FAILED }
+    val failedOperations = operations.filter { it.status == TimeEntryRepository.EntrySyncStatus.FAILED }
+    val failed = failedOperations.size
     val retrying = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.RETRYING }
     val conflicts = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.CONFLICT }
-    val summaryStatus = when {
-        failed > 0 -> TimeEntryRepository.EntrySyncStatus.FAILED
-        conflicts > 0 -> TimeEntryRepository.EntrySyncStatus.CONFLICT
-        retrying > 0 -> TimeEntryRepository.EntrySyncStatus.RETRYING
-        else -> TimeEntryRepository.EntrySyncStatus.PENDING
+    val (statusIcon, statusTint) = when {
+        failed > 0 -> Icons.Outlined.SyncProblem to MaterialTheme.colorScheme.syncFailed
+        conflicts > 0 -> Icons.Outlined.SyncProblem to MaterialTheme.colorScheme.error
+        retrying > 0 -> Icons.Outlined.Sync to MaterialTheme.colorScheme.syncPending
+        else -> Icons.Outlined.Schedule to MaterialTheme.colorScheme.syncPending
     }
-    SectionCard(
-        modifier = Modifier.testTag(TrackingTestTags.SYNC_STATUS_CARD),
-        title = stringResource(R.string.sync_status_card_title),
+    val retryLabel = stringResource(R.string.retry)
+    GroupedSection(
+        modifier = modifier.testTag(TrackingTestTags.SYNC_STATUS_CARD),
+        header = stringResource(R.string.sync_status_card_title),
     ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Space12),
-        ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
-            ) {
-                SyncChip(status = summaryStatus, showLabel = false)
-                Text(
-                    when {
-                        failed > 0 -> pluralStringResource(R.plurals.sync_failed_count, failed, failed)
-                        conflicts > 0 -> pluralStringResource(R.plurals.sync_conflict_count, conflicts, conflicts)
-                        retrying > 0 -> pluralStringResource(R.plurals.sync_retrying_count, retrying, retrying)
-                        else -> pluralStringResource(R.plurals.sync_pending_count, operations.size, operations.size)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (failed > 0 || retrying > 0) {
-                TextButton(onClick = onRetry) { Text(stringResource(R.string.retry)) }
-            }
+        GroupedRow(
+            title = when {
+                failed > 0 -> pluralStringResource(R.plurals.sync_failed_count, failed, failed)
+                conflicts > 0 -> pluralStringResource(R.plurals.sync_conflict_count, conflicts, conflicts)
+                retrying > 0 -> pluralStringResource(R.plurals.sync_retrying_count, retrying, retrying)
+                else -> pluralStringResource(R.plurals.sync_pending_count, operations.size, operations.size)
+            },
+            leadingIcon = statusIcon,
+            leadingIconTint = statusTint,
+            trailing = if (failed > 0 || retrying > 0) {
+                { TextButton(onClick = onRetry) { Text(retryLabel) } }
+            } else {
+                null
+            },
+        )
+        failedOperations.forEach { operation ->
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            GroupedRow(
+                title = stringResource(R.string.sync_entry_failed),
+                leadingIcon = Icons.Outlined.ErrorOutline,
+                leadingIconTint = MaterialTheme.colorScheme.syncFailed,
+                trailing = { TextButton(onClick = { onRetryEntry(operation.entryId) }) { Text(retryLabel) } },
+            )
         }
-        operations.filter { it.status == TimeEntryRepository.EntrySyncStatus.FAILED }.forEach { operation ->
-            HorizontalDivider()
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
-            ) {
-                Text(
-                    stringResource(R.string.sync_entry_failed),
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                TextButton(onClick = { onRetryEntry(operation.entryId) }) {
-                    Text(stringResource(R.string.retry))
-                }
-            }
-        }
-        HorizontalDivider()
-        TextButton(
+        GroupedDivider(inset = Dimens.SettingsIconInset)
+        GroupedRow(
+            title = stringResource(R.string.sync_center_open),
+            leadingIcon = Icons.Outlined.Info,
             onClick = onOpenSyncCenter,
-            modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.SYNC_DETAILS_BUTTON),
-        ) {
-            Text(stringResource(R.string.sync_center_open))
-        }
+            modifier = Modifier.testTag(TrackingTestTags.SYNC_DETAILS_BUTTON),
+        )
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * The long-running timer check, as a grouped section: the warning, then adjust the end, keep
+ * running for another hour, and stop, which is the destructive row.
+ */
 @Composable
-private fun LongTimerWarning(hours: Int, onStop: () -> Unit, onKeepRunning: () -> Unit, onAdjust: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-        Column(Modifier.fillMaxWidth().padding(12.dp)) {
-            Text(
-                pluralStringResource(R.plurals.timer_running_long, hours, hours),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onStop) { Text(stringResource(R.string.stop_now)) }
-                TextButton(onClick = onKeepRunning) { Text(stringResource(R.string.keep_running)) }
-                TextButton(onClick = onAdjust) { Text(stringResource(R.string.adjust_end_time)) }
-            }
-        }
+private fun LongTimerWarning(
+    hours: Int,
+    onStop: () -> Unit,
+    onKeepRunning: () -> Unit,
+    onAdjust: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    GroupedSection(modifier = modifier) {
+        GroupedRow(
+            title = pluralStringResource(R.plurals.timer_running_long, hours, hours),
+            leadingIcon = Icons.Outlined.Timer,
+            leadingIconTint = MaterialTheme.colorScheme.error,
+        )
+        GroupedDivider(inset = Dimens.SettingsIconInset)
+        GroupedRow(
+            title = stringResource(R.string.adjust_end_time),
+            leadingIcon = Icons.Outlined.Edit,
+            onClick = onAdjust,
+        )
+        GroupedDivider(inset = Dimens.SettingsIconInset)
+        GroupedRow(
+            title = stringResource(R.string.keep_running),
+            leadingIcon = Icons.Outlined.Snooze,
+            showChevron = false,
+            onClick = onKeepRunning,
+        )
+        GroupedDivider(inset = Dimens.SettingsIconInset)
+        GroupedRow(
+            title = stringResource(R.string.stop_now),
+            leadingIcon = Icons.Default.Stop,
+            destructive = true,
+            onClick = onStop,
+        )
     }
 }
 
 private const val HISTORY_PREFETCH_ITEMS = 75
 private const val HISTORY_INITIAL_PREFETCH_MAX_ENTRIES = 250
 
-private fun historyHeaderIndex(
-    requestedDate: LocalDate,
-    groupedEntries: Map<LocalDate, List<TimeEntry>>
-): Int {
-    val groups = groupedEntries.filterValues { it.isNotEmpty() }
-    val targetDate = groups.keys.minByOrNull { kotlin.math.abs(it.toEpochDay() - requestedDate.toEpochDay()) }
-        ?: return -1
-    var index = 0
-    for ((date, entries) in groups) {
-        if (date == targetDate) return index
-        index += 1 + historyEntryGroups(entries).size
-    }
-    return -1
-}
-
+@Suppress("LongParameterList")
 internal fun LazyListScope.trackingHistoryItems(
     uiState: TrackingUiState,
     historyItems: List<HistoryListItem>,
     projectsById: Map<String, Project>,
     tasksById: Map<String, Task>,
+    clientsById: Map<String, Client>,
     syncStatusByEntryId: Map<String, TimeEntryRepository.EntrySyncStatus>,
     onEdit: (TimeEntry) -> Unit,
     onDelete: (TimeEntry) -> Unit,
     onDateClick: (LocalDate) -> Unit,
-    onRetrySync: (TimeEntry) -> Unit = {}
+    onRetrySync: (TimeEntry) -> Unit = {},
+    onContinue: ((TimeEntry) -> Unit)? = null,
+    onDuplicate: ((TimeEntry) -> Unit)? = null,
+    onDeleteStack: ((List<TimeEntry>) -> Unit)? = null,
+    reviewIssues: Map<String, Set<EntryReviewIssue>> = emptyMap(),
+    showNoMatches: Boolean = false,
 ) {
     if (!uiState.hasLoadedTimeEntries && uiState.timeEntries.isEmpty()) {
         item(key = "history_loading_header") { HistoryLoadingHeader() }
-            repeat(HISTORY_PLACEHOLDER_COUNT) { index ->
+        repeat(HISTORY_PLACEHOLDER_COUNT) { index ->
             item(key = "history_loading_$index") { HistoryLoadingEntry(index) }
         }
         return
     }
 
+    val zone = uiState.zone
     items(
         items = historyItems,
-        key = {
-            when (it) {
-                is HistoryListItem.Header -> "header_${it.day.date}"
-                is HistoryListItem.Group -> "group_${it.date}_${it.entries.first().id}"
-            }
-        },
+        key = { it.key },
         contentType = {
             when (it) {
+                is HistoryListItem.Week -> "history_week"
                 is HistoryListItem.Header -> "history_header"
                 is HistoryListItem.Group -> "history_group"
             }
         },
     ) { historyItem ->
         when (historyItem) {
-            is HistoryListItem.Header -> DateHeader(
-                date = historyItem.day.date,
-                entries = historyItem.day.entries,
-                projectsById = projectsById,
-                zone = uiState.zone,
+            is HistoryListItem.Week -> HistoryWeekHeader(week = historyItem)
+            is HistoryListItem.Header -> HistoryDayHeader(
+                day = historyItem.day,
+                zone = zone,
                 onClick = { onDateClick(historyItem.day.date) },
             )
             is HistoryListItem.Group -> {
-                val entriesForProject = historyItem.entries
-                    CollapsibleTimeEntryGroup(
-                        entries = entriesForProject,
-                        date = historyItem.date,
-                        zone = uiState.zone,
-                        projectsById = projectsById,
-                        tasksById = tasksById,
-                        syncStatusByEntryId = syncStatusByEntryId,
-                        onEdit = onEdit,
-                        onDelete = onDelete,
-                        onRetrySync = onRetrySync
-                    )
+                val project = projectsById[historyItem.lead.projectId]
+                HistoryEntryCard(
+                    group = historyItem,
+                    zone = zone,
+                    project = project,
+                    task = tasksById[historyItem.lead.taskId],
+                    client = project?.clientId?.let(clientsById::get),
+                    // Only this card's statuses: a sync or review update elsewhere leaves it equal,
+                    // so it is skipped instead of every visible card redrawing.
+                    status = historyCardStatus(historyItem, syncStatusByEntryId, reviewIssues),
+                    onEdit = onEdit,
+                    onDelete = onDelete,
+                    onDeleteStack = onDeleteStack,
+                    onDuplicate = onDuplicate,
+                    onRetrySync = onRetrySync,
+                    onContinue = onContinue,
+                )
             }
         }
+    }
+
+    if (showNoMatches) {
+        item(key = "history_no_matches") { EmptyState(text = stringResource(R.string.no_results_found)) }
     }
 
     if (uiState.hasMoreTimeEntries || uiState.isLoadingMoreTimeEntries) {
@@ -1773,14 +1404,14 @@ internal fun LazyListScope.trackingHistoryItems(
             Row(
                 modifier = Modifier.fillMaxWidth().padding(24.dp),
                 horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                 uiState.totalTimeEntries?.let { total ->
                     Text(
                         text = "  ${uiState.timeEntries.size} / $total",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -1788,14 +1419,7 @@ internal fun LazyListScope.trackingHistoryItems(
     }
 
     if (uiState.timeEntries.isEmpty() && uiState.hasLoadedTimeEntries && !uiState.isLoading) {
-        item {
-            Text(
-                text = stringResource(R.string.no_time_entries),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(32.dp)
-            )
-        }
+        item(key = "history_empty") { EmptyState(text = stringResource(R.string.no_time_entries)) }
     }
 }
 
@@ -1807,84 +1431,35 @@ internal fun LazyListScope.trackingHistoryItems(
     onDelete: (TimeEntry) -> Unit,
     onDateClick: (LocalDate) -> Unit,
     onRetrySync: (TimeEntry) -> Unit = {},
+    onContinue: ((TimeEntry) -> Unit)? = null,
+    onDuplicate: ((TimeEntry) -> Unit)? = null,
+    onDeleteStack: ((List<TimeEntry>) -> Unit)? = null,
+    reviewIssues: Map<String, Set<EntryReviewIssue>> = emptyMap(),
 ) {
-    val historyItems = buildList {
-        groupedEntries.forEach { (date, entries) ->
-            val completed = entries.filter(::isCompletedTimeEntry)
-            if (completed.isNotEmpty()) {
-                val day = HistoryDay(
-                    date = date,
-                    entries = completed,
-                    groups = historyEntryGroups(completed),
-                )
-                add(HistoryListItem.Header(day))
-                day.groups.forEach { add(HistoryListItem.Group(day.date, it)) }
-            }
-        }
-    }
+    val now = Instant.now()
     trackingHistoryItems(
         uiState = uiState,
-        historyItems = historyItems,
+        historyItems = buildHistoryListItems(
+            days = groupedEntries,
+            firstDayOfWeek = uiState.firstDayOfWeek,
+            today = LocalDate.now(uiState.zone),
+            zone = uiState.zone,
+            now = now,
+        ),
         projectsById = uiState.projects.associateBy { it.id },
         tasksById = uiState.tasks.associateBy { it.id },
+        clientsById = uiState.clients.associateBy { it.id },
         syncStatusByEntryId = worstSyncStatusByEntryId(uiState.syncOperations),
         onEdit = onEdit,
         onDelete = onDelete,
         onDateClick = onDateClick,
         onRetrySync = onRetrySync,
+        onContinue = onContinue,
+        onDuplicate = onDuplicate,
+        onDeleteStack = onDeleteStack,
+        reviewIssues = reviewIssues,
     )
 }
-
-/**
- * One chip per entry: a dead-lettered UPDATE queued behind a pending STOP must not read as merely
- * queued, so the entry shows its worst operation.
- */
-private val syncStatusSeverity = listOf(
-    TimeEntryRepository.EntrySyncStatus.FAILED,
-    TimeEntryRepository.EntrySyncStatus.CONFLICT,
-    TimeEntryRepository.EntrySyncStatus.RETRYING,
-    TimeEntryRepository.EntrySyncStatus.PENDING,
-    TimeEntryRepository.EntrySyncStatus.SYNCED,
-)
-
-internal fun worstSyncStatusByEntryId(
-    operations: List<TimeEntryRepository.SyncOperation>,
-): Map<String, TimeEntryRepository.EntrySyncStatus> = operations
-    .groupBy { it.entryId }
-    .mapValues { (_, entryOperations) -> entryOperations.minBy { syncStatusSeverity.indexOf(it.status) }.status }
-
-@Immutable
- internal data class HistoryDay(
-     val date: LocalDate,
-     val entries: List<TimeEntry>,
-     val groups: List<List<TimeEntry>>,
- )
-
-@Immutable
- internal sealed interface HistoryListItem {
-    @Immutable
-     data class Header(val day: HistoryDay) : HistoryListItem
-    @Immutable
-     data class Group(val date: LocalDate, val entries: List<TimeEntry>) : HistoryListItem
- }
-
-/** Keep every punch visible, even when multiple entries share the same project/task/description. */
-/** Statuses a user can act on from the card; PENDING is queued and will upload on its own. */
-internal fun canRetrySync(status: TimeEntryRepository.EntrySyncStatus): Boolean =
-    status == TimeEntryRepository.EntrySyncStatus.FAILED || status == TimeEntryRepository.EntrySyncStatus.RETRYING
-
-internal fun historyEntryGroups(entries: List<TimeEntry>): List<List<TimeEntry>> =
-    entries.map(::listOf)
-
-@Immutable
- private data class PreparedHistory(
-     val groupedEntries: Map<LocalDate, List<TimeEntry>>,
-     val listItems: List<HistoryListItem>,
- ) {
-     companion object {
-         val Empty = PreparedHistory(emptyMap(), emptyList())
-     }
- }
 
 @Composable
 private fun rememberGhostAlpha(): Float {
@@ -1894,25 +1469,22 @@ private fun rememberGhostAlpha(): Float {
         targetValue = 0.78f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 850),
-            repeatMode = RepeatMode.Reverse
+            repeatMode = RepeatMode.Reverse,
         ),
-        label = "ghost alpha"
+        label = "ghost alpha",
     )
     return alpha
 }
 
 @Composable
-private fun GhostBlock(
-    modifier: Modifier,
-    alpha: Float
-) {
+private fun GhostBlock(modifier: Modifier, alpha: Float) {
     Box(
         modifier = modifier
             .alpha(alpha)
             .background(
                 MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f),
-                RoundedCornerShape(6.dp)
-            )
+                RoundedCornerShape(6.dp),
+            ),
     )
 }
 
@@ -1924,7 +1496,7 @@ private fun HistoryLoadingHeader() {
             .fillMaxWidth()
             .padding(top = 12.dp, bottom = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         GhostBlock(Modifier.width(72.dp).height(12.dp), alpha)
         GhostBlock(Modifier.width(150.dp).height(10.dp), alpha)
@@ -1937,23 +1509,23 @@ private fun HistoryLoadingEntry(index: Int) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-        shape = RoundedCornerShape(8.dp)
+        shape = RoundedCornerShape(8.dp),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             GhostBlock(Modifier.size(10.dp), alpha)
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(7.dp)
+                verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
                 GhostBlock(
                     Modifier
                         .fillMaxWidth(if (index % ALTERNATING_ROW_COUNT == 0) GHOST_PRIMARY_WIDTH else GHOST_SECONDARY_WIDTH)
                         .height(13.dp),
-                    alpha
+                    alpha,
                 )
                 GhostBlock(Modifier.width(if (index % 2 == 0) 96.dp else 128.dp).height(10.dp), alpha)
             }
@@ -1963,409 +1535,35 @@ private fun HistoryLoadingEntry(index: Int) {
 }
 
 /**
- * Tracking controls card with timer and input fields
+ * The last entry as a start-timer shortcut: its description, then "Project · Task"; tapping starts
+ * a timer with its fields, like the favourites below it.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-@Suppress("LongMethod")
-internal fun TrackingControls(
-    uiState: TrackingUiState,
-    elapsedSeconds: Long = 0L,
-    onDescriptionChange: (String) -> Unit,
-    onProjectChange: (String?) -> Unit,
-    onTaskChange: (String?) -> Unit,
-    onResetEntryFields: () -> Unit = {},
-    autoClearEntryFieldsAfterStop: Boolean = true,
-    onTagsChange: (List<String>) -> Unit,
-    onBillableChange: (Boolean) -> Unit,
-    onStart: () -> Unit,
-    onStop: () -> Unit,
-    onPause: () -> Unit,
-    onResume: () -> Unit,
-    onUpdate: () -> Unit,
-    onEditActiveEntry: () -> Unit = {},
-) {
+private fun ContinueLastEntryRow(entry: TimeEntry, projects: List<Project>, tasks: List<Task>, onContinue: () -> Unit) {
     val haptic = LocalHapticFeedback.current
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // Timer display
-            if (uiState.isTracking) {
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = formatElapsedTime(elapsedSeconds),
-                        style = MaterialTheme.typography.displayMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontSize = 48.sp,
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .testTag(TrackingTestTags.ELAPSED_TIMER),
-                    )
-                    if (uiState.currentTimeEntry != null) {
-                        IconButton(
-                            onClick = onEditActiveEntry,
-                            enabled = !uiState.isMutating,
-                            modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .testTag(TrackingTestTags.EDIT_ACTIVE_ENTRY),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = stringResource(R.string.edit_start_time),
-                            )
-                        }
-                    }
-                }
-                HorizontalDivider(
-                    color = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            } else if (uiState.isPaused) {
-                Text(
-                    text = stringResource(R.string.paused),
-                    style = MaterialTheme.typography.displayMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.tertiary,
-                    fontSize = 36.sp,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
-                HorizontalDivider(
-                    color = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            }
-
-            // Description field with recent entry suggestions
-            DescriptionFieldWithSuggestions(
-                description = uiState.editingDescription,
-                onDescriptionChange = onDescriptionChange,
-                timeEntries = uiState.timeEntries,
-                projects = uiState.projects,
-                tags = uiState.tags,
-                enabled = !uiState.isMutating,
-                onEntryCopied = { entry ->
-                    onDescriptionChange(entry.description ?: "")
-                    onProjectChange(entry.projectId)
-                    onTaskChange(entry.taskId)
-                    onTagsChange(entry.tags.map { it.id })
-                    onBillableChange(entry.billable)
-                }
-            )
-
-            // Combined Project/Task selector
-            ProjectTaskDropdown(
-                selectedProjectId = uiState.editingProjectId,
-                selectedTaskId = uiState.editingTaskId,
-                projects = uiState.projects,
-                tasks = uiState.tasks,
-                onSelectionChanged = { projectId, taskId ->
-                    onProjectChange(projectId)
-                    onTaskChange(taskId)
-                },
-                enabled = !uiState.isMutating
-            )
-
-            TagsSelector(
-                selectedTagIds = uiState.editingTags,
-                availableTags = uiState.tags,
-                onTagsChanged = onTagsChange,
-                enabled = !uiState.isMutating,
-            )
-
-            if (!autoClearEntryFieldsAfterStop && !uiState.isTracking && !uiState.isPaused &&
-                (uiState.editingDescription.isNotEmpty() || uiState.editingProjectId != null || uiState.editingTaskId != null)) {
-                OutlinedButton(
-                    onClick = onResetEntryFields,
-                    enabled = !uiState.isMutating,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = Dimens.MinTouchTarget)
-                        .testTag(TrackingTestTags.RESET_FIELDS_BUTTON),
-                    shape = RoundedCornerShape(Dimens.CornerRadius),
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null)
-                    Spacer(Modifier.width(Dimens.Space8))
-                    Text(stringResource(R.string.reset_entry_fields))
-                }
-            }
-
-            // Billable checkbox
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .toggleable(
-                        value = uiState.editingBillable,
-                        enabled = !uiState.isMutating,
-                        role = Role.Checkbox,
-                        onValueChange = onBillableChange
-                    ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(
-                    checked = uiState.editingBillable,
-                    onCheckedChange = null,
-                    enabled = !uiState.isMutating
-                )
-                Text(
-                    text = stringResource(R.string.billable),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-
-            // Action buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (uiState.isTracking) {
-                    Button(
-                        onClick = onUpdate,
-                        modifier = Modifier.weight(1f),
-                        enabled = !uiState.isMutating,
-                        contentPadding = PaddingValues(horizontal = Dimens.Space8),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            stringResource(R.string.update),
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            softWrap = false,
-                        )
-                    }
-                    Button(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onPause()
-                        },
-                        modifier = Modifier.weight(1f),
-                        enabled = !uiState.isMutating,
-                        contentPadding = PaddingValues(horizontal = Dimens.Space8),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.tertiary,
-                            contentColor = MaterialTheme.colorScheme.onTertiary
-                        ),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Pause,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            stringResource(R.string.pause),
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            softWrap = false,
-                        )
-                    }
-                    Button(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onStop()
-                        },
-                        modifier = Modifier.weight(1f).testTag(TrackingTestTags.STOP_BUTTON),
-                        enabled = !uiState.isMutating,
-                        contentPadding = PaddingValues(horizontal = Dimens.Space8),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError
-                        ),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Stop,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            stringResource(R.string.stop),
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            softWrap = false,
-                        )
-                    }
-                } else if (uiState.isPaused) {
-                    Button(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onResume()
-                        },
-                        modifier = Modifier.weight(1f),
-                        enabled = !uiState.isMutating,
-                        contentPadding = PaddingValues(horizontal = Dimens.Space8),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            stringResource(R.string.resume),
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            softWrap = false,
-                        )
-                    }
-                    Button(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onStop()
-                        },
-                        modifier = Modifier.weight(1f).testTag(TrackingTestTags.STOP_BUTTON),
-                        enabled = !uiState.isMutating,
-                        contentPadding = PaddingValues(horizontal = Dimens.Space8),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError
-                        ),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Stop,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            stringResource(R.string.stop),
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            softWrap = false,
-                        )
-                    }
-                } else {
-                    Button(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onStart()
-                        },
-                        modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.START_BUTTON),
-                        enabled = !uiState.isMutating,
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.start), fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * "Continue last entry" button that starts tracking with the same params as the last entry.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ContinueLastEntryButton(
-    entry: TimeEntry,
-    projects: List<Project>,
-    onContinue: () -> Unit
-) {
-    val haptic = LocalHapticFeedback.current
-    val project = projects.find { it.id == entry.projectId }
-
-    OutlinedButton(
+    val projectName = remember(entry.projectId, projects) { projects.firstOrNull { it.id == entry.projectId }?.name }
+    val taskName = remember(entry.taskId, tasks) { tasks.firstOrNull { it.id == entry.taskId }?.name }
+    GroupedRow(
+        title = entry.description.orEmpty(),
+        subtitle = shortcutProjectTaskLabel(projectName, taskName),
+        leadingIcon = Icons.Default.PlayArrow,
+        showChevron = false,
+        singleLine = true,
+        onClickLabel = stringResource(R.string.continue_last_entry),
         onClick = {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             onContinue()
         },
-        modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.CONTINUE_BUTTON),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Icon(
-            Icons.Default.PlayArrow,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp)
-        )
-        Spacer(Modifier.width(8.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = stringResource(R.string.continue_last_entry),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = entry.description ?: "",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            if (entry.projectId != null) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (project != null) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(Color(project.color.toColorInt()))
-                        )
-                    } else {
-                        Spacer(Modifier.size(8.dp))
-                    }
-                    Text(
-                        text = project?.name ?: " ",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            if (entry.tags.isNotEmpty()) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.padding(top = 2.dp)
-                ) {
-                    entry.tags.forEach { tag ->
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                            tonalElevation = 0.dp
-                        ) {
-                            Text(
-                                text = tag.name,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
+        modifier = Modifier.testTag(TrackingTestTags.CONTINUE_BUTTON),
+    )
+}
+
+/** "Project · Task" for a shortcut row; just the project without a task, nothing without a project. */
+@Composable
+internal fun shortcutProjectTaskLabel(projectName: String?, taskName: String?): String? = when {
+    projectName == null -> null
+    taskName == null -> projectName
+    else -> stringResource(R.string.start_timer_shortcut_project_task, projectName, taskName)
 }
 
 /**
@@ -2376,62 +1574,89 @@ private fun ContinueLastEntryButton(
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun DescriptionFieldWithSuggestions(
+internal fun DescriptionFieldWithSuggestions(
     description: String,
     onDescriptionChange: (String) -> Unit,
     timeEntries: List<TimeEntry>,
     projects: List<Project>,
     tags: List<Tag>,
     enabled: Boolean,
-    onEntryCopied: (TimeEntry) -> Unit
+    onEntryCopied: (TimeEntry) -> Unit,
+    borderless: Boolean = false,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val descriptionLabel = stringResource(R.string.description)
 
-    // Compute last 5 unique recent entries, filtering out empty descriptions
+    // The last 5 unique recent entries with a description. History is newest first, so this stops
+    // as soon as it has them instead of sorting the whole history.
     val recentEntries = remember(timeEntries) {
         timeEntries
+            .asSequence()
             .filter { isCompletedTimeEntry(it) && !it.description.isNullOrBlank() }
-            .sortedByDescending { it.start }
             .distinctBy { entry ->
                 "${entry.description}|${entry.projectId}|${entry.taskId}|${entry.tags.map { it.id }.sorted()}"
             }
             .take(RECENT_ENTRIES_LIMIT)
+            .toList()
     }
 
     ExposedDropdownMenuBox(
         expanded = expanded && recentEntries.isNotEmpty(),
         onExpandedChange = {
             if (enabled) expanded = it
-        }
+        },
     ) {
-        OutlinedTextField(
-            value = description,
-            onValueChange = {
-                onDescriptionChange(it)
-                expanded = false
-            },
-            label = { Text(stringResource(R.string.description)) },
-            placeholder = { Text(stringResource(R.string.what_are_you_working_on)) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable, enabled = enabled)
-                .onFocusChanged {
-                    if (it.isFocused && enabled) expanded = true
-                },
-            singleLine = true,
-            enabled = enabled,
-            shape = RoundedCornerShape(8.dp)
-        )
+        val fieldModifier = Modifier
+            .fillMaxWidth()
+            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable, enabled = enabled)
+            .onFocusChanged {
+                if (it.isFocused && enabled) expanded = true
+            }
+        val onValueChange: (String) -> Unit = {
+            onDescriptionChange(it)
+            expanded = false
+        }
+        if (borderless) {
+            val transparent = androidx.compose.ui.graphics.Color.Transparent
+            TextField(
+                value = description,
+                onValueChange = onValueChange,
+                placeholder = { Text(stringResource(R.string.what_are_you_working_on)) },
+                modifier = fieldModifier.semantics { contentDescription = descriptionLabel },
+                singleLine = true,
+                enabled = enabled,
+                textStyle = MaterialTheme.typography.bodyLarge,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = transparent,
+                    unfocusedContainerColor = transparent,
+                    disabledContainerColor = transparent,
+                    focusedIndicatorColor = transparent,
+                    unfocusedIndicatorColor = transparent,
+                    disabledIndicatorColor = transparent,
+                ),
+            )
+        } else {
+            OutlinedTextField(
+                value = description,
+                onValueChange = onValueChange,
+                label = { Text(descriptionLabel) },
+                placeholder = { Text(stringResource(R.string.what_are_you_working_on)) },
+                modifier = fieldModifier,
+                singleLine = true,
+                enabled = enabled,
+                shape = RoundedCornerShape(8.dp),
+            )
+        }
 
         ExposedDropdownMenu(
             expanded = expanded && recentEntries.isNotEmpty(),
-            onDismissRequest = { expanded = false }
+            onDismissRequest = { expanded = false },
         ) {
             Text(
                 stringResource(R.string.recent_entries),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
 
             recentEntries.forEach { entry ->
@@ -2447,30 +1672,24 @@ private fun DescriptionFieldWithSuggestions(
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                overflow = TextOverflow.Ellipsis,
                             )
                             // Project row
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 if (project != null) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(project.color.toColorInt()))
-                                    )
-                                    Text(
-                                        text = project.name,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    ProjectTaskLine(
+                                        project = project,
+                                        task = null,
+                                        background = MaterialTheme.colorScheme.surfaceContainer,
                                     )
                                 } else {
                                     Text(
                                         text = stringResource(R.string.no_project_label),
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                             }
@@ -2478,13 +1697,13 @@ private fun DescriptionFieldWithSuggestions(
                             if (entryTagNames.isNotEmpty()) {
                                 FlowRow(
                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
                                 ) {
                                     entryTagNames.forEach { tagName ->
                                         Surface(
                                             shape = RoundedCornerShape(4.dp),
                                             color = MaterialTheme.colorScheme.secondaryContainer,
-                                            tonalElevation = 0.dp
+                                            tonalElevation = 0.dp,
                                         ) {
                                             Text(
                                                 text = tagName,
@@ -2492,8 +1711,8 @@ private fun DescriptionFieldWithSuggestions(
                                                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                                                 modifier = Modifier.padding(
                                                     horizontal = 6.dp,
-                                                    vertical = 2.dp
-                                                )
+                                                    vertical = 2.dp,
+                                                ),
                                             )
                                         }
                                     }
@@ -2504,7 +1723,7 @@ private fun DescriptionFieldWithSuggestions(
                     onClick = {
                         onEntryCopied(entry)
                         expanded = false
-                    }
+                    },
                 )
             }
         }
@@ -2522,6 +1741,7 @@ internal fun ProjectTaskDropdown(
     enabled: Boolean,
     onCreateProject: ((String) -> Unit)? = null,
     onCreateTask: ((String, String) -> Unit)? = null,
+    style: SelectorStyle = SelectorStyle.Field,
 ) {
     SharedProjectTaskDropdown(
         projects = projects,
@@ -2534,462 +1754,80 @@ internal fun ProjectTaskDropdown(
         rounded = true,
         onCreateProject = onCreateProject,
         onCreateTask = onCreateTask,
+        style = style,
+    )
+}
+
+/** Confirms deleting one history entry, or every entry of a stack ([count] > 1). */
+@Composable
+private fun DeleteEntriesDialog(count: Int, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    ConfirmDialog(
+        title = if (count > 1) {
+            pluralStringResource(R.plurals.history_delete_stack_title, count, count)
+        } else {
+            stringResource(R.string.calendar_delete_entry_title)
+        },
+        message = stringResource(if (count > 1) R.string.history_delete_stack_message else R.string.calendar_delete_entry_message),
+        confirmLabel = stringResource(R.string.delete),
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
+        destructive = true,
+        confirmTestTag = TrackingTestTags.DELETE_CONFIRM,
+        dismissTestTag = TrackingTestTags.DELETE_CANCEL,
     )
 }
 
 /**
- * Date header for time entries
+ * The Time Tracker header: the side-menu button and title, then search, enable-notifications
+ * (when not granted) and refresh, which spins while a sync runs.
  */
 @Composable
-private fun DateHeader(
-    date: LocalDate,
-    entries: List<TimeEntry>,
-    projectsById: Map<String, Project>,
-    zone: ZoneId,
-    onClick: () -> Unit
+internal fun TimeTrackerTopBar(
+    syncing: Boolean,
+    onRefresh: () -> Unit,
+    onRequestNotifications: (() -> Unit)?,
+    searchOpen: Boolean = false,
+    onSearch: (() -> Unit)? = null,
 ) {
-    val context = LocalContext.current
-    val locale = appLocale()
-    val resources = LocalResources.current
-    val now = remember { Instant.now() }
-    val headerStats = remember(entries, projectsById, date, zone, now) {
-        val projectIds = entries.mapNotNull { it.projectId }.toSet()
-        val customerCount = projectIds.mapNotNull { projectsById[it]?.clientId }.toSet().size
-        val totalDuration = entries.filter(::isWorkTimeEntry).sumOf { entryDurationOnDay(it, date, zone, now) }
-        val summary = buildList {
-            add(formatCompactDuration(totalDuration))
-            if (customerCount > 0) {
-                add(resources.getQuantityString(R.plurals.customer_count, customerCount, customerCount))
+    MainTopBar(
+        title = stringResource(R.string.nav_time_tracker),
+        actions = {
+            if (onSearch != null && !searchOpen) {
+                IconButton(onClick = onSearch, modifier = Modifier.testTag(TrackingTestTags.SEARCH_BUTTON)) {
+                    Icon(Icons.Default.Search, contentDescription = stringResource(R.string.search_history))
+                }
             }
-            if (projectIds.isNotEmpty()) {
-                add(resources.getQuantityString(R.plurals.project_count, projectIds.size, projectIds.size))
+            if (onRequestNotifications != null) {
+                IconButton(onClick = onRequestNotifications) {
+                    Icon(
+                        imageVector = Icons.Outlined.NotificationsOff,
+                        contentDescription = stringResource(R.string.enable_notifications),
+                    )
+                }
             }
-        }.joinToString(" · ")
-        summary
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(top = 12.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(
-            text = formatDate(date, context, zone, locale),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1
-        )
-        Text(
-            text = headerStats,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-    }
-}
-
-/**
- * Collapsible group of time entries with same project/task
- */
-@Composable
-private fun CollapsibleTimeEntryGroup(
-    entries: List<TimeEntry>,
-    date: LocalDate,
-    zone: ZoneId,
-    projectsById: Map<String, Project>,
-    tasksById: Map<String, Task>,
-    syncStatusByEntryId: Map<String, TimeEntryRepository.EntrySyncStatus>,
-    onEdit: (TimeEntry) -> Unit,
-    onDelete: (TimeEntry) -> Unit,
-    onRetrySync: (TimeEntry) -> Unit
-) {
-    var isExpanded by remember { mutableStateOf(false) }
-    val now = remember { Instant.now() }
-    val worstSyncStatus = remember(entries, syncStatusByEntryId) {
-        entries.mapNotNull { entry -> syncStatusByEntryId[entry.id] }
-            .maxByOrNull { it.ordinal }
-    }
-    val totalDuration = remember(entries, date, zone, now) {
-        entries.filter(::isWorkTimeEntry).sumOf { entryDurationOnDay(it, date, zone, now) }
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (entries.size == 1) {
-            // Single entry, show normally
-            CompactTimeEntryRow(
-                entry = entries.first(),
-                date = date,
-                zone = zone,
-                project = projectsById[entries.first().projectId],
-                task = tasksById[entries.first().taskId],
-                syncStatus = syncStatusByEntryId[entries.first().id],
-                onEdit = { onEdit(entries.first()) },
-                onDelete = { onDelete(entries.first()) },
-                onRetrySync = { onRetrySync(entries.first()) },
-                count = null
-            )
-        } else {
-            // Multiple entries, show collapsed or expanded
-            if (!isExpanded) {
-                // Show grouped entry
-                CompactTimeEntryRow(
-                    entry = entries.first(),
-                    date = date,
-                    zone = zone,
-                    project = projectsById[entries.first().projectId],
-                    task = tasksById[entries.first().taskId],
-                    syncStatus = worstSyncStatus,
-                    onEdit = { isExpanded = true },
-                    onDelete = { /* Don't allow deleting grouped entries */ },
-                    onRetrySync = {
-                        entries.filter { syncStatusByEntryId[it.id]?.let(::canRetrySync) == true }.forEach(onRetrySync)
-                    },
-                    count = entries.size,
-                    totalDuration = totalDuration
+            // Only compose the infinite spin while syncing; an idle infinite transition keeps the
+            // frame clock busy forever.
+            val syncRotation = if (syncing) {
+                val syncTransition = rememberInfiniteTransition(label = "sync")
+                val rotation by syncTransition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = FULL_ROTATION_DEGREES,
+                    animationSpec = infiniteRepeatable(tween(SYNC_ROTATION_DURATION_MS), RepeatMode.Restart),
+                    label = "sync rotation",
                 )
+                rotation
             } else {
-                // Show all entries
-                entries.forEach { entry ->
-                    CompactTimeEntryRow(
-                        entry = entry,
-                        date = date,
-                        zone = zone,
-                        project = projectsById[entry.projectId],
-                        task = tasksById[entry.taskId],
-                        syncStatus = syncStatusByEntryId[entry.id],
-                        onEdit = { onEdit(entry) },
-                        onDelete = { onDelete(entry) },
-                        onRetrySync = { onRetrySync(entry) },
-                        count = null,
-                        isIndented = true
-                    )
-                }
-                // Collapse button
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            RoundedCornerShape(6.dp)
-                        )
-                        .heightIn(min = Dimens.MinTouchTarget)
-                        .clickable(role = Role.Button) { isExpanded = false }
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = pluralStringResource(R.plurals.collapse_entries, entries.size, entries.size),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                0f
             }
-        }
-    }
-}
-
-/**
- * Track top-app-bar title: the "Time tracking" heading plus, on subordinate lines, the signed-in
- * user's name and their active organization.
- *
- * When [userName] and [organizationName] are identical (trimmed, case-sensitive) the two would read
- * as duplicated text / a rendering glitch, so we collapse them into a single line.
- *
- * The organization line only signals its interactivity when a real switch is possible
- * ([canSwitchOrganization]): it then gains a dropdown arrow plus [Role.Button] semantics with a
- * "Switch organization" content description and opens the membership picker on click. Otherwise it
- * is inert, plain [onSurfaceVariant] text with no click target and no affordance icon.
- */
-@Composable
-internal fun TrackingAppBarTitle(
-    userName: String?,
-    organizationName: String?,
-    canSwitchOrganization: Boolean,
-    memberships: List<Membership>,
-    currentMembershipId: String?,
-    onMembershipChange: (Membership) -> Unit,
-) {
-    var organizationMenuExpanded by remember { mutableStateOf(false) }
-    val collapsed = userName != null && organizationName != null &&
-        userName.trim() == organizationName.trim()
-
-    Column {
-        Text(
-            stringResource(R.string.time_tracking),
-            fontWeight = FontWeight.SemiBold
-        )
-
-        // When collapsed, the org line represents both user and org, so skip the separate user line.
-        if (userName != null && !collapsed) {
-            Text(
-                text = userName,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        if (organizationName != null) {
-            Box {
-                if (canSwitchOrganization) {
-                    val switchDescription = stringResource(R.string.switch_organization)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .clickable { organizationMenuExpanded = true }
-                            .semantics {
-                                role = Role.Button
-                                contentDescription = switchDescription
-                            }
-                    ) {
-                        Text(
-                            text = organizationName,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Icon(
-                            imageVector = Icons.Default.ArrowDropDown,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                } else {
-                    Text(
-                        text = organizationName,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                androidx.compose.material3.DropdownMenu(
-                    expanded = organizationMenuExpanded,
-                    onDismissRequest = { organizationMenuExpanded = false }
-                ) {
-                    memberships.forEach { membership ->
-                        DropdownMenuItem(
-                            text = { Text(membership.organization.name) },
-                            onClick = {
-                                organizationMenuExpanded = false
-                                onMembershipChange(membership)
-                            },
-                            trailingIcon = if (membership.id == currentMembershipId) {
-                                {
-                                    Icon(
-                                        imageVector = Icons.Default.Done,
-                                        contentDescription = null
-                                    )
-                                }
-                            } else null
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * Compact time entry row showing past entry details (collapsed view)
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-@Suppress("LongMethod")
-private fun CompactTimeEntryRow(
-    entry: TimeEntry,
-    date: LocalDate,
-    zone: ZoneId,
-    project: Project?,
-    task: Task?,
-    syncStatus: TimeEntryRepository.EntrySyncStatus?,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onRetrySync: () -> Unit,
-    count: Int? = null,
-    totalDuration: Long? = null,
-    isIndented: Boolean = false
-) {
-    val now = remember { Instant.now() }
-    val locale = appLocale()
-    val nowLabel = stringResource(R.string.tracking_now)
-    val invalidTimeLabel = stringResource(R.string.tracking_invalid_time)
-    val timeRange = remember(entry.start, entry.end, zone, locale, nowLabel, invalidTimeLabel) {
-        formatTimeRange(entry.start, entry.end, zone, locale, nowLabel, invalidTimeLabel)
-    }
-    val durationText = remember(totalDuration, entry, date, zone, now) {
-        formatDuration(totalDuration ?: entryDurationOnDay(entry, date, zone, now))
-    }
-    val projectColor = remember(project?.color) {
-        project?.let { runCatching { Color(it.color.toColorInt()) }.getOrNull() }
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(TrackingTestTags.ENTRY_ROW)
-            .then(if (isIndented) Modifier.padding(start = 16.dp) else Modifier)
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
-            .padding(horizontal = 12.dp, vertical = 10.dp)
-            .clickable(enabled = count != null && count > 1) { onEdit() },
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Count badge (if grouped)
-        if (count != null && count > 1) {
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = count.toString(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    fontWeight = FontWeight.Bold
+            IconButton(onClick = onRefresh, modifier = Modifier.testTag(TrackingTestTags.REFRESH_BUTTON)) {
+                Icon(
+                    imageVector = Icons.Outlined.Sync,
+                    contentDescription = stringResource(if (syncing) R.string.syncing else R.string.refresh),
+                    modifier = Modifier.rotate(syncRotation),
                 )
             }
-            Spacer(Modifier.width(8.dp))
-        }
-
-        // Left side: Description and project info
-        Column(modifier = Modifier.weight(1f)) {
-            // Description
-            Text(
-                text = entry.description?.takeIf { it.isNotEmpty() }
-                    ?: stringResource(R.string.no_description),
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (entry.description.isNullOrEmpty())
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                else
-                    MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Spacer(Modifier.height(2.dp))
-
-            // Project â€¢ Task and time range on same line
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                // Project color dot + name
-                if (project != null) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(projectColor ?: MaterialTheme.colorScheme.outline)
-                    )
-                    val projectTaskText = remember(project.name, task?.name) {
-                        buildString {
-                            append(project.name)
-                            task?.let { append(" · ${it.name}") }
-                        }
-                    }
-                    Text(
-                        text = projectTaskText,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                } else {
-                    Spacer(Modifier.weight(1f))
-                }
-
-                // Time range
-                Text(
-                    text = timeRange,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    modifier = Modifier.testTag(TrackingTestTags.entryTimeRange(entry.id)),
-                )
-            }
-        }
-
-        Spacer(Modifier.width(8.dp))
-
-        // Right side: Duration and action icons
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Kit chip renders nothing for SYNCED (and null); only PENDING /
-            // RETRYING / FAILED surface, so a healthy row stays clutter-free.
-            // A change that has not reached the server gets a tappable retry instead of the
-            // passive chip, so recovery happens on the card rather than in the Sync center.
-            if (syncStatus != null && canRetrySync(syncStatus)) {
-                IconButton(
-                    onClick = onRetrySync,
-                    modifier = Modifier.size(48.dp).testTag(TrackingTestTags.entryRetrySyncButton(entry.id))
-                ) {
-                    Icon(
-                        Icons.Default.SyncProblem,
-                        contentDescription = stringResource(R.string.sync_retry_entry),
-                        tint = if (syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED) {
-                            MaterialTheme.colorScheme.syncFailed
-                        } else {
-                            MaterialTheme.colorScheme.syncPending
-                        },
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            } else {
-                syncStatus?.let { SyncChip(status = it, showLabel = false) }
-            }
-            // Duration (use totalDuration if grouped, otherwise entry duration)
-            Text(
-                text = durationText,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            // Only show action buttons if not grouped or if expanded
-            if (count == null || count == 1) {
-                // Edit button
-                IconButton(
-                    onClick = onEdit,
-                    modifier = Modifier.size(48.dp).testTag(TrackingTestTags.ENTRY_EDIT_BUTTON)
-                ) {
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = stringResource(R.string.edit),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-
-                // Delete button
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(48.dp).testTag(TrackingTestTags.ENTRY_DELETE_BUTTON)
-                ) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = stringResource(R.string.delete),
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-        }
-    }
+        },
+    )
 }
 
 /**
@@ -3014,16 +1852,22 @@ internal fun TimeEntryFormSheet(
     saveEnabled: Boolean = true,
     onDuplicate: (() -> Unit)? = null,
     onSplit: ((String) -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
+    // The running timer's controls, given the sheet's pending fields for a Pause or Stop there.
+    runningControls: (@Composable (pendingEdits: () -> RunningEntryEdits) -> Unit)? = null,
 ) {
-    var description by remember { mutableStateOf(entry?.description ?: "") }
-    var projectId by remember { mutableStateOf(entry?.projectId) }
-    var taskId by remember { mutableStateOf(entry?.taskId) }
-    var selectedTags by remember { mutableStateOf(entry?.tags?.map { it.id } ?: emptyList<String>()) }
-    var billable by remember { mutableStateOf(entry?.billable ?: false) }
+    // Keyed on the entry: when another entry replaces the one shown (e.g. "edit the running entry"
+    // arriving while a history entry is open), its fields must not carry over.
+    val entryKey = entry?.id
+    var description by remember(entryKey) { mutableStateOf(entry?.description ?: "") }
+    var projectId by remember(entryKey) { mutableStateOf(entry?.projectId) }
+    var taskId by remember(entryKey) { mutableStateOf(entry?.taskId) }
+    var selectedTags by remember(entryKey) { mutableStateOf(entry?.tags?.map { it.id } ?: emptyList<String>()) }
+    var billable by remember(entryKey) { mutableStateOf(entry?.billable ?: false) }
     val isRunningEntry = remember(entry?.id, entry?.end, entry?.duration) {
         entry?.let(::isRunningTimeEntry) == true
     }
-    var templateMenuExpanded by remember { mutableStateOf(false) }
+    var templatePickerOpen by remember(entryKey) { mutableStateOf(false) }
     val originalStart = remember(entry?.id, zone) {
         entry?.let { ZonedDateTime.parse(it.start, DateTimeFormatter.ISO_DATE_TIME).withZoneSameInstant(zone) }
             ?: (suggestedStart ?: ZonedDateTime.now(zone).minusHours(1))
@@ -3042,25 +1886,29 @@ internal fun TimeEntryFormSheet(
     var durationMinutes by remember(entry?.id, zone) {
         mutableStateOf(java.time.Duration.between(originalStart, originalEnd).toMinutes().coerceAtLeast(1).toString())
     }
-    var editingTime by remember { mutableStateOf<TimeField?>(null) }
-    var editingDate by remember { mutableStateOf<TimeField?>(null) }
-    var showSplitPicker by remember { mutableStateOf(false) }
+    var editingTime by remember(entryKey) { mutableStateOf<TimeField?>(null) }
+    var editingDate by remember(entryKey) { mutableStateOf<TimeField?>(null) }
+    var showSplitPicker by remember(entryKey) { mutableStateOf(false) }
+    var splitOutsideEntry by remember(entryKey) { mutableStateOf(false) }
     val durationIsValid = isRunningEntry || durationMinutes.toLongOrNull()?.let { it > 0 } == true
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    val overlaps = remember(startTime, endTime, existingEntries, entry, isRunningEntry) {
-        val org = entry?.organizationId ?: existingEntries.firstOrNull()?.organizationId
-        if (isRunningEntry || org == null || existingEntries.isEmpty()) {
+    // The other entries' intervals, parsed once off the main thread; each time change then only
+    // compares instants of the entries near the new interval.
+    val overlapIndex by produceState<EntryOverlapIndex?>(null, existingEntries) {
+        value = withContext(Dispatchers.Default) { EntryOverlapIndex.of(existingEntries) }
+    }
+    val overlapOrganizationId = entry?.organizationId ?: existingEntries.firstOrNull()?.organizationId
+    val overlaps = remember(startTime, endTime, overlapIndex, entry?.id, overlapOrganizationId, isRunningEntry) {
+        if (isRunningEntry || overlapOrganizationId == null) {
             false
         } else {
-            val candidate = TimeEntry(
-                id = entry?.id ?: "",
-                userId = entry?.userId ?: "",
-                start = formatTimeEntryInstant(startTime),
-                end = formatTimeEntryInstant(endTime),
-                organizationId = org,
-            )
-            existingEntries.any { it.id != candidate.id && EntryTrustRules.overlaps(candidate, it) }
+            overlapIndex?.overlaps(
+                excludeId = entry?.id.orEmpty(),
+                organizationId = overlapOrganizationId,
+                start = startTime.toInstant(),
+                end = endTime.toInstant(),
+            ) == true
         }
     }
     val validation = remember(startTime, endTime, overlaps, preventOverlap, isRunningEntry) {
@@ -3080,15 +1928,27 @@ internal fun TimeEntryFormSheet(
         endTime = startTime.plusMinutes(safeMinutes)
     }
 
+    val saveEntry = {
+        onSave(
+            description.ifEmpty { null },
+            projectId,
+            taskId,
+            selectedTags,
+            billable,
+            formatTimeEntryInstant(startTime),
+            endTime.takeUnless { isRunningEntry }?.let(::formatTimeEntryInstant),
+        )
+    }
     ModalBottomSheet(
         // Child date/time/split pickers use separate dialog windows. Do not let the parent sheet
         // interpret their focus change as a request to close the whole editor.
         onDismissRequest = {
-            if (canDismissTimeEntryFormSheet(editingTime != null, editingDate != null, showSplitPicker)) onDismiss()
+            if (canDismissTimeEntryFormSheet(editingTime != null, editingDate != null, showSplitPicker, templatePickerOpen)) onDismiss()
         },
         modifier = Modifier.testTag(TrackingTestTags.SHEET),
         sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        shape = RoundedCornerShape(topStart = Dimens.RadiusXl, topEnd = Dimens.RadiusXl),
+        containerColor = MaterialTheme.colorScheme.background,
     ) {
         Column(
             modifier = Modifier
@@ -3096,213 +1956,40 @@ internal fun TimeEntryFormSheet(
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
                 .imePadding()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(bottom = Dimens.Space24),
+            verticalArrangement = Arrangement.spacedBy(Dimens.Space16),
         ) {
-                Text(
-                    text = stringResource(if (entry == null) R.string.add_time_entry else R.string.edit_time_entry),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold
+            Box(Modifier.padding(horizontal = Dimens.Space8)) {
+                EntrySheetHeader(
+                    title = stringResource(if (entry == null) R.string.add_time_entry else R.string.edit_time_entry),
+                    onCancel = onDismiss,
+                    onSave = saveEntry,
+                    saveEnabled = saveEnabled && durationIsValid && validation.canSave,
+                    cancelTag = EditTimeEntryTestTags.CANCEL_BUTTON,
+                    saveTag = TrackingTestTags.SHEET_SAVE_BUTTON,
                 )
+            }
 
-                // Save-as-template / start-from-template affordance (gap analysis #1, #9).
-                if (templates.isNotEmpty() || onSaveAsTemplate != null) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (templates.isNotEmpty()) {
-                            Box {
-                                OutlinedButton(
-                                    onClick = { templateMenuExpanded = true },
-                                    shape = RoundedCornerShape(8.dp),
-                                ) {
-                                    Text(stringResource(R.string.templates_use_template))
-                                }
-                                DropdownMenu(
-                                    expanded = templateMenuExpanded,
-                                    onDismissRequest = { templateMenuExpanded = false },
-                                ) {
-                                    templates.forEach { template ->
-                                        val label = templateDisplayLabel(template, projects)
-                                        DropdownMenuItem(
-                                            text = { Text(label) },
-                                            onClick = {
-                                                val resolution = TemplateResolver.resolve(
-                                                    template, projects, tasks, tags,
-                                                )
-                                                description = template.description ?: ""
-                                                projectId = resolution.projectId
-                                                taskId = resolution.taskId
-                                                selectedTags = resolution.tagIds
-                                                billable = resolution.billable
-                                                templateMenuExpanded = false
-                                            },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        if (onSaveAsTemplate != null) {
-                            OutlinedButton(
-                                onClick = {
-                                    onSaveAsTemplate(
-                                        TemplateDraft(
-                                            name = null,
-                                            projectId = projectId,
-                                            taskId = taskId,
-                                            description = description.trim().takeIf { it.isNotEmpty() },
-                                            tagIds = selectedTags,
-                                            billable = billable,
-                                            isFavorite = false,
-                                        )
-                                    )
-                                },
-                                enabled = projectId != null || description.isNotBlank() || selectedTags.isNotEmpty(),
-                                shape = RoundedCornerShape(8.dp),
-                            ) {
-                                Text(stringResource(R.string.templates_save_as_template))
-                            }
-                        }
-                    }
-                }
-
-                Text(
-                    text = stringResource(R.string.time_and_duration),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
-                ) {
-                    EntryDateFieldButton(
-                        label = stringResource(R.string.start_date),
-                        date = startTime.toLocalDate(),
-                        onClick = { editingDate = TimeField.Start },
-                        modifier = if (isRunningEntry) Modifier.fillMaxWidth() else Modifier.weight(1f),
-                        testTag = TrackingTestTags.SHEET_START_DATE,
+            if (isRunningEntry) {
+                runningControls?.invoke {
+                    RunningEntryEdits(
+                        description = description.ifEmpty { null },
+                        projectId = projectId,
+                        taskId = taskId,
+                        tagIds = selectedTags,
+                        billable = billable,
+                        start = formatTimeEntryInstant(startTime),
                     )
-                    if (!isRunningEntry) {
-                        EntryDateFieldButton(
-                            label = stringResource(R.string.end_date),
-                            date = endTime.toLocalDate(),
-                            onClick = { editingDate = TimeField.End },
-                            modifier = Modifier.weight(1f),
-                            testTag = TrackingTestTags.SHEET_END_DATE,
-                        )
-                    }
                 }
+            }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)
-                ) {
-                    TimeFieldButton(
-                        label = stringResource(R.string.start_time),
-                        value = startTime,
-                        onClick = { editingTime = TimeField.Start },
-                        modifier = (if (isRunningEntry) Modifier.fillMaxWidth() else Modifier.weight(1f))
-                            .testTag(TrackingTestTags.SHEET_START_TIME)
-                    )
-                    if (!isRunningEntry) {
-                        TimeFieldButton(
-                            label = stringResource(R.string.end_time),
-                            value = endTime,
-                            onClick = { editingTime = TimeField.End },
-                            modifier = Modifier.weight(1f).testTag(TrackingTestTags.SHEET_END_TIME)
-                        )
-                    }
-                }
+            EntryDescriptionField(
+                value = description,
+                onValueChange = { description = it },
+                testTag = TrackingTestTags.SHEET_DESCRIPTION_FIELD,
+            )
 
-                if (isRunningEntry) {
-                    Text(
-                        text = stringResource(R.string.running_entry_start_edit_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = stringResource(R.string.total_time),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = formatEditableDuration(durationMinutes.toLongOrNull() ?: 0),
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            FilledTonalIconButton(
-                                onClick = {
-                                    setDuration(
-                                        (durationMinutes.toLongOrNull() ?: MINIMUM_DURATION_MINUTES) - DURATION_STEP_MINUTES,
-                                    )
-                                },
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Remove,
-                                    contentDescription = stringResource(R.string.decrease_15_minutes)
-                                )
-                            }
-                            OutlinedTextField(
-                                value = durationMinutes,
-                                onValueChange = { value ->
-                                    if (value.all(Char::isDigit)) {
-                                        durationMinutes = value
-                                        value.toLongOrNull()
-                                            ?.takeIf { it >= MINIMUM_DURATION_MINUTES }
-                                            ?.let { endTime = startTime.plusMinutes(it) }
-                                    }
-                                },
-                                label = { Text(stringResource(R.string.minutes)) },
-                                suffix = { Text(stringResource(R.string.minutes_short)) },
-                                isError = !durationIsValid,
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.weight(1f).testTag(TrackingTestTags.SHEET_DURATION_FIELD),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                            FilledTonalIconButton(
-                                onClick = { setDuration((durationMinutes.toLongOrNull() ?: 0) + DURATION_STEP_MINUTES) },
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Add,
-                                    contentDescription = stringResource(R.string.increase_15_minutes)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text(stringResource(R.string.description)) },
-                    modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.SHEET_DESCRIPTION_FIELD),
-                    shape = RoundedCornerShape(8.dp)
-                )
-
+            GroupedSection {
                 ProjectTaskDropdown(
                     selectedProjectId = projectId,
                     selectedTaskId = taskId,
@@ -3312,111 +1999,185 @@ internal fun TimeEntryFormSheet(
                         projectId = newProjectId
                         taskId = newTaskId
                     },
-                    enabled = true
+                    enabled = true,
+                    style = SelectorStyle.Grouped,
                 )
-
+                GroupedDivider(inset = Dimens.SettingsIconInset)
                 TagsSelector(
                     selectedTagIds = selectedTags,
                     availableTags = tags,
                     onTagsChanged = { selectedTags = it },
                     enabled = true,
+                    style = SelectorStyle.Grouped,
                 )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedSwitchRow(
+                    title = stringResource(R.string.billable),
+                    leadingIcon = Icons.Outlined.AttachMoney,
+                    checked = billable,
+                    onCheckedChange = { billable = it },
+                    modifier = Modifier.testTag(TrackingTestTags.SHEET_BILLABLE),
+                )
+            }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .testTag(TrackingTestTags.SHEET_BILLABLE)
-                        .toggleable(
-                            value = billable,
-                            role = Role.Checkbox,
-                            onValueChange = { billable = it }
-                        ),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = billable,
-                        onCheckedChange = null
+            GroupedSection(
+                header = stringResource(R.string.time_section),
+                footer = stringResource(R.string.running_entry_start_edit_hint).takeIf { isRunningEntry },
+            ) {
+                EntryTimeRow(
+                    label = stringResource(R.string.start),
+                    value = startTime,
+                    onDateClick = { editingDate = TimeField.Start },
+                    onTimeClick = { editingTime = TimeField.Start },
+                    dateTag = TrackingTestTags.SHEET_START_DATE,
+                    timeTag = TrackingTestTags.SHEET_START_TIME,
+                    dateLabel = stringResource(R.string.start_date),
+                    timeLabel = stringResource(R.string.start_time),
+                )
+                if (!isRunningEntry) {
+                    GroupedDivider()
+                    EntryTimeRow(
+                        label = stringResource(R.string.end),
+                        value = endTime,
+                        onDateClick = { editingDate = TimeField.End },
+                        onTimeClick = { editingTime = TimeField.End },
+                        dateTag = TrackingTestTags.SHEET_END_DATE,
+                        timeTag = TrackingTestTags.SHEET_END_TIME,
+                        dateLabel = stringResource(R.string.end_date),
+                        timeLabel = stringResource(R.string.end_time),
                     )
-                    Text(
-                        text = stringResource(R.string.billable),
-                        style = MaterialTheme.typography.bodyMedium
+                    GroupedDivider()
+                    EntryDurationRow(
+                        minutesText = durationMinutes,
+                        totalLabel = formatElapsedTime((durationMinutes.toLongOrNull() ?: 0) * SECONDS_PER_MINUTE_LONG),
+                        isValid = durationIsValid,
+                        onMinutesTextChange = { value ->
+                            durationMinutes = value
+                            value.toLongOrNull()
+                                ?.takeIf { it >= MINIMUM_DURATION_MINUTES }
+                                ?.let { endTime = startTime.plusMinutes(it) }
+                        },
+                        onDecrease = {
+                            setDuration((durationMinutes.toLongOrNull() ?: MINIMUM_DURATION_MINUTES) - DURATION_STEP_MINUTES)
+                        },
+                        onIncrease = { setDuration((durationMinutes.toLongOrNull() ?: 0) + DURATION_STEP_MINUTES) },
+                        fieldTag = TrackingTestTags.SHEET_DURATION_FIELD,
                     )
                 }
+            }
 
-                if (!isRunningEntry) {
+            if (!isRunningEntry) {
+                Box(Modifier.padding(horizontal = Dimens.Space16)) {
                     EntryValidationBanner(result = validation, durationHours = durationHours)
                 }
+            }
 
-                if (!saveEnabled) {
+            if (!saveEnabled) {
+                Text(
+                    text = stringResource(R.string.sync_conflict_edit_locked),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = Dimens.Space32),
+                )
+            }
+
+            // Save-as-template / start-from-template affordance (gap analysis #1, #9).
+            if (templates.isNotEmpty() || onSaveAsTemplate != null) {
+                GroupedSection {
+                    if (templates.isNotEmpty()) {
+                        GroupedRow(
+                            title = stringResource(R.string.templates_use_template),
+                            leadingIcon = Icons.Outlined.StarOutline,
+                            onClick = { templatePickerOpen = true },
+                        )
+                    }
+                    if (templates.isNotEmpty() && onSaveAsTemplate != null) {
+                        GroupedDivider(inset = Dimens.SettingsIconInset)
+                    }
+                    if (onSaveAsTemplate != null) {
+                        val canSaveTemplate = projectId != null || description.isNotBlank() || selectedTags.isNotEmpty()
+                        GroupedRow(
+                            title = stringResource(R.string.templates_save_as_template),
+                            leadingIcon = Icons.Outlined.BookmarkAdd,
+                            showChevron = false,
+                            onClick = if (canSaveTemplate) {
+                                {
+                                    onSaveAsTemplate(
+                                        TemplateDraft(
+                                            name = null,
+                                            projectId = projectId,
+                                            taskId = taskId,
+                                            description = description.trim().takeIf { it.isNotEmpty() },
+                                            tagIds = selectedTags,
+                                            billable = billable,
+                                            isFavorite = false,
+                                        ),
+                                    )
+                                }
+                            } else {
+                                null
+                            },
+                        )
+                    }
+                }
+            }
+
+            // Roadmap #13: Duplicate/Split act on the stored entry. Only for completed
+            // (has end) and editable (not conflicted) entries; hidden otherwise.
+            val canDuplicateOrSplit = entry?.let(::isCompletedTimeEntry) == true && saveEnabled
+            if (canDuplicateOrSplit && (onDuplicate != null || onSplit != null)) {
+                GroupedSection {
+                    if (onDuplicate != null) {
+                        GroupedRow(
+                            title = stringResource(R.string.duplicate_entry),
+                            leadingIcon = Icons.Outlined.ContentCopy,
+                            showChevron = false,
+                            onClick = {
+                                onDuplicate()
+                                onDismiss()
+                            },
+                            modifier = Modifier.testTag(EditTimeEntryTestTags.DUPLICATE_BUTTON),
+                        )
+                    }
+                    if (onDuplicate != null && onSplit != null) GroupedDivider(inset = Dimens.SettingsIconInset)
+                    if (onSplit != null) {
+                        GroupedRow(
+                            title = stringResource(R.string.split_entry),
+                            leadingIcon = Icons.AutoMirrored.Outlined.CallSplit,
+                            showChevron = false,
+                            onClick = {
+                                splitOutsideEntry = false
+                                showSplitPicker = true
+                            },
+                            modifier = Modifier.testTag(EditTimeEntryTestTags.SPLIT_BUTTON),
+                        )
+                    }
+                }
+                if (splitOutsideEntry) {
+                    // A picked time the entry does not contain; say why nothing was split.
                     Text(
-                        text = stringResource(R.string.sync_conflict_edit_locked),
+                        text = stringResource(
+                            R.string.split_time_outside_entry,
+                            originalStart.format(hourMinuteFormatter),
+                            originalEnd.format(hourMinuteFormatter),
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = Dimens.Space32),
                     )
                 }
+            }
 
-                // Roadmap #13: Duplicate/Split act on the stored entry. Only for completed
-                // (has end) and editable (not conflicted) entries; hidden otherwise.
-                val canDuplicateOrSplit = entry?.let(::isCompletedTimeEntry) == true && saveEnabled
-                if (canDuplicateOrSplit && (onDuplicate != null || onSplit != null)) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (onDuplicate != null) {
-                            OutlinedButton(
-                                onClick = { onDuplicate(); onDismiss() },
-                                modifier = Modifier.testTag(EditTimeEntryTestTags.DUPLICATE_BUTTON),
-                                shape = RoundedCornerShape(8.dp),
-                            ) {
-                                Text(stringResource(R.string.duplicate_entry))
-                            }
-                        }
-                        if (onSplit != null) {
-                            OutlinedButton(
-                                onClick = { showSplitPicker = true },
-                                modifier = Modifier.testTag(EditTimeEntryTestTags.SPLIT_BUTTON),
-                                shape = RoundedCornerShape(8.dp),
-                            ) {
-                                Text(stringResource(R.string.split_entry))
-                            }
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Button(
-                        onClick = onDismiss,
-                        modifier = Modifier.testTag(EditTimeEntryTestTags.CANCEL_BUTTON),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Transparent,
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    ) {
-                        Text(stringResource(R.string.cancel))
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            onSave(
-                                description.ifEmpty { null },
-                                projectId,
-                                taskId,
-                                selectedTags,
-                                billable,
-                                formatTimeEntryInstant(startTime),
-                                endTime.takeUnless { isRunningEntry }?.let(::formatTimeEntryInstant)
-                            )
-                        },
-                        enabled = saveEnabled && durationIsValid && validation.canSave,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.testTag(TrackingTestTags.SHEET_SAVE_BUTTON)
-                    ) {
-                        Text(stringResource(R.string.save), fontWeight = FontWeight.SemiBold)
-                    }
-                }
+            if (entry != null && onDelete != null && saveEnabled) {
+                DestructiveActionRow(
+                    label = stringResource(R.string.delete_entry),
+                    onClick = {
+                        onDelete()
+                        onDismiss()
+                    },
+                    testTag = EditTimeEntryTestTags.DELETE_BUTTON,
+                )
+            }
         }
     }
 
@@ -3440,7 +2201,7 @@ internal fun TimeEntryFormSheet(
                     durationMinutes = java.time.Duration.between(startTime, endTime).toMinutes().toString()
                 }
                 editingTime = null
-            }
+            },
         )
     }
 
@@ -3474,68 +2235,71 @@ internal fun TimeEntryFormSheet(
             onDismiss = { showSplitPicker = false },
             onConfirm = { hour, minute ->
                 showSplitPicker = false
-                val candidate = originalStart.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
-                // Clamp into the open interval: reject boundary/out-of-range picks (half-open
-                // semantics) - the repository re-validates, this just avoids an obvious no-op.
-                if (candidate.isAfter(originalStart) && candidate.isBefore(originalEnd)) {
-                    onSplit(formatTimeEntryInstant(candidate))
+                // The clock time on whichever day the entry contains it, so an entry running past
+                // midnight can be split after midnight too. Boundary and outside picks split
+                // nothing and say so; the repository re-validates.
+                val splitAt = resolveSplitInstant(originalStart, originalEnd, hour, minute)
+                if (splitAt != null) {
+                    onSplit(formatTimeEntryInstant(splitAt))
                     onDismiss()
+                } else {
+                    splitOutsideEntry = true
                 }
             },
         )
     }
+
+    if (templatePickerOpen) {
+        OptionPickerDialog(
+            title = stringResource(R.string.templates_use_template),
+            options = templates,
+            selected = null,
+            label = { templateDisplayLabel(it, projects) },
+            onSelect = { template ->
+                val resolution = TemplateResolver.resolve(template, projects, tasks, tags)
+                description = template.description ?: ""
+                projectId = resolution.projectId
+                taskId = resolution.taskId
+                selectedTags = resolution.tagIds
+                billable = resolution.billable
+            },
+            onDismiss = { templatePickerOpen = false },
+        )
+    }
+}
+
+/**
+ * The instant to split an entry from [start] to [end] at the picked clock time: that time on the
+ * first day within the entry where it falls strictly inside, or null when it never does.
+ */
+internal fun resolveSplitInstant(start: ZonedDateTime, end: ZonedDateTime, hour: Int, minute: Int): ZonedDateTime? {
+    var day = start.toLocalDate()
+    val lastDay = end.toLocalDate()
+    while (!day.isAfter(lastDay)) {
+        val candidate = ZonedDateTime.of(day, java.time.LocalTime.of(hour, minute), start.zone)
+        if (candidate.isAfter(start) && candidate.isBefore(end)) return candidate
+        day = day.plusDays(1)
+    }
+    return null
 }
 
 private enum class TimeField { Start, End }
 
-@Composable
-private fun TimeFieldButton(
-    label: String,
-    value: ZonedDateTime,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = modifier.height(64.dp),
-        shape = RoundedCornerShape(12.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)
-    ) {
-        Icon(Icons.Default.AccessTime, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Column(horizontalAlignment = Alignment.Start) {
-            Text(label, style = MaterialTheme.typography.labelSmall)
-            Text(value.format(hourMinuteFormatter), style = MaterialTheme.typography.titleMedium)
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EntryTimePickerDialog(
     title: String,
     initial: ZonedDateTime,
     testTag: String? = null,
     onDismiss: () -> Unit,
-    onConfirm: (Int, Int) -> Unit
+    onConfirm: (Int, Int) -> Unit,
 ) {
-    val state = rememberTimePickerState(initialHour = initial.hour, initialMinute = initial.minute, is24Hour = true)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            TimePicker(
-                state = state,
-                modifier = testTag?.let(Modifier::testTag) ?: Modifier,
-            )
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(state.hour, state.minute) },
-                modifier = Modifier.testTag(EditTimeEntryTestTags.TIME_PICKER_CONFIRM),
-            ) { Text(stringResource(R.string.done)) }
-        },
-        dismissButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
+    AppTimePickerDialog(
+        title = title,
+        initialHour = initial.hour,
+        initialMinute = initial.minute,
+        onDismiss = onDismiss,
+        onConfirm = onConfirm,
+        pickerModifier = testTag?.let(Modifier::testTag) ?: Modifier,
     )
 }
 
@@ -3543,145 +2307,10 @@ internal fun canDismissTimeEntryFormSheet(
     hasTimePicker: Boolean,
     hasDatePicker: Boolean,
     hasSplitPicker: Boolean,
-): Boolean = !hasTimePicker && !hasDatePicker && !hasSplitPicker
+    hasTemplatePicker: Boolean = false,
+): Boolean = !hasTimePicker && !hasDatePicker && !hasSplitPicker && !hasTemplatePicker
 
-/**
- * About section with version info, verification details, and Obtainium button
- */
-@Composable
-private fun AboutSection(context: Context) {
-    Text(
-        text = stringResource(R.string.about),
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(bottom = 12.dp)
-    )
-
-    // Version
-    Text(
-        text = stringResource(R.string.app_version, BuildConfig.VERSION_NAME),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(bottom = 16.dp)
-    )
-
-    // Verification Info card
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.verification_info),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            // Package ID
-            Text(
-                text = stringResource(R.string.package_id_label),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = context.packageName,
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = Dimens.MinTouchTarget)
-                    .clickable(role = Role.Button) { copyToClipboard(context, context.packageName) }
-                    .wrapContentHeight()
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Signing Certificate SHA-256
-            Text(
-                text = stringResource(R.string.signing_certificate_label),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            val signingHash = remember { getSigningCertificateHash(context) }
-            Text(
-                text = signingHash,
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = Dimens.MinTouchTarget)
-                    .clickable(role = Role.Button) { copyToClipboard(context, signingHash) }
-                    .wrapContentHeight()
-            )
-        }
-    }
-
-    Spacer(modifier = Modifier.height(12.dp))
-
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var obtainiumInstalled by remember { mutableStateOf(isObtainiumInstalled(context)) }
-
-    DisposableEffect(context, lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                obtainiumInstalled = isObtainiumInstalled(context)
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    // Add to Obtainium, or help the user install it first.
-    OutlinedButton(
-        onClick = {
-            val obtainiumUrl = if (obtainiumInstalled) {
-                OBTAINIUM_ADD_APP_URL
-            } else {
-                OBTAINIUM_INSTALL_URL
-            }
-            val intent = Intent(Intent.ACTION_VIEW, obtainiumUrl.toUri()).apply {
-                if (obtainiumInstalled) setPackage(OBTAINIUM_PACKAGE)
-            }
-            context.startActivity(intent)
-        },
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = stringResource(
-                    if (obtainiumInstalled) R.string.add_to_obtainium else R.string.install_obtainium
-                ),
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = stringResource(
-                    if (obtainiumInstalled) {
-                        R.string.add_to_obtainium_description
-                    } else {
-                        R.string.install_obtainium_description
-                    }
-                ),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-private const val OBTAINIUM_PACKAGE = "dev.imranr.obtainium"
-private const val OBTAINIUM_INSTALL_URL = "https://obtainium.imranr.dev/"
 private const val FULL_ROTATION_DEGREES = 360f
-private const val SECONDS_PER_HOUR = 3600
-private const val SECONDS_PER_MINUTE = 60
 private const val SECONDS_PER_HOUR_LONG = 3600L
 private const val SECONDS_PER_MINUTE_LONG = 60L
 private const val FILTER_ENTER_DURATION_MS = 180
@@ -3692,79 +2321,30 @@ private const val SYNC_ROTATION_DURATION_MS = 900
 private const val ALTERNATING_ROW_COUNT = 2
 private const val GHOST_PRIMARY_WIDTH = 0.62f
 private const val GHOST_SECONDARY_WIDTH = 0.45f
-private const val WIDE_PRIMARY_WEIGHT = 0.9f
-private const val WIDE_HISTORY_WEIGHT = 1.1f
+private const val FAB_SCRIM_ALPHA = 0.32f
 private const val HISTORY_PLACEHOLDER_COUNT = 4
 private const val RECENT_ENTRIES_LIMIT = 5
 private const val DURATION_STEP_MINUTES = 15L
 private const val MINIMUM_DURATION_MINUTES = 1L
-private const val TWO_HOURS = 2
-private const val FOUR_HOURS = 4
-private const val SIX_HOURS = 6
-private const val EIGHT_HOURS = 8
-private const val TWELVE_HOURS = 12
-private val LONG_TIMER_OPTIONS = listOf(TWO_HOURS, FOUR_HOURS, SIX_HOURS, EIGHT_HOURS, TWELVE_HOURS)
 private const val MAX_CROSS_MIDNIGHT_HOURS = 18L
 private const val LONG_DURATION_WARNING_HOURS = 12L
 private const val LAST_7_DAYS_OFFSET = 6L
-@Suppress("MaxLineLength")
-private const val OBTAINIUM_ADD_APP_URL = "obtainium://app/%7B%22id%22%3A%22dev.tricked.solidverdant%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FTricked-dev%2FSolidVerdant%22%2C%22author%22%3A%22Tricked-dev%22%2C%22name%22%3A%22SolidVerdant%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%7D%22%7D"
 
-private fun isObtainiumInstalled(context: Context): Boolean = try {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        context.packageManager.getPackageInfo(
-            OBTAINIUM_PACKAGE,
-            PackageManager.PackageInfoFlags.of(0)
-        )
-    } else {
-        @Suppress("DEPRECATION")
-        context.packageManager.getPackageInfo(OBTAINIUM_PACKAGE, 0)
-    }
-    true
-} catch (_: PackageManager.NameNotFoundException) {
-    false
-}
+/** How long a duplicate/split waits to appear in the list before its editor is given up. */
+private const val ENTRY_TO_EDIT_WAIT_MS = 5_000L
 
-/**
- * Get the SHA-256 hash of the app's signing certificate
- */
-private fun getSigningCertificateHash(context: Context): String {
-    return try {
-        val packageInfo = context.packageManager.getPackageInfo(
-            context.packageName,
-            PackageManager.GET_SIGNING_CERTIFICATES,
-        )
-        val signatures = packageInfo.signingInfo?.apkContentsSigners
-
-        val signature = signatures?.firstOrNull() ?: return "Unknown"
-        val digest = java.security.MessageDigest.getInstance("SHA-256")
-        val hashBytes = digest.digest(signature.toByteArray())
-        hashBytes.joinToString(":") { "%02X".format(it) }
-    } catch (e: Exception) {
-        "Unknown"
-    }
-}
-
-/**
- * Copy text to clipboard and show a toast
- */
-private fun copyToClipboard(context: Context, text: String) {
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val clip = ClipData.newPlainText("SolidVerdant", text)
-    clipboard.setPrimaryClip(clip)
-    Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
-}
-
-/**
- * Format elapsed time as HH:MM:SS
- */
+/** Clock-style duration like the iOS timer: "37:03" under an hour, "1:05:00" from an hour. */
 internal fun formatElapsedTime(seconds: Long): String {
     // Defensive floor: a device clock behind the entry's start must never render as "-1:-5:-3".
     val safeSeconds = seconds.coerceAtLeast(0)
     val hours = safeSeconds / SECONDS_PER_HOUR_LONG
     val minutes = (safeSeconds % SECONDS_PER_HOUR_LONG) / SECONDS_PER_MINUTE_LONG
     val secs = safeSeconds % SECONDS_PER_MINUTE_LONG
-    return String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, secs)
+    return if (hours > 0) {
+        String.format(Locale.ROOT, "%d:%02d:%02d", hours, minutes, secs)
+    } else {
+        String.format(Locale.ROOT, "%02d:%02d", minutes, secs)
+    }
 }
 
 /**
@@ -3778,6 +2358,7 @@ internal object EntryTimeValidator {
     /** An end clock-time earlier than start rolls to the next day only within this span; beyond it
      *  the inversion is treated as a mistake rather than an intended overnight shift. */
     val MAX_CROSS_MIDNIGHT: java.time.Duration = java.time.Duration.ofHours(MAX_CROSS_MIDNIGHT_HOURS)
+
     /** Durations at or above this are plausible but worth confirming before saving. */
     val LONG_DURATION_WARNING: java.time.Duration = java.time.Duration.ofHours(LONG_DURATION_WARNING_HOURS)
     enum class Error { END_NOT_AFTER_START }
@@ -3799,12 +2380,7 @@ internal object EntryTimeValidator {
         return rolled.takeIf { java.time.Duration.between(start, it) <= MAX_CROSS_MIDNIGHT }
     }
 
-    fun evaluate(
-        start: ZonedDateTime,
-        end: ZonedDateTime,
-        overlaps: Boolean = false,
-        overlapProhibited: Boolean = false,
-    ): Result {
+    fun evaluate(start: ZonedDateTime, end: ZonedDateTime, overlaps: Boolean = false, overlapProhibited: Boolean = false): Result {
         val duration = java.time.Duration.between(start, end)
         val error = when {
             !end.isAfter(start) -> Error.END_NOT_AFTER_START
@@ -3824,20 +2400,26 @@ internal fun EntryValidationBanner(result: EntryTimeValidator.Result, durationHo
     if (result.canSave && result.warnings.isEmpty()) return
     val isError = !result.canSave
     Surface(
-        color = if (isError) MaterialTheme.colorScheme.errorContainer
-        else MaterialTheme.colorScheme.secondaryContainer,
+        color = if (isError) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer
+        },
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().testTag(dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.VALIDATION_BANNER)
+        modifier = Modifier.fillMaxWidth().testTag(dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.VALIDATION_BANNER),
     ) {
-        val contentColor = if (isError) MaterialTheme.colorScheme.onErrorContainer
-        else MaterialTheme.colorScheme.onSecondaryContainer
+        val contentColor = if (isError) {
+            MaterialTheme.colorScheme.onErrorContainer
+        } else {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        }
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             result.error?.let { error ->
                 Text(
                     text = stringResource(
                         when (error) {
                             EntryTimeValidator.Error.END_NOT_AFTER_START -> R.string.entry_error_end_before_start
-                        }
+                        },
                     ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = contentColor,
@@ -3864,7 +2446,7 @@ internal fun EntryValidationBanner(result: EntryTimeValidator.Result, durationHo
 /**
  * Format date for display
  */
-private fun formatDate(date: LocalDate, context: android.content.Context, zone: ZoneId, locale: Locale): String {
+internal fun formatDate(date: LocalDate, context: android.content.Context, zone: ZoneId, locale: Locale): String {
     val today = LocalDate.now(zone)
     return when {
         date == today -> context.getString(R.string.today)
@@ -3908,48 +2490,24 @@ internal fun formatTimeRange(
     }
 }
 
+internal fun groupCompletedEntriesByLocalDay(entries: List<TimeEntry>, zone: ZoneId, now: Instant): Map<LocalDate, List<TimeEntry>> =
+    groupEntriesByLocalDay(entries, zone, now, includeRunning = false)
+
 /**
- * Format duration in seconds to HH:MM:SS
+ * Work entries by each local day they overlap, newest day first. Running entries are left out,
+ * as the docked timer shows them, unless [includeRunning] (the "Running" search option).
  */
-private fun formatDuration(seconds: Long): String {
-    val hours = seconds / SECONDS_PER_HOUR
-    val minutes = (seconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE
-    val secs = seconds % SECONDS_PER_MINUTE
-    return String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, secs)
-}
-
-private fun entryDurationOnDay(entry: TimeEntry, date: LocalDate, zone: ZoneId, now: Instant): Long =
-    clipTimeEntryToLocalDay(entry, date, zone, now)?.seconds ?: 0L
-
-internal fun groupCompletedEntriesByLocalDay(
+internal fun groupEntriesByLocalDay(
     entries: List<TimeEntry>,
     zone: ZoneId,
     now: Instant,
+    includeRunning: Boolean,
 ): Map<LocalDate, List<TimeEntry>> = entries
     .asSequence()
-    .filter(::isCompletedTimeEntry)
+    .filter { includeRunning || isCompletedTimeEntry(it) }
     .filter(::isWorkTimeEntry)
     .flatMap { entry -> timeEntryLocalDaySlices(entry, zone, now).asSequence().map { it.date to entry } }
     .groupBy({ it.first }, { it.second })
     .toSortedMap(compareByDescending { it })
 
 /** Date-picker millis are UTC-midnight instants; resolve them back to the picked date. */
-private fun utcDateOf(epochMillis: Long): LocalDate = Instant.ofEpochMilli(epochMillis).atZone(ZoneOffset.UTC).toLocalDate()
-
-/** Format a day total without seconds to keep history headers compact. */
-private fun formatCompactDuration(seconds: Long): String {
-    val hours = seconds / SECONDS_PER_HOUR
-    val minutes = (seconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE
-    return if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
-}
-
-private fun formatEditableDuration(minutes: Long): String {
-    val safeMinutes = minutes.coerceAtLeast(0)
-    val hours = safeMinutes / SECONDS_PER_MINUTE_LONG
-    val remainingMinutes = safeMinutes % SECONDS_PER_MINUTE_LONG
-    return when {
-        hours > 0 && remainingMinutes > 0 -> "${hours}h ${remainingMinutes}m"
-        hours > 0 -> "${hours}h"
-        else -> "${remainingMinutes}m"
-    }
-}

@@ -10,26 +10,37 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.tricked.solidverdant.R
 
+/**
+ * The app's root destinations. Route strings are stable: calendar deep links, review notifications
+ * and device tests depend on them. Review is not in the side menu (its checks show on the history
+ * cards); Settings opens it.
+ */
 sealed class Screen(val route: String, val labelRes: Int, val icon: ImageVector) {
-    data object Track : Screen("track", R.string.nav_track, Icons.Outlined.Timer)
+    data object Track : Screen("track", R.string.nav_time_tracker, Icons.Outlined.Timer)
     data object Calendar : Screen("calendar", R.string.nav_calendar, Icons.Outlined.CalendarMonth)
-    data object Stats : Screen("stats", R.string.nav_stats, Icons.Outlined.BarChart)
-
-    /** Review-loop home (Time Inbox + end-of-day review). Fourth bottom-nav destination. */
+    data object Stats : Screen("stats", R.string.nav_reports, Icons.Outlined.BarChart)
     data object Review : Screen("review", R.string.nav_review, Icons.Outlined.Inbox)
+    data object Settings : Screen("settings", R.string.settings_menu, Icons.Outlined.Settings)
 }
 
-val bottomNavScreens: List<Screen> =
-    listOf(Screen.Track, Screen.Calendar, Screen.Stats, Screen.Review)
+/** The side-menu destinations, in menu order. */
+val menuScreens: List<Screen> = listOf(Screen.Track, Screen.Calendar, Screen.Stats, Screen.Settings)
+
+/** Test tag of a side-menu item, shared by production UI and device robots. */
+fun mainNavTag(route: String): String = "main_nav_$route"
+
+/** Test tag of the ☰ button that opens the side menu. */
+const val MAIN_MENU_BUTTON_TAG: String = "main_menu_button"
 
 /**
- * Routes for review-loop destinations that are pushed on top of the bottom-nav graph rather than
- * being tabs themselves. They are reached from the Review tab, its overflow menu, or a reminder /
- * end-of-day notification, and each renders full-screen with its own back navigation.
+ * Routes for review-loop destinations pushed on top of a menu destination. They are reached from
+ * Review's overflow menu, Settings, or a reminder / end-of-day notification, and each renders
+ * full-screen with its own back navigation.
  */
 object ReviewRoutes {
     /** Compact end-of-day review flow (opened from the end-of-day notification). */
@@ -43,8 +54,8 @@ object ReviewRoutes {
 }
 
 /**
- * Routes for the sync surface (#33). The dedicated Sync Center is pushed full-screen on top of the
- * tab graph with its own back navigation, reached from the Track screen's sync summary.
+ * Routes for the sync surface (#33). The dedicated Sync Center is pushed full-screen with its own
+ * back navigation, reached from the Time Tracker sync summary or Settings.
  */
 object SyncRoutes {
     /** Dedicated Sync Center: freshness, pending changes, failures + retry/discard. */
@@ -53,8 +64,7 @@ object SyncRoutes {
 
 /**
  * Routes for the settings surface. The privacy & data-management screen (#48) is pushed full-screen
- * on top of the tab graph with its own back navigation, reached from the Track screen's settings
- * drawer.
+ * on top of the menu destinations with its own back navigation, reached from Settings.
  */
 object SettingsRoutes {
     /** Privacy & data-management: what is stored/sent, token protection, permissions, data controls. */

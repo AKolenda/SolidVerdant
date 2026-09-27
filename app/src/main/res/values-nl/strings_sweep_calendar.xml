@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Kalenderpanelen en -dialogen (functiegebonden; wordt samengevoegd). -->
+    <string name="calendar_sync_status">Synchronisatiestatus</string>
+    <string name="calendar_split_date">Datum</string>
+    <string name="calendar_settings_start_title">Dag begint om</string>
+    <string name="calendar_settings_end_title">Dag eindigt om</string>
+</resources>

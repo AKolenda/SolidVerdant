@@ -8,6 +8,7 @@ package dev.tricked.solidverdant.domain.time
 
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.time.DayOfWeek
@@ -25,13 +26,15 @@ import javax.inject.Singleton
 @Singleton
 class TemporalPolicyProvider @Inject constructor(private val settings: SettingsDataStore) {
 
+    // Distinct: switching membership or refreshing the profile rewrites the auth cache without
+    // changing the zone or week start, and every collector would re-fetch its range for nothing.
     val policy: Flow<TemporalPolicy> = settings.observeCachedAuth().map { cached ->
         val user = cached?.user
         TemporalPolicy(
             zone = parseZone(user?.timezone),
             firstDayOfWeek = parseFirstDayOfWeek(user?.weekStart),
         )
-    }
+    }.distinctUntilChanged()
 
     suspend fun current(): TemporalPolicy = policy.first()
 

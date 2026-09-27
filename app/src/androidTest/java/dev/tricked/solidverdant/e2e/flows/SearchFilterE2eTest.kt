@@ -22,16 +22,16 @@ class SearchFilterE2eTest {
     val e2e = E2eRule(this)
 
     @Test
-    fun searchStaysAvailableWhileOptionsCollapseAndPreserveTheQuery() {
+    fun searchLivesInTheHeaderAndKeepsTheQueryAcrossTheOptionsSheet() {
         e2e.requireMockBackend().presetLoggedInWorld()
         e2e.launchApp()
         val robot = TrackRobot(e2e.composeRule).waitForHistory()
 
-        assertTrue("Search options control should span most of history", robot.historyFilterOpenWidthRatio() >= 0.8f)
-        robot.openHistoryFilters()
+        assertTrue("Search is not part of the history list until opened", robot.isHistorySearchHidden())
+        robot.openHistorySearch()
             .enterHistorySearch("Seeded")
-            .closeHistoryFilters()
             .openHistoryFilters()
+            .closeHistoryFilters()
             .assertHistorySearch("Seeded")
     }
 }

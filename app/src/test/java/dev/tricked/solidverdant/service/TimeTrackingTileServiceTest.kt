@@ -12,10 +12,14 @@ import android.os.Looper
 import android.service.quicksettings.Tile
 import androidx.test.core.app.ApplicationProvider
 import dev.tricked.solidverdant.data.local.SettingsDataStore
+import dev.tricked.solidverdant.data.model.Membership
+import dev.tricked.solidverdant.data.model.Organization
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
+import dev.tricked.solidverdant.data.repository.TimerCommands
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -162,28 +166,55 @@ class TimeTrackingTileServiceTest {
     }
 
     @Test
-    fun clicking_an_active_tile_stops_the_server_entry() {
+    fun clicking_an_active_tile_stops_the_server_entry_through_the_outbox() {
         val authRepository = loggedInRepository().also {
             coEvery { it.getActiveTimeEntry() } returnsMany listOf(
                 Result.success(activeEntry),
                 Result.success(null),
-            )
-            coEvery { it.stopTimeEntry(any(), any(), any(), any()) } returns Result.success(
-                activeEntry.copy(end = "2026-08-10T09:00:00Z"),
             )
         }
         val service = createService(authRepository)
 
         service.onClick()
 
-        coVerify(timeout = TIMEOUT_MS, exactly = 1) {
-            authRepository.stopTimeEntry(
-                organizationId = activeEntry.organizationId,
-                timeEntryId = activeEntry.id,
-                userId = activeEntry.userId,
-                startTime = activeEntry.start,
-            )
+        coVerify(timeout = TIMEOUT_MS, exactly = 1) { timeEntryRepository.adoptServerEntry(activeEntry) }
+        coVerify(timeout = TIMEOUT_MS, exactly = 1) { timeEntryRepository.stopEntry(activeEntry, activeEntry.userId) }
+        coVerify(exactly = 0) { authRepository.stopTimeEntry(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun clicking_the_tile_stops_a_timer_whose_start_is_still_queued() {
+        val queued = activeEntry.copy(id = "local-queued")
+        coEvery { timeEntryRepository.localActiveEntry(activeEntry.organizationId, activeEntry.userId) } returns queued
+        coEvery { timeEntryRepository.hasPendingSync(queued.id) } returns true
+        val authRepository = loggedInRepository().also {
+            coEvery { it.getActiveTimeEntry() } returns Result.failure(IllegalStateException("offline"))
         }
+        val service = createService(authRepository)
+
+        service.onClick()
+
+        coVerify(timeout = TIMEOUT_MS, exactly = 1) { timeEntryRepository.stopEntry(queued, activeEntry.userId) }
+    }
+
+    @Test
+    fun refresh_keeps_a_locally_started_timer_active_until_its_start_syncs() {
+        val queued = activeEntry.copy(id = "local-queued")
+        coEvery { timeEntryRepository.localActiveEntry(activeEntry.organizationId, activeEntry.userId) } returns queued
+        coEvery { timeEntryRepository.hasPendingSync(queued.id) } returns true
+        context.getSharedPreferences(TILE_PREFS, Context.MODE_PRIVATE).edit().putString(LAST_ENTRY_ID, queued.id).commit()
+        val authRepository = loggedInRepository().also {
+            // The server has not received the START yet.
+            coEvery { it.getActiveTimeEntry() } returns Result.success(null)
+        }
+        val service = createService(authRepository)
+
+        service.onStartListening()
+        // Force a network refresh too: a debounced first refresh may race the tile binding.
+        requestRefresh()
+
+        awaitTile(service) { state == Tile.STATE_ACTIVE && subtitle == queued.description }
+        assertEquals(queued.id, context.getSharedPreferences(TILE_PREFS, Context.MODE_PRIVATE).getString(LAST_ENTRY_ID, null))
     }
 
     @Test
@@ -208,22 +239,20 @@ class TimeTrackingTileServiceTest {
     }
 
     @Test
-    fun failed_stop_can_be_retried_from_the_tile() {
+    fun a_slow_stop_ignores_repeated_clicks_and_the_tile_can_stop_again_afterwards() {
         val firstStopEntered = CompletableDeferred<Unit>()
         val releaseFirstStop = CompletableDeferred<Unit>()
         val secondStopFinished = CompletableDeferred<Unit>()
         val stopAttempts = AtomicInteger()
         val authRepository = loggedInRepository().also {
             coEvery { it.getActiveTimeEntry() } returns Result.success(activeEntry)
-            coEvery { it.stopTimeEntry(any(), any(), any(), any()) } coAnswers {
-                if (stopAttempts.incrementAndGet() == 1) {
-                    firstStopEntered.complete(Unit)
-                    releaseFirstStop.await()
-                    Result.failure(IllegalStateException("offline"))
-                } else {
-                    secondStopFinished.complete(Unit)
-                    Result.success(activeEntry.copy(end = "2026-08-10T09:00:00Z"))
-                }
+        }
+        coEvery { timeEntryRepository.stopEntry(any(), any()) } coAnswers {
+            if (stopAttempts.incrementAndGet() == 1) {
+                firstStopEntered.complete(Unit)
+                releaseFirstStop.await()
+            } else {
+                secondStopFinished.complete(Unit)
             }
         }
         val service = createService(authRepository)
@@ -232,7 +261,7 @@ class TimeTrackingTileServiceTest {
         runBlocking { withTimeout(TIMEOUT_MS) { firstStopEntered.await() } }
 
         service.onClick()
-        coVerify(exactly = 1) { authRepository.stopTimeEntry(any(), any(), any(), any()) }
+        coVerify(exactly = 1) { timeEntryRepository.stopEntry(any(), any()) }
 
         releaseFirstStop.complete(Unit)
         awaitCondition { !service.isProcessingForTest() }
@@ -240,11 +269,21 @@ class TimeTrackingTileServiceTest {
         service.onClick()
 
         runBlocking { withTimeout(TIMEOUT_MS) { secondStopFinished.await() } }
-        coVerify(timeout = TIMEOUT_MS, exactly = 2) { authRepository.stopTimeEntry(any(), any(), any(), any()) }
+        coVerify(timeout = TIMEOUT_MS, exactly = 2) { timeEntryRepository.stopEntry(any(), any()) }
     }
 
     private fun loggedInRepository() = mockk<AuthRepository>(relaxed = true) {
         every { isLoggedIn } returns flowOf(true)
+    }
+
+    /** Room + outbox seam; Room knows no timer unless a test says so. */
+    private val timeEntryRepository = mockk<TimeEntryRepository>(relaxed = true) {
+        every { observeProjects(any()) } returns flowOf(emptyList())
+        every { observeTasks(any()) } returns flowOf(emptyList())
+        coEvery { localActiveEntry(any(), any()) } returns null
+        coEvery { hasPendingSync(any()) } returns false
+        coEvery { isStoppingLocally(any()) } returns false
+        coEvery { adoptServerEntry(any()) } answers { firstArg() }
     }
 
     private fun createService(authRepository: AuthRepository): TimeTrackingTileService {
@@ -252,13 +291,18 @@ class TimeTrackingTileServiceTest {
         return controller.get().also {
             it.authRepository = authRepository
             it.apiClientFactory = mockk<ApiClientFactory>(relaxed = true)
-            it.timeEntryRepository = mockk<TimeEntryRepository>(relaxed = true) {
-                every { observeProjects(any()) } returns flowOf(emptyList())
-                every { observeTasks(any()) } returns flowOf(emptyList())
-            }
+            it.timeEntryRepository = timeEntryRepository
             it.settingsDataStore = mockk<SettingsDataStore>(relaxed = true) {
                 every { alwaysShowNotification } returns flowOf(false)
             }
+            val cachedAccount = mockk<SettingsDataStore> {
+                every { getCachedAuth() } returns SettingsDataStore.CachedAuth(
+                    User(id = activeEntry.userId, name = "User", email = "user@example.invalid"),
+                    listOf(Membership("member-id", "member", Organization(activeEntry.organizationId, "Org", "EUR"))),
+                    "member-id",
+                )
+            }
+            it.timerCommands = TimerCommands(authRepository, timeEntryRepository, cachedAccount) { }
         }
     }
 
@@ -286,7 +330,9 @@ class TimeTrackingTileServiceTest {
     private companion object {
         const val TILE_PREFS = "tile_state"
         const val LAST_ENTRY_ID = "last_entry_id"
-        const val TIMEOUT_MS = 3_000L
+
+        // Generous: the first test in a JVM also pays for mock and coroutine warm-up.
+        const val TIMEOUT_MS = 10_000L
         const val POLL_MS = 10L
     }
 }

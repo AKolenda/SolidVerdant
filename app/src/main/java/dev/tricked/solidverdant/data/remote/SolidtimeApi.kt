@@ -11,6 +11,7 @@ import dev.tricked.solidverdant.data.model.CreateClientRequest
 import dev.tricked.solidverdant.data.model.CreateProjectRequest
 import dev.tricked.solidverdant.data.model.CreateTagRequest
 import dev.tricked.solidverdant.data.model.CreateTaskRequest
+import dev.tricked.solidverdant.data.model.MembersResponse
 import dev.tricked.solidverdant.data.model.MembershipsResponse
 import dev.tricked.solidverdant.data.model.OrganizationResponse
 import dev.tricked.solidverdant.data.model.ProjectResponse
@@ -32,6 +33,7 @@ import retrofit2.http.DELETE
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
@@ -79,6 +81,13 @@ interface SolidtimeApi {
      */
     @GET("api/v1/users/me")
     suspend fun getCurrentUser(): UserResponse
+
+    /**
+     * Identify the account behind freshly exchanged tokens before they are persisted, so cached
+     * data owned by a different account is cleared before any new-session request can touch it.
+     */
+    @GET("api/v1/users/me")
+    suspend fun getCurrentUserWithToken(@Header("Authorization") authorization: String): UserResponse
 
     /**
      * Get all memberships (organizations) for the current user
@@ -154,6 +163,23 @@ interface SolidtimeApi {
         @Query("start") start: String? = null,
         @Query("end") end: String? = null,
     ): TimeEntriesResponse
+
+    /**
+     * Time entries on one project, all of them regardless of date. A null [memberId] asks for every
+     * member's entries, which needs the `time-entries:view:all` permission.
+     */
+    @GET("api/v1/organizations/{organization}/time-entries")
+    suspend fun getProjectTimeEntries(
+        @Path("organization") organizationId: String,
+        @Query("project_ids[]") projectId: String,
+        @Query("member_id") memberId: String? = null,
+        @Query("limit") limit: Int = 500,
+        @Query("offset") offset: Int = 0,
+    ): TimeEntriesResponse
+
+    /** The organization's members; needs the `members:view` permission. */
+    @GET("api/v1/organizations/{organization}/members")
+    suspend fun getMembers(@Path("organization") organizationId: String, @Query("page") page: Int = 1): MembersResponse
 
     /**
      * Update an existing time entry

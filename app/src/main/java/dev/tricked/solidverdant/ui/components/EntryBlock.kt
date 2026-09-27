@@ -18,10 +18,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,16 +35,16 @@ import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 
 /**
- * A single calendar entry block, adopting the month/day calendar treatment:
- * a tinted background derived from the entry [color] (22% alpha), a solid
- * coloured leading side bar, onSurface text and [MaterialTheme.shapes.small]
- * corners. Use this everywhere an entry is rendered so the per-view block
- * renderers stay consistent.
+ * A single calendar entry card with [MaterialTheme.shapes.small] corners: tinted with the entry
+ * [color] and led by a bar in it, the title in onSurface and the project line in onSurfaceVariant.
+ * The tint is laid over the page background, so the hour lines and an overlapping entry do not
+ * show through. Use this everywhere an entry is rendered so the per-view block renderers stay
+ * consistent.
  *
- * @param color    entry accent colour (e.g. its project colour).
+ * @param color    entry colour (e.g. its project colour): the card's tint and its bar.
  * @param title    entry title; null/blank falls back to the shared
  *                 "Untitled entry" string.
- * @param subtitle optional secondary line (e.g. "Project - Task"), onSurfaceVariant.
+ * @param subtitle optional secondary line (e.g. "Project - Task").
  * @param time     optional trailing text (e.g. formatted duration or time range).
  * @param minHeight minimum block height; defaults to [Dimens.EntryMinHeight].
  */
@@ -58,12 +60,14 @@ fun EntryBlock(
 ) {
     val resolvedTitle = title?.takeIf { it.isNotBlank() }
         ?: stringResource(R.string.uikit_untitled_entry)
+    val background = MaterialTheme.colorScheme.background
+    val cardColor = remember(color, background) { color.copy(alpha = ENTRY_TINT_ALPHA).compositeOver(background) }
     Row(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = minHeight)
             .clip(MaterialTheme.shapes.small)
-            .background(color.copy(alpha = 0.22f))
+            .background(cardColor)
             .padding(
                 horizontal = Dimens.EntryPaddingHorizontal,
                 vertical = Dimens.EntryPaddingVertical,
@@ -119,6 +123,8 @@ fun EntryBlock(
         }
     }
 }
+
+private const val ENTRY_TINT_ALPHA = 0.22f
 
 @Preview
 @Composable

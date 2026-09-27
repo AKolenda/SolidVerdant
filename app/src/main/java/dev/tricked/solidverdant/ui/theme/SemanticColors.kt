@@ -50,6 +50,14 @@ val ColorScheme.syncPending: Color
 val ColorScheme.syncFailed: Color
     get() = error
 
+/** Segmented-control track: one step darker than the grouped background on light grounds. */
+val ColorScheme.segmentedTrack: Color
+    get() = if (isLight) outlineVariant else surfaceVariant
+
+/** Raised selected segment: the card white on light grounds, a lifted grey on dark ones. */
+val ColorScheme.segmentedThumb: Color
+    get() = if (isLight) surface else outline
+
 /**
  * Convenience accessor bundling the semantic tokens, for call sites that want a
  * single value to destructure. Equivalent to reading the extension vals above.

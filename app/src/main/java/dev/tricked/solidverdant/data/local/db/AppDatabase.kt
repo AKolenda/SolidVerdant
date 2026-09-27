@@ -20,6 +20,7 @@ private const val DATABASE_VERSION_5 = 5
 private const val DATABASE_VERSION_6 = 6
 private const val DATABASE_VERSION_7 = 7
 private const val DATABASE_VERSION_8 = 8
+private const val DATABASE_VERSION_9 = 9
 
 @Database(
     entities = [
@@ -36,7 +37,7 @@ private const val DATABASE_VERSION_8 = 8
         TemplateEntity::class,
         InboxDismissalEntity::class,
     ],
-    version = DATABASE_VERSION_8,
+    version = DATABASE_VERSION_9,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -166,6 +167,22 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v8 -> v9 replaces the organization-only index on `time_entries` with a composite
+         * (`organizationId`, `start`) index: the per-organization history, range, tombstone and
+         * active-timer queries all filter by organization and sort or bound by start. Index-only
+         * change; no data is rewritten.
+         */
+        val MIGRATION_8_9 = object : Migration(DATABASE_VERSION_8, DATABASE_VERSION_9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP INDEX IF EXISTS `index_time_entries_organizationId`")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_time_entries_organizationId_start` " +
+                        "ON `time_entries` (`organizationId`, `start`)",
+                )
+            }
+        }
+
         val MIGRATIONS: Array<Migration> =
             arrayOf(
                 MIGRATION_1_2,
@@ -175,6 +192,7 @@ abstract class AppDatabase : RoomDatabase() {
                 MIGRATION_5_6,
                 MIGRATION_6_7,
                 MIGRATION_7_8,
+                MIGRATION_8_9,
             )
     }
 }

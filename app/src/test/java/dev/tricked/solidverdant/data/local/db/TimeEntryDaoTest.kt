@@ -41,7 +41,8 @@ class TimeEntryDaoTest {
 
     private fun entry(id: String, org: String = "org1", end: String? = "2026-01-01T10:00:00Z") = TimeEntryEntity(
         id = id, description = "d", userId = "u", start = "2026-01-01T09:00:00Z",
-        end = end, duration = 3600, taskId = null, projectId = null,
+        // A running timer (no end) has no duration yet, like Solidtime's active entry.
+        end = end, duration = if (end == null) null else 3600, taskId = null, projectId = null,
         billable = false, organizationId = org, updatedAt = 1L,
         syncState = SyncState.SYNCED, pendingDelete = false,
     )
@@ -55,8 +56,67 @@ class TimeEntryDaoTest {
 
     @Test fun observe_active_returns_entry_with_null_end() = runTest {
         dao.upsert(entry("a", end = "2026-01-01T10:00:00Z"))
-        dao.upsert(entry("b", end = null))
+        dao.upsert(entry("b", end = null).copy(duration = null))
         assertEquals("b", dao.observeActive("org1").first()?.id)
+    }
+
+    @Test fun joined_entries_carry_catalogue_tags_in_order_and_skip_unknown_tags() = runTest {
+        db.catalogDao().upsertTags(
+            listOf(TagEntity("t1", "one", "org1"), TagEntity("t2", "two", "org1"), TagEntity("foreign", "x", "org2")),
+        )
+        dao.upsert(entry("newer").copy(start = "2026-01-02T09:00:00Z"))
+        dao.upsert(entry("older"))
+        dao.upsert(entry("hidden").copy(pendingDelete = true))
+        dao.replaceTagRefs("newer", listOf("t2", "t1", "foreign", "missing"))
+
+        val rows = dao.observeVisibleEntriesWithTags("org1").first()
+
+        // Newest start first; each entry's tags in the order they were set; refs to tags outside
+        // the organization's catalogue come back without a tag (callers drop them).
+        assertEquals(listOf("newer", "newer", "newer", "newer", "older"), rows.map { it.entry.id })
+        assertEquals(listOf("t2", "t1", null, null, null), rows.map { it.tagId })
+        assertEquals(listOf("two", "one", null, null, null), rows.map { it.tagName })
+    }
+
+    @Test fun prune_drops_only_old_untouched_synced_rows_with_nothing_queued() = runTest {
+        val old = "2024-01-01T09:00:00Z"
+        dao.upsert(entry("old-synced").copy(start = old, updatedAt = 10L))
+        dao.upsert(entry("old-pending").copy(start = old, updatedAt = 10L, syncState = SyncState.PENDING))
+        dao.upsert(entry("old-conflict").copy(start = old, updatedAt = 10L, syncState = SyncState.CONFLICT))
+        dao.upsert(entry("old-queued").copy(start = old, updatedAt = 10L))
+        dao.upsert(entry("old-running", end = null).copy(start = old, updatedAt = 10L))
+        dao.upsert(entry("old-recently-written").copy(start = old, updatedAt = 1_000L))
+        dao.upsert(entry("recent").copy(start = "2026-01-01T09:00:00Z", updatedAt = 10L))
+        dao.replaceTagRefs("old-synced", listOf("t1"))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = "old-queued",
+                payloadJson = "{}",
+                createdAtMs = 1L,
+            ),
+        )
+
+        val pruned = dao.pruneSyncedEntries(startBefore = "2025-01-01T00:00:00Z", untouchedSinceMs = 500L)
+
+        assertEquals(1, pruned)
+        assertNull(dao.getById("old-synced"))
+        assertTrue(dao.tagIdsFor("old-synced").isEmpty())
+        listOf("old-pending", "old-conflict", "old-queued", "old-running", "old-recently-written", "recent").forEach {
+            assertNotNull("$it must survive", dao.getById(it))
+        }
+    }
+
+    @Test fun completed_entry_without_end_but_with_duration_is_not_running() = runTest {
+        // Solidtime's second completed-entry shape: no end, positive duration (domain rule in
+        // isRunningTimeEntry). A zero duration still means running.
+        dao.upsert(entry("completed", end = null).copy(duration = 3_600))
+        assertNull(dao.observeActive("org1").first())
+        assertNull(dao.getActive("org1"))
+
+        dao.upsert(entry("running", end = null).copy(duration = 0))
+        assertEquals("running", dao.getActive("org1")?.id)
     }
 
     @Test fun rekey_moves_row_to_new_id() = runTest {

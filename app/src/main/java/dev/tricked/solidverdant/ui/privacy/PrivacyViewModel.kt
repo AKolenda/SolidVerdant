@@ -20,13 +20,19 @@ import dev.tricked.solidverdant.data.export.DiagnosticExporter
 import dev.tricked.solidverdant.data.local.AuthDataStore
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.local.UserCacheCleaner
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository
+import dev.tricked.solidverdant.sync.SyncTrigger
+import dev.tricked.solidverdant.ui.settings.observeUnsyncedChanges
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -40,6 +46,9 @@ import javax.inject.Inject
  * privacy-reviewed bundle (#49), and the host's existing logout path (routed via a callback in the
  * screen) for full session revocation.
  *
+ * The cache wipe also deletes the upload queue and conflict copies, so it is refused while any
+ * change is still waiting to reach the server; the screen offers Sync now instead.
+ *
  * Storage usage is approximate and cheap: it sums the Room DB file(s) and the cache directory off
  * the main thread. It is refreshed after a cache clear so the numbers reflect the wipe.
  */
@@ -52,12 +61,13 @@ class PrivacyViewModel internal constructor(
     private val exportDiagnosticBundle: suspend () -> Uri,
     private val buildShareIntent: (Uri) -> Intent,
     private val storageDispatcher: CoroutineDispatcher,
+    private val unsyncedChanges: Flow<Int> = flowOf(0),
+    private val requestSync: () -> Unit = {},
 ) : ViewModel() {
 
     private val applicationContext = context.applicationContext
 
     /** Production wiring; the internal constructor keeps unit tests off process-wide IO/DataStore. */
-    @Suppress("UNUSED_PARAMETER")
     @Inject
     constructor(
         @ApplicationContext context: Context,
@@ -65,15 +75,22 @@ class PrivacyViewModel internal constructor(
         authDataStore: AuthDataStore,
         userCacheCleaner: UserCacheCleaner,
         diagnosticExporter: DiagnosticExporter,
+        timeEntryRepository: TimeEntryRepository,
+        syncTrigger: SyncTrigger,
     ) : this(
         context = context,
         readEndpoint = { authDataStore.endpoint.first() },
         readSessionPresent = { !authDataStore.accessToken.first().isNullOrEmpty() },
-        clearUserCache = { userCacheCleaner.clear() },
+        clearUserCache = { clearKeepingSignIn(settingsDataStore, userCacheCleaner, timeEntryRepository) },
         exportDiagnosticBundle = { diagnosticExporter.export() },
         buildShareIntent = diagnosticExporter::shareIntent,
         storageDispatcher = Dispatchers.IO,
+        unsyncedChanges = observeUnsyncedChanges(timeEntryRepository, settingsDataStore),
+        requestSync = syncTrigger::requestSync,
     )
+
+    /** How the last "clear cached data" ended, for a one-shot message on the screen. */
+    enum class ClearOutcome { CLEARED, BLOCKED, FAILED }
 
     @Stable
     data class State(
@@ -84,6 +101,9 @@ class PrivacyViewModel internal constructor(
         val computingStorage: Boolean = true,
         val clearingCache: Boolean = false,
         val exporting: Boolean = false,
+        /** Changes the server has not received; clearing the cache or logging out would delete them. */
+        val unsyncedChanges: Int = 0,
+        val clearOutcome: ClearOutcome? = null,
     ) {
         val totalBytes: Long get() = dbBytes + cacheBytes
     }
@@ -94,11 +114,14 @@ class PrivacyViewModel internal constructor(
     init {
         viewModelScope.launch {
             val endpoint = readEndpoint()
-            _state.value = _state.value.copy(serverHost = hostOf(endpoint))
+            _state.update { it.copy(serverHost = hostOf(endpoint)) }
         }
         viewModelScope.launch {
             val present = readSessionPresent()
-            _state.value = _state.value.copy(sessionPresent = present)
+            _state.update { it.copy(sessionPresent = present) }
+        }
+        viewModelScope.launch {
+            unsyncedChanges.collect { count -> _state.update { it.copy(unsyncedChanges = count) } }
         }
         refreshStorage()
     }
@@ -111,29 +134,45 @@ class PrivacyViewModel internal constructor(
     }
 
     private suspend fun refreshStorageNow() {
-        _state.value = _state.value.copy(computingStorage = true)
+        _state.update { it.copy(computingStorage = true) }
         val (dbBytes, cacheBytes) = withContext(storageDispatcher) {
             databaseBytes() to directoryBytes(applicationContext.cacheDir)
         }
-        _state.value = _state.value.copy(
-            dbBytes = dbBytes,
-            cacheBytes = cacheBytes,
-            computingStorage = false,
-        )
+        _state.update { it.copy(dbBytes = dbBytes, cacheBytes = cacheBytes, computingStorage = false) }
     }
 
     /**
      * Clears the re-syncable account cache via the existing [UserCacheCleaner] (preserves templates
-     * per SV-011, keeps the user logged in), then re-reads storage. Does NOT touch auth.
+     * per SV-011, keeps the user logged in), asks for a sync, then re-reads storage. Does NOT touch
+     * auth. The wipe includes the upload queue, so it is refused — and reported as
+     * [ClearOutcome.BLOCKED] — while any change is still waiting to reach the server; the count is
+     * read again here because it can grow while the confirmation is open.
      */
     fun clearCache() {
+        if (_state.value.clearingCache) return
         viewModelScope.launch {
-            _state.value = _state.value.copy(clearingCache = true)
-            runCatching { clearUserCache() }
+            val waiting = unsyncedChanges.first()
+            if (waiting > 0) {
+                _state.update { it.copy(unsyncedChanges = waiting, clearOutcome = ClearOutcome.BLOCKED) }
+                return@launch
+            }
+            _state.update { it.copy(clearingCache = true) }
+            val cleared = runCatching { clearUserCache() }
                 .onFailure { Timber.e(it, "Failed to clear cached data") }
+                .isSuccess
+            if (cleared) requestSync()
             refreshStorageNow()
-            _state.value = _state.value.copy(clearingCache = false)
+            _state.update {
+                it.copy(clearingCache = false, clearOutcome = if (cleared) ClearOutcome.CLEARED else ClearOutcome.FAILED)
+            }
         }
+    }
+
+    /** Send the waiting changes now, so the cache can be cleared once they are on the server. */
+    fun syncNow() = requestSync()
+
+    fun consumeClearOutcome() {
+        _state.update { it.copy(clearOutcome = null) }
     }
 
     /**
@@ -142,11 +181,11 @@ class PrivacyViewModel internal constructor(
      */
     fun exportDiagnostics(onReady: (Uri) -> Unit) {
         viewModelScope.launch {
-            _state.value = _state.value.copy(exporting = true)
+            _state.update { it.copy(exporting = true) }
             runCatching { exportDiagnosticBundle() }
                 .onSuccess { onReady(it) }
                 .onFailure { Timber.e(it, "Failed to export diagnostics") }
-            _state.value = _state.value.copy(exporting = false)
+            _state.update { it.copy(exporting = false) }
         }
     }
 
@@ -186,4 +225,21 @@ class PrivacyViewModel internal constructor(
         /** Must match the name used in [dev.tricked.solidverdant.di.DatabaseModule]. */
         const val DB_NAME = "solidverdant.db"
     }
+}
+
+/**
+ * The cache wipe without signing the user out. [UserCacheCleaner] also drops the cached account
+ * snapshot that Review, Sync & recovery and the widgets read the account from, so it is put back;
+ * then the current organization is downloaded again so Track and Calendar are not left empty.
+ */
+private suspend fun clearKeepingSignIn(settings: SettingsDataStore, cleaner: UserCacheCleaner, repository: TimeEntryRepository) {
+    val account = settings.getCachedAuth()
+    cleaner.clear()
+    account ?: return
+    settings.cacheAuth(account.user, account.memberships, account.currentMembershipId)
+    val membership = account.memberships.firstOrNull { it.id == account.currentMembershipId }
+        ?: account.memberships.firstOrNull()
+        ?: return
+    repository.refreshAll(membership.organizationId, membership.id)
+        .onFailure { Timber.w(it, "Re-download after clearing the cache failed; it will load on the next refresh") }
 }

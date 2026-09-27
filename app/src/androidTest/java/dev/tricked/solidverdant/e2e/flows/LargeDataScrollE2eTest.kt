@@ -17,11 +17,15 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
+import androidx.compose.ui.test.waitUntilDoesNotExist
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
 import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.TestTags
+import dev.tricked.solidverdant.e2e.robots.openCalendarFromMenu
+import dev.tricked.solidverdant.e2e.robots.openMenuDestination
+import dev.tricked.solidverdant.e2e.robots.openReviewFromSettings
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -44,23 +48,28 @@ class LargeDataScrollE2eTest {
         e2e.launchApp()
 
         e2e.composeRule.waitForTag(TestTags.TRACK_HISTORY_LIST)
+        // The next entry's project picker lives in the start-timer sheet behind the + button.
+        e2e.composeRule.tapTag(TestTags.TRACK_TIMER_FAB)
+        e2e.composeRule.tapTag(TestTags.TRACK_START_TIMER_ACTION)
         e2e.composeRule.tapTag("project_task_selector")
         e2e.composeRule.waitForTag("project_task_list")
         e2e.composeRule.swipeTag("project_task_list", times = 12)
         Espresso.pressBack()
         e2e.composeRule.waitForTag("project_task_selector")
+        Espresso.pressBack()
+        e2e.composeRule.waitUntilDoesNotExist(hasTestTag(TestTags.TRACK_START_TIMER_SHEET), 30_000)
         e2e.composeRule.swipeTag(TestTags.TRACK_HISTORY_LIST, times = 12)
 
-        e2e.composeRule.tapTag("main_nav_calendar")
+        e2e.composeRule.openCalendarFromMenu(timeoutMs = 30_000)
         e2e.composeRule.waitForTag(TestTags.CALENDAR_WEEK_GRID)
         e2e.composeRule.swipeTag(TestTags.CALENDAR_WEEK_GRID, times = 8)
 
-        e2e.composeRule.tapTag("main_nav_stats")
+        e2e.composeRule.openMenuDestination(TestTags.NAV_DASHBOARD, timeoutMs = 30_000)
         e2e.composeRule.waitForTag(TestTags.STATS_SCREEN)
         e2e.composeRule.waitForScrollable()
         e2e.composeRule.swipeScrollable(times = 8)
 
-        e2e.composeRule.tapTag("main_nav_review")
+        e2e.composeRule.openReviewFromSettings(timeoutMs = 30_000)
         e2e.composeRule.waitForTag("review_more_actions")
         e2e.composeRule.swipeScrollableIfPresent(times = 8)
 
@@ -69,10 +78,9 @@ class LargeDataScrollE2eTest {
         e2e.composeRule.waitForTag("templates_list")
         e2e.composeRule.swipeScrollable(times = 12)
 
-        // The settings drawer is itself a long, independently scrollable surface.
-        e2e.composeRule.tapTag("main_nav_track")
-        e2e.composeRule.tapTag(TestTags.TRACK_SETTINGS_BUTTON)
-        e2e.composeRule.waitForTag(TestTags.TRACK_LOGOUT_BUTTON)
+        // Settings is itself a long, independently scrollable surface.
+        e2e.composeRule.openMenuDestination(TestTags.NAV_SETTINGS, timeoutMs = 30_000)
+        e2e.composeRule.waitForTag(TestTags.SETTINGS_LOGOUT_BUTTON)
         e2e.composeRule.swipeScrollable(times = 8)
     }
 }

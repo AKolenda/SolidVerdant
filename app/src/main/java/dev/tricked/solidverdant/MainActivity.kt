@@ -20,12 +20,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
@@ -40,18 +42,22 @@ import dev.tricked.solidverdant.ui.auth.AuthViewModel
 import dev.tricked.solidverdant.ui.calendar.CalendarScreen
 import dev.tricked.solidverdant.ui.components.AppStatusOverlay
 import dev.tricked.solidverdant.ui.login.LoginScreen
+import dev.tricked.solidverdant.ui.navigation.MainMenuHeader
 import dev.tricked.solidverdant.ui.navigation.MainNavHost
 import dev.tricked.solidverdant.ui.navigation.ReviewRoutes
 import dev.tricked.solidverdant.ui.navigation.Screen
 import dev.tricked.solidverdant.ui.navigation.SettingsRoutes
 import dev.tricked.solidverdant.ui.navigation.SyncRoutes
 import dev.tricked.solidverdant.ui.navigation.calendarDateFromUri
-import dev.tricked.solidverdant.ui.review.ReviewBadgeViewModel
+import dev.tricked.solidverdant.ui.navigation.navigateToMenuDestination
 import dev.tricked.solidverdant.ui.review.ReviewScreen
+import dev.tricked.solidverdant.ui.settings.SettingsScreen
 import dev.tricked.solidverdant.ui.statistics.StatisticsScreen
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 import dev.tricked.solidverdant.ui.tracking.TrackingScreen
 import dev.tricked.solidverdant.ui.tracking.TrackingViewModel
+import dev.tricked.solidverdant.ui.tracking.entryDraft
+import dev.tricked.solidverdant.ui.tracking.withoutIdleDraft
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -87,8 +93,15 @@ open class MainActivity : ComponentActivity() {
         }
         enableEdgeToEdge()
 
-        // Handle deep links on creation
-        handleIntent(intent)
+        // Handle the launch intent once. A recreated activity (rotation, process restore) gets the
+        // same intent again: handling it again would switch organization past the running-timer
+        // guard, jump the calendar again and resubmit a used OAuth code. Requests not yet acted on
+        // come back from the saved state instead.
+        if (savedInstanceState == null) {
+            handleIntent(intent)
+        } else {
+            restorePendingRequests(savedInstanceState)
+        }
 
         setContent {
             val initialTheme by startupTheme.collectAsState()
@@ -135,6 +148,21 @@ open class MainActivity : ComponentActivity() {
         handleIntent(intent)
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        handoffOrganizationId?.let { outState.putString(STATE_HANDOFF_ORGANIZATION_ID, it) }
+        outState.putBoolean(STATE_EDIT_ACTIVE_ENTRY, editActiveEntryRequested)
+        pendingReviewRoute?.let { outState.putString(STATE_REVIEW_ROUTE, it) }
+        pendingCalendarDate?.let { outState.putString(STATE_CALENDAR_DATE, it.toString()) }
+    }
+
+    private fun restorePendingRequests(state: Bundle) {
+        handoffOrganizationId = state.getString(STATE_HANDOFF_ORGANIZATION_ID)
+        editActiveEntryRequested = state.getBoolean(STATE_EDIT_ACTIVE_ENTRY, false)
+        pendingReviewRoute = state.getString(STATE_REVIEW_ROUTE)
+        pendingCalendarDate = state.getString(STATE_CALENDAR_DATE)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    }
+
     override fun onStart() {
         super.onStart()
 
@@ -159,24 +187,14 @@ open class MainActivity : ComponentActivity() {
         super.onStop()
     }
 
-    /**
-     * Handle incoming intents (including deep links)
-     */
+    /** Handle incoming intents (including deep links). */
     private fun handleIntent(intent: Intent?) {
-        handoffOrganizationId = intent?.getStringExtra(EXTRA_HANDOFF_ORGANIZATION_ID)
-        if (intent?.getBooleanExtra(EXTRA_EDIT_ACTIVE_ENTRY, false) == true) {
-            editActiveEntryRequested = true
-            intent.removeExtra(EXTRA_EDIT_ACTIVE_ENTRY)
-        }
-        intent?.getStringExtra(ReminderWorker.EXTRA_OPEN_REVIEW_ROUTE)?.let { route ->
-            if (route in setOf(ReviewRoutes.END_OF_DAY, ReviewRoutes.REMINDER_SETTINGS, ReviewRoutes.MANAGE_TEMPLATES)) {
-                pendingReviewRoute = route
-            }
-            intent.removeExtra(ReminderWorker.EXTRA_OPEN_REVIEW_ROUTE)
-        }
-        intent?.data?.let { uri ->
-            handleDeepLink(uri)
-        }
+        intent ?: return
+        val requests = takeLaunchRequests(intent)
+        handoffOrganizationId = requests.handoffOrganizationId
+        if (requests.editActiveEntry) editActiveEntryRequested = true
+        requests.reviewRoute?.let { pendingReviewRoute = it }
+        requests.deepLink?.let(::handleDeepLink)
     }
 
     /** Handle incoming app deep links without logging URI contents. */
@@ -197,7 +215,37 @@ open class MainActivity : ComponentActivity() {
         const val RESUME_REFRESH_THRESHOLD_MS = 30_000L
         const val EXTRA_HANDOFF_ORGANIZATION_ID = "handoff_organization_id"
         const val EXTRA_EDIT_ACTIVE_ENTRY = "edit_active_entry"
+        private const val STATE_HANDOFF_ORGANIZATION_ID = "state_handoff_organization_id"
+        private const val STATE_EDIT_ACTIVE_ENTRY = "state_edit_active_entry"
+        private const val STATE_REVIEW_ROUTE = "state_review_route"
+        private const val STATE_CALENDAR_DATE = "state_calendar_date"
     }
+}
+
+/** The one-off requests an intent to [MainActivity] carries. */
+internal data class LaunchRequests(
+    val handoffOrganizationId: String?,
+    val editActiveEntry: Boolean,
+    val reviewRoute: String?,
+    val deepLink: Uri?,
+)
+
+/**
+ * Read [intent]'s requests and remove them from it, so the activity's intent never carries a
+ * request that was already acted on: an OAuth code is single-use, a calendar link a one-off jump,
+ * and a handoff must not switch organization again later.
+ */
+internal fun takeLaunchRequests(intent: Intent): LaunchRequests {
+    val handoffOrganizationId = intent.getStringExtra(MainActivity.EXTRA_HANDOFF_ORGANIZATION_ID)
+    intent.removeExtra(MainActivity.EXTRA_HANDOFF_ORGANIZATION_ID)
+    val editActiveEntry = intent.getBooleanExtra(MainActivity.EXTRA_EDIT_ACTIVE_ENTRY, false)
+    intent.removeExtra(MainActivity.EXTRA_EDIT_ACTIVE_ENTRY)
+    val reviewRoute = intent.getStringExtra(ReminderWorker.EXTRA_OPEN_REVIEW_ROUTE)
+        ?.takeIf { it in setOf(ReviewRoutes.END_OF_DAY, ReviewRoutes.REMINDER_SETTINGS, ReviewRoutes.MANAGE_TEMPLATES) }
+    intent.removeExtra(ReminderWorker.EXTRA_OPEN_REVIEW_ROUTE)
+    val deepLink = intent.data
+    intent.data = null
+    return LaunchRequests(handoffOrganizationId, editActiveEntry, reviewRoute, deepLink)
 }
 
 /**
@@ -220,7 +268,16 @@ fun SolidVerdantApp(
     val authUiState by authViewModel.uiState.collectAsState()
     val configState by authViewModel.configState.collectAsState()
     val authState by authViewModel.authState.collectAsState()
-    val trackingUiState by trackingViewModel.uiState.collectAsState()
+    // Read lower down, in the destinations. Typing into the start-timer sheet only changes its
+    // draft: the state everything else sees stays equal, so the shell, the navigation host and the
+    // Time Tracker skip recomposition, and only the form reads [entryDraft].
+    val trackingUiStateSource = trackingViewModel.uiState.collectAsState()
+    val trackingUiState by remember(trackingUiStateSource) {
+        derivedStateOf(structuralEqualityPolicy()) { trackingUiStateSource.value.withoutIdleDraft() }
+    }
+    val entryDraft = remember(trackingUiStateSource) {
+        derivedStateOf(structuralEqualityPolicy()) { trackingUiStateSource.value.entryDraft() }
+    }
     val alwaysShowNotifications by trackingViewModel.alwaysShowNotifications.collectAsState(initial = false)
     val appTheme by trackingViewModel.appTheme.collectAsState(initial = AppThemeMode.SYSTEM)
     val optimisticRefresh by trackingViewModel.optimisticRefresh.collectAsState(initial = true)
@@ -239,14 +296,20 @@ fun SolidVerdantApp(
     }
 
     LaunchedEffect(handoffOrganizationId, authUiState.memberships) {
-        handoffOrganizationId?.let { organizationId ->
-            authUiState.memberships
-                .firstOrNull { it.organizationId == organizationId }
-                ?.let {
-                    authViewModel.selectMembership(it)
-                    onHandoffConsumed()
-                }
-        }
+        val organizationId = handoffOrganizationId ?: return@LaunchedEffect
+        val membership = authUiState.memberships.firstOrNull { it.organizationId == organizationId } ?: return@LaunchedEffect
+        val tracking = trackingViewModel.uiState.value
+        // Like the menu and Settings: switching organization while a timer runs or is paused would
+        // orphan it, so a handoff then keeps the current organization.
+        if (!tracking.isTracking && !tracking.isPaused) authViewModel.selectMembership(membership)
+        onHandoffConsumed()
+    }
+
+    // Show the organization's local history and full catalogue from Room right away; the network
+    // refresh below may wait for account revalidation.
+    LaunchedEffect(authUiState.currentMembership?.id, snapshotHydrated) {
+        val membership = authUiState.currentMembership ?: return@LaunchedEffect
+        if (snapshotHydrated) trackingViewModel.observeLocalData(membership.organizationId, membership.id)
     }
 
     // Load all tracking data when user and membership are available
@@ -273,11 +336,6 @@ fun SolidVerdantApp(
         authState == AuthState.LoggedIn -> {
             val navController = rememberNavController()
             val currentMembership = authUiState.currentMembership
-            val reviewBadgeViewModel: ReviewBadgeViewModel = hiltViewModel()
-            LaunchedEffect(currentMembership?.organizationId) {
-                reviewBadgeViewModel.setOrganization(currentMembership?.organizationId)
-            }
-            val inboxBadgeCount by reviewBadgeViewModel.openIssueCount.collectAsState()
             LaunchedEffect(pendingReviewRoute, currentMembership?.organizationId) {
                 val route = pendingReviewRoute
                 if (route != null && currentMembership != null) {
@@ -289,19 +347,35 @@ fun SolidVerdantApp(
             }
             LaunchedEffect(calendarInitialDate, currentMembership?.organizationId) {
                 if (calendarInitialDate != null && currentMembership != null) {
-                    navController.navigate(Screen.Calendar.route) {
-                        popUpTo(Screen.Track.route) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
+                    navController.navigateToMenuDestination(Screen.Calendar.route)
                 }
+            }
+            // "Adjust end time" from the notification opens the running entry in Time Tracker, so
+            // go there now instead of leaving the request for whenever Time Tracker is next shown.
+            LaunchedEffect(editActiveEntryRequested) {
+                if (editActiveEntryRequested) navController.navigateToMenuDestination(Screen.Track.route)
             }
             MainNavHost(
                 navController = navController,
-                inboxBadgeCount = inboxBadgeCount,
                 onPrivacyLogout = { authViewModel.logout() },
+                menuHeader = {
+                    MainMenuHeader(
+                        userName = authUiState.user?.name,
+                        userEmail = authUiState.user?.email,
+                        organizationName = currentMembership?.organization?.name,
+                        memberships = authUiState.memberships,
+                        currentMembershipId = currentMembership?.id,
+                        // Switching organization while a timer runs would orphan the running entry.
+                        canSwitchOrganization = authUiState.memberships.size > 1 &&
+                            !trackingUiState.isTracking &&
+                            !trackingUiState.isPaused,
+                        onMembershipChange = authViewModel::selectMembership,
+                    )
+                },
                 reviewContent = {
+                    // Opened from Settings or a review notification, so it goes back to its opener.
                     ReviewScreen(
+                        onBack = { navController.popBackStack() },
                         onOpenReminderSettings = {
                             navController.navigate(ReviewRoutes.REMINDER_SETTINGS)
                         },
@@ -316,30 +390,13 @@ fun SolidVerdantApp(
                 trackContent = {
                     TrackingScreen(
                         user = authUiState.user,
-                        memberships = authUiState.memberships,
                         currentMembership = authUiState.currentMembership,
-                        serverEndpoint = configState.endpoint,
-                        clientId = configState.clientId,
                         uiState = trackingUiState,
                         elapsedSeconds = trackingViewModel.elapsedSeconds,
-                        alwaysShowNotifications = alwaysShowNotifications,
-                        appTheme = appTheme,
-                        optimisticRefresh = optimisticRefresh,
-                        liveUpdateEnabled = liveUpdateEnabled,
                         autoClearEntryFieldsAfterStop = autoClearEntryFieldsAfterStop,
-                        clearDescriptionAfterStop = clearDescriptionAfterStop,
                         longTimerHours = longTimerHours,
                         editActiveEntryRequested = editActiveEntryRequested,
                         onEditActiveEntryConsumed = onEditActiveEntryConsumed,
-                        onAlwaysShowNotificationsChange = { enabled ->
-                            trackingViewModel.setAlwaysShowNotifications(enabled)
-                        },
-                        onAppThemeChange = trackingViewModel::setAppTheme,
-                        onOptimisticRefreshChange = trackingViewModel::setOptimisticRefresh,
-                        onLiveUpdateEnabledChange = trackingViewModel::setLiveUpdateEnabled,
-                        onAutoClearEntryFieldsAfterStopChange = trackingViewModel::setAutoClearEntryFieldsAfterStop,
-                        onClearDescriptionAfterStopChange = trackingViewModel::setClearDescriptionAfterStop,
-                        onLongTimerHoursChange = trackingViewModel::setLongTimerHours,
                         onRefresh = {
                             authUiState.currentMembership?.let { membership ->
                                 trackingViewModel.loadAllData(
@@ -349,10 +406,6 @@ fun SolidVerdantApp(
                                 )
                             }
                         },
-                        onLogout = {
-                            authViewModel.logout()
-                        },
-                        onMembershipChange = authViewModel::selectMembership,
                         onStartTracking = {
                             authUiState.currentMembership?.let { membership ->
                                 authUiState.user?.let { user ->
@@ -364,8 +417,11 @@ fun SolidVerdantApp(
                                 }
                             }
                         },
-                        onStopTracking = trackingViewModel::stopTimeEntry,
-                        onPauseTracking = trackingViewModel::pauseTimeEntry,
+                        onStopTracking = { trackingViewModel.stopTimeEntry() },
+                        onPauseTracking = { trackingViewModel.pauseTimeEntry() },
+                        onStopTrackingWithEdits = { edits -> trackingViewModel.stopTimeEntry(edits) },
+                        onPauseTrackingWithEdits = { edits -> trackingViewModel.pauseTimeEntry(edits) },
+                        entryDraft = { entryDraft.value },
                         onResumeTracking = {
                             authUiState.currentMembership?.let { membership ->
                                 authUiState.user?.let { user ->
@@ -392,9 +448,6 @@ fun SolidVerdantApp(
                         },
                         onBillableChange = { billable ->
                             trackingViewModel.updateBillable(billable)
-                        },
-                        onUpdateCurrentEntry = {
-                            trackingViewModel.updateCurrentTimeEntry()
                         },
                         onUpdatePastEntry = {
                                 entry: TimeEntry,
@@ -462,14 +515,56 @@ fun SolidVerdantApp(
                         onOpenSyncCenter = {
                             navController.navigate(SyncRoutes.SYNC_CENTER)
                         },
-                        onOpenPrivacy = {
-                            navController.navigate(SettingsRoutes.PRIVACY)
+                        onContinueEntry = { entry ->
+                            authUiState.currentMembership?.let { membership ->
+                                authUiState.user?.let { user ->
+                                    trackingViewModel.continueEntry(
+                                        entry = entry,
+                                        organizationId = membership.organizationId,
+                                        memberId = membership.id,
+                                        userId = user.id,
+                                    )
+                                }
+                            }
                         },
                         onLoadMoreEntries = trackingViewModel::loadMoreTimeEntries,
                         onLoadNewerEntries = trackingViewModel::loadNewerTimeEntries,
                         onJumpToDate = trackingViewModel::jumpToHistoryDate,
                         onHistoryJumpConsumed = trackingViewModel::consumeHistoryJump,
                         onClearError = trackingViewModel::clearError,
+                    )
+                },
+                settingsContent = {
+                    SettingsScreen(
+                        user = authUiState.user,
+                        memberships = authUiState.memberships,
+                        currentMembership = authUiState.currentMembership,
+                        canSwitchOrganization = authUiState.memberships.size > 1 &&
+                            !trackingUiState.isTracking &&
+                            !trackingUiState.isPaused,
+                        serverEndpoint = configState.endpoint,
+                        clientId = configState.clientId,
+                        appTheme = appTheme,
+                        alwaysShowNotifications = alwaysShowNotifications,
+                        optimisticRefresh = optimisticRefresh,
+                        liveUpdateEnabled = liveUpdateEnabled,
+                        autoClearEntryFieldsAfterStop = autoClearEntryFieldsAfterStop,
+                        clearDescriptionAfterStop = clearDescriptionAfterStop,
+                        longTimerHours = longTimerHours,
+                        onMembershipChange = authViewModel::selectMembership,
+                        onAppThemeChange = trackingViewModel::setAppTheme,
+                        onAlwaysShowNotificationsChange = trackingViewModel::setAlwaysShowNotifications,
+                        onOptimisticRefreshChange = trackingViewModel::setOptimisticRefresh,
+                        onLiveUpdateEnabledChange = trackingViewModel::setLiveUpdateEnabled,
+                        onAutoClearEntryFieldsAfterStopChange = trackingViewModel::setAutoClearEntryFieldsAfterStop,
+                        onClearDescriptionAfterStopChange = trackingViewModel::setClearDescriptionAfterStop,
+                        onLongTimerHoursChange = trackingViewModel::setLongTimerHours,
+                        onOpenReview = { navController.navigate(Screen.Review.route) },
+                        onOpenReminderSettings = { navController.navigate(ReviewRoutes.REMINDER_SETTINGS) },
+                        onOpenManageTemplates = { navController.navigate(ReviewRoutes.MANAGE_TEMPLATES) },
+                        onOpenSyncCenter = { navController.navigate(SyncRoutes.SYNC_CENTER) },
+                        onOpenPrivacy = { navController.navigate(SettingsRoutes.PRIVACY) },
+                        onLogout = authViewModel::logout,
                     )
                 },
                 calendarContent = {
@@ -574,9 +669,22 @@ fun SolidVerdantApp(
                                 )
                             },
                             onDeleteEntry = trackingViewModel::deleteTimeEntry,
-                            onDuplicateEntry = trackingViewModel::duplicateTimeEntry,
-                            onSplitEntry = trackingViewModel::splitTimeEntry,
+                            // The Calendar opens its own editor; do not leave the Time Tracker a
+                            // request to open the copy the next time it is shown.
+                            onDuplicateEntry = { entryId -> trackingViewModel.duplicateTimeEntry(entryId, openEditor = false) },
+                            onSplitEntry = { entryId, atIso -> trackingViewModel.splitTimeEntry(entryId, atIso, openEditor = false) },
                             onStopEntry = { trackingViewModel.stopTimeEntry() },
+                            // Stops a running or ends a paused timer first, as the history play button does.
+                            onContinueEntry = { entry ->
+                                authUiState.user?.let { user ->
+                                    trackingViewModel.continueEntry(
+                                        entry = entry,
+                                        organizationId = currentMembership.organizationId,
+                                        memberId = currentMembership.id,
+                                        userId = user.id,
+                                    )
+                                }
+                            },
                             onUndoDelete = trackingViewModel::undoDelete,
                             onRetrySyncEntry = trackingViewModel::retrySync,
                             onDiscardFailedSync = trackingViewModel::discardFailedSync,

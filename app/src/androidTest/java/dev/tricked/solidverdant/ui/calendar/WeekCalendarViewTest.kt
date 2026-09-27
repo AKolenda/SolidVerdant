@@ -71,7 +71,6 @@ class WeekCalendarViewTest {
                     onCreateRange = { selected = it },
                     onPrevious = {},
                     onNext = {},
-                    onToday = {},
                     projects = emptyList(),
                 )
             }
@@ -107,7 +106,6 @@ class WeekCalendarViewTest {
                     onCreateRange = { selected = it },
                     onPrevious = {},
                     onNext = {},
-                    onToday = {},
                     projects = emptyList(),
                 )
             }
@@ -153,7 +151,6 @@ class WeekCalendarViewTest {
                     onEntryClick = {},
                     onPrevious = {},
                     onNext = {},
-                    onToday = {},
                     projects = listOf(Project(id = "project-1", name = "Project", color = "#123456", clientId = "client-1")),
                     clients = listOf(Client(id = "client-1", name = "Client")),
                     tasks = listOf(
@@ -243,7 +240,6 @@ class WeekCalendarViewTest {
                     onMoveEntry = { source, start, end -> moved = Triple(source, start, end) },
                     onPrevious = {},
                     onNext = {},
-                    onToday = {},
                     projects = emptyList(),
                 )
             }
@@ -252,6 +248,7 @@ class WeekCalendarViewTest {
         composeRule.onNodeWithTag("week-entry-${entry.id}").performScrollTo().performTouchInput {
             gestureHeight = height
             down(center)
+            advanceEventTime(viewConfiguration.longPressTimeoutMillis + LONG_PRESS_MARGIN_MS)
             // Use the rendered block height instead of a raw pixel distance. Instrumentation
             // emulators can use different densities, but one entry height is always one hour.
             moveBy(Offset(0f, -height.toFloat()), delayMillis = 250)
@@ -295,7 +292,6 @@ class WeekCalendarViewTest {
                     onMoveEntry = { source, start, end -> moved = Triple(source, start, end) },
                     onPrevious = {},
                     onNext = {},
-                    onToday = {},
                     projects = emptyList(),
                 )
             }
@@ -304,6 +300,7 @@ class WeekCalendarViewTest {
         composeRule.onNodeWithTag("week-entry-${entry.id}").performScrollTo().performTouchInput {
             gestureHeight = height
             down(Offset(center.x, bottom - 2f))
+            advanceEventTime(viewConfiguration.longPressTimeoutMillis + LONG_PRESS_MARGIN_MS)
             moveBy(Offset(0f, -height.toFloat()), delayMillis = 250)
             up()
         }
@@ -325,7 +322,8 @@ class WeekCalendarViewTest {
             start = "2026-07-06T09:00:00Z",
             end = "2026-07-06T10:00:00Z",
         )
-        var longPressed: String? = null
+        var clicked: String? = null
+        var moved: String? = null
         composeRule.setContent {
             MaterialTheme {
                 WeekCalendarView(
@@ -338,18 +336,23 @@ class WeekCalendarViewTest {
                         bucketsByDate = mapOf(date to DayBucket(date, listOf(entry), 3_600)),
                     ),
                     onSelectDate = {},
-                    onEntryClick = {},
-                    onEntryLongPress = { longPressed = it.id },
+                    onEntryClick = { clicked = it.id },
+                    onMoveEntry = { moving, _, _ -> moved = moving.id },
                     onPrevious = {},
                     onNext = {},
-                    onToday = {},
                     projects = emptyList(),
                 )
             }
         }
 
+        // A hold lifts the entry for dragging; releasing in place neither opens it nor moves it.
         composeRule.onNodeWithTag("week-entry-${entry.id}").performScrollTo().performTouchInput { longClick() }
 
-        composeRule.runOnIdle { assertEquals(entry.id, longPressed) }
+        composeRule.runOnIdle {
+            assertEquals(null, clicked)
+            assertEquals(null, moved)
+        }
     }
 }
+
+private const val LONG_PRESS_MARGIN_MS = 100L

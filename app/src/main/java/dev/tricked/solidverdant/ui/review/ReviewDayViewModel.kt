@@ -18,6 +18,7 @@ import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.domain.time.clipTimeEntryToLocalDay
 import dev.tricked.solidverdant.domain.time.isCompletedTimeEntry
 import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
+import dev.tricked.solidverdant.domain.time.isWorkTimeEntry
 import dev.tricked.solidverdant.reminder.currentOrganizationIdOrNull
 import dev.tricked.solidverdant.sync.SyncScheduler
 import dev.tricked.solidverdant.util.Clock
@@ -35,6 +36,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
@@ -210,9 +212,13 @@ class ReviewDayViewModel @Inject constructor(
         markHandled(reviewItemKey(ReviewItemType.RUNNING_TIMER, entry, entry.id))
     }
 
+    /** The end time the "adjust end" picker opens at: now on the account's clock, not the device's. */
+    fun suggestedEndTime(): LocalTime = Instant.ofEpochMilli(clock.nowMs()).atZone(zone).toLocalTime()
+
     /**
-     * Adjust the running entry's end to today at [hour]:[minute] local time. The end must be after
-     * the start and no later than now; otherwise a message is shown and nothing changes.
+     * End the running entry at [hour]:[minute] in the account zone, on the first such time after its
+     * start: an overnight timer started yesterday evening can end yesterday at 23:00 or today at
+     * 07:00. The end must not be in the future; otherwise a message is shown and nothing changes.
      */
     fun adjustEndTime(hour: Int, minute: Int) = viewModelScope.launch {
         val entry = uiState.value.runningEntry ?: return@launch
@@ -222,8 +228,8 @@ class ReviewDayViewModel @Inject constructor(
             return@launch
         }
         val now = Instant.ofEpochMilli(clock.nowMs())
-        val endInstant = now.atZone(zone).toLocalDate().atTime(hour, minute).atZone(zone).toInstant()
-        if (!endInstant.isAfter(startInstant) || endInstant.isAfter(now)) {
+        val endInstant = resolveEndAfterStart(startInstant, LocalTime.of(hour, minute), zone, now)
+        if (endInstant == null) {
             _message.value = R.string.review_msg_invalid_end
             return@launch
         }
@@ -324,21 +330,37 @@ class ReviewDayViewModel @Inject constructor(
             val uncategorized: List<TimeEntry>,
         )
 
-        /** Facts for one local day, clipped at its actual timezone-aware midnight boundaries. */
+        /**
+         * Facts for one local day, clipped at its actual timezone-aware midnight boundaries. Breaks
+         * are not tracked work: they count neither towards the totals nor as uncategorized time,
+         * but they do cover the time they span, so a lunch break is not reported as a gap.
+         */
         internal fun buildDayFacts(entries: List<TimeEntry>, day: LocalDate, zone: ZoneId, now: Instant): DayFacts {
             val slices = entries.mapNotNull { entry ->
                 clipTimeEntryToLocalDay(entry, day, zone, now)?.let { slice -> entry to slice }
             }
+            val work = slices.filter { (entry, _) -> isWorkTimeEntry(entry) }
             return DayFacts(
-                entries = slices.map { it.first },
-                totalSeconds = slices.sumOf { it.second.seconds },
-                billableSeconds = slices.sumOf { (entry, slice) ->
+                entries = work.map { it.first },
+                totalSeconds = work.sumOf { it.second.seconds },
+                billableSeconds = work.sumOf { (entry, slice) ->
                     if (entry.billable) slice.seconds else 0L
                 },
                 intervals = slices.map { (_, slice) -> slice.start.epochSecond..slice.endExclusive.epochSecond },
-                uncategorized = slices.map { it.first }
+                uncategorized = work.map { it.first }
                     .filter { isCompletedTimeEntry(it) && it.projectId.isNullOrBlank() },
             )
+        }
+
+        /**
+         * The first [time] of day (in [zone]) after [start], or null when that moment is still in
+         * the future. DST gaps resolve forward, as [java.time.ZonedDateTime] does.
+         */
+        internal fun resolveEndAfterStart(start: Instant, time: LocalTime, zone: ZoneId, now: Instant): Instant? {
+            val startDate = start.atZone(zone).toLocalDate()
+            val sameDay = startDate.atTime(time).atZone(zone).toInstant()
+            val end = if (sameDay.isAfter(start)) sameDay else startDate.plusDays(1).atTime(time).atZone(zone).toInstant()
+            return end.takeUnless { it.isAfter(now) }
         }
 
         /**

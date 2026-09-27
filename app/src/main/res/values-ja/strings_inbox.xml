@@ -82,9 +82,6 @@
     <string name="inbox_settings_check_missing_description">説明未設定</string>
     <string name="inbox_settings_check_missing_tags">タグ未設定</string>
     <string name="inbox_settings_check_long">長い項目</string>
-    <string name="inbox_settings_done">完了</string>
-    <string name="inbox_settings_decrease">減らす</string>
-    <string name="inbox_settings_increase">増やす</string>
     <string name="inbox_minutes_value">%1$d 分</string>
     <string name="inbox_hours_value">%1$d 時間</string>
 

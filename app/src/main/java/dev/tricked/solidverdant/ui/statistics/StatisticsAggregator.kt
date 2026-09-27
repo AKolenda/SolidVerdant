@@ -23,7 +23,18 @@ enum class TrendGranularity { DAY, WEEK }
 /** [projectName] is null when the entry has no project or its project is missing from the catalogue. */
 data class ProjectTotal(val projectId: String?, val projectName: String?, val colorHex: String, val seconds: Long)
 
-data class TrendBucket(val label: String, val startDate: LocalDate, val seconds: Long)
+/**
+ * One project's share of a [TrendBucket]; [projectId] null is the "no project" bucket. [isOther]
+ * marks the segment [StatisticsAggregator.projectOverview] folds the smaller projects into.
+ */
+data class ProjectSegment(val projectId: String?, val colorHex: String, val seconds: Long, val isOther: Boolean = false)
+
+/**
+ * One bar of the trend chart. [segments] stack the bucket's non-zero time by project, ordered like
+ * [StatisticsSummary.perProject] (range total descending) so a project sits at the same height in
+ * every bar; their seconds sum to [seconds].
+ */
+data class TrendBucket(val label: String, val startDate: LocalDate, val seconds: Long, val segments: List<ProjectSegment> = emptyList())
 
 data class StatisticsSummary(
     val totalSeconds: Long,
@@ -34,6 +45,26 @@ data class StatisticsSummary(
     val perProject: List<ProjectTotal>,
     val trend: List<TrendBucket>,
 )
+
+/** Projects the Dashboard names in its legend and breakdown; smaller ones fold into "Other". */
+const val DASHBOARD_TOP_PROJECTS = 6
+
+/** Estimate rows the Dashboard shows, most urgent first. */
+const val DASHBOARD_TOP_ESTIMATES = 6
+
+/**
+ * The Dashboard's per-project view: the [top] projects by time, the remaining [otherProjectIds]
+ * folded into one [otherSeconds] total, and the [trend] with the same folding so the chart's
+ * colours match the legend. Without folding, [top] is every project and [trend] is unchanged.
+ */
+data class ProjectOverview(
+    val top: List<ProjectTotal>,
+    val otherSeconds: Long,
+    val otherProjectIds: Set<String?>,
+    val trend: List<TrendBucket>,
+) {
+    val hasOther: Boolean get() = otherProjectIds.isNotEmpty()
+}
 
 /** Fraction at/above which a project is flagged as approaching its estimate (but not yet over). */
 private const val NEAR_THRESHOLD = 0.9f
@@ -68,6 +99,8 @@ data class DrillDownRow(
     val startDate: LocalDate,
     val seconds: Long,
     val billable: Boolean,
+    /** Who logged the entry, set when a list holds more than one person's time. */
+    val memberName: String? = null,
 )
 
 object StatisticsAggregator {
@@ -104,6 +137,30 @@ object StatisticsAggregator {
     }
 
     /**
+     * Keeps the [limit] projects with the most time and folds the rest, in every trend bucket too,
+     * into one "Other" total. A single leftover project is shown by name instead: folding it would
+     * hide its name without saving a row.
+     */
+    fun projectOverview(summary: StatisticsSummary, limit: Int = DASHBOARD_TOP_PROJECTS): ProjectOverview {
+        if (summary.perProject.size <= limit + 1) {
+            return ProjectOverview(summary.perProject, otherSeconds = 0, otherProjectIds = emptySet(), trend = summary.trend)
+        }
+        val top = summary.perProject.take(limit)
+        val rest = summary.perProject.drop(limit)
+        val topIds = top.mapTo(HashSet()) { it.projectId }
+        val trend = summary.trend.map { bucket ->
+            val (kept, folded) = bucket.segments.partition { it.projectId in topIds }
+            if (folded.isEmpty()) {
+                bucket
+            } else {
+                val other = ProjectSegment(projectId = null, colorHex = "", seconds = folded.sumOf { it.seconds }, isOther = true)
+                bucket.copy(segments = kept + other)
+            }
+        }
+        return ProjectOverview(top, rest.sumOf { it.seconds }, rest.mapTo(HashSet()) { it.projectId }, trend)
+    }
+
+    /**
      * Budget/progress for every in-scope project that carries a positive Solidtime estimate.
      *
      * Uses the server's authoritative project-level [Project.spentTime] vs [Project.estimatedTime]
@@ -114,10 +171,20 @@ object StatisticsAggregator {
      * section's scope stays consistent with the by-project view above it; the entry-level task/tag
      * dimensions have no project-level meaning here and are ignored. Sorted over-budget first (most
      * urgent), then by consumed fraction descending, then by name for a stable order.
+     *
+     * The Dashboard passes [relevantProjectIds], the projects with time in the selected range after
+     * every filter, so the section follows the range instead of listing every estimated project in
+     * the organization, and caps it at the [limit] most urgent.
      */
-    fun projectEstimateProgress(projects: List<Project>, filters: StatFilters): List<EstimateProgress> = projects.asSequence()
+    fun projectEstimateProgress(
+        projects: List<Project>,
+        filters: StatFilters,
+        relevantProjectIds: Set<String>? = null,
+        limit: Int = Int.MAX_VALUE,
+    ): List<EstimateProgress> = projects.asSequence()
         .filter { !it.isArchived }
         .filter { (it.estimatedTime ?: 0) > 0 }
+        .filter { relevantProjectIds == null || it.id in relevantProjectIds }
         .filter { p ->
             val projectOk = filters.projectIds.isEmpty() || p.id in filters.projectIds
             val clientOk = filters.clientIds.isEmpty() || (p.clientId != null && p.clientId in filters.clientIds)
@@ -142,6 +209,7 @@ object StatisticsAggregator {
                 .thenByDescending { it.fraction }
                 .thenBy { it.name },
         )
+        .take(limit)
         .toList()
 
     /** In-range contribution (seconds) of [e], or null when it does not overlap the window. */
@@ -181,6 +249,45 @@ object StatisticsAggregator {
                 startDate = daily.first().first,
                 seconds = daily.sumOf { it.second },
                 billable = e.billable,
+            )
+        }.sortedWith(
+            compareByDescending<DrillDownRow> { it.startDate }.thenByDescending { it.seconds },
+        )
+    }
+
+    /**
+     * Rows for whole entries, not clipped to any range: an estimate's project history. Running
+     * entries have no length yet and are left out. [memberNames] maps a user id to the name shown
+     * on its rows. Ordered like [drillDown]: newest day first, then longest first.
+     */
+    fun historyRows(
+        entries: List<TimeEntry>,
+        projects: List<Project>,
+        tasks: List<Task>,
+        zone: ZoneId,
+        memberNames: Map<String, String> = emptyMap(),
+    ): List<DrillDownRow> {
+        val projectById = projects.associateBy { it.id }
+        val taskById = tasks.associateBy { it.id }
+        return entries.mapNotNull { e ->
+            val start = parseTimeEntryInstant(e.start) ?: return@mapNotNull null
+            val seconds = when {
+                e.end != null -> parseTimeEntryInstant(e.end)?.let { it.epochSecond - start.epochSecond } ?: return@mapNotNull null
+                e.duration != null && e.duration > 0 -> e.duration.toLong()
+                else -> return@mapNotNull null
+            }
+            val project = e.projectId?.let { projectById[it] }
+            DrillDownRow(
+                entryId = e.id,
+                description = e.description,
+                projectId = e.projectId,
+                projectName = project?.name,
+                colorHex = project?.color ?: NO_PROJECT_COLOR,
+                taskName = e.taskId?.let { taskById[it]?.name },
+                startDate = start.atZone(zone).toLocalDate(),
+                seconds = seconds.coerceAtLeast(0),
+                billable = e.billable,
+                memberName = memberNames[e.userId],
             )
         }.sortedWith(
             compareByDescending<DrillDownRow> { it.startDate }.thenByDescending { it.seconds },
@@ -229,7 +336,8 @@ object StatisticsAggregator {
         val days = ChronoUnit.DAYS.between(rangeStart, rangeEnd) + 1
         val avgPerDay = if (days > 0) totalSeconds / days else totalSeconds
 
-        val trend = buildTrend(counted.flatMap { it.daily }, rangeStart, rangeEnd, granularity, firstDayOfWeek)
+        val slices = counted.flatMap { c -> c.daily.map { (date, seconds) -> DaySlice(date, c.entry.projectId, seconds) } }
+        val trend = buildTrend(slices, perProject, rangeStart, rangeEnd, granularity, firstDayOfWeek)
 
         return StatisticsSummary(
             totalSeconds = totalSeconds,
@@ -292,39 +400,50 @@ object StatisticsAggregator {
         return out
     }
 
+    /** The in-range seconds one entry contributes to one local day. */
+    private data class DaySlice(val date: LocalDate, val projectId: String?, val seconds: Long)
+
+    /** Buckets [slices] and stacks each bucket by project in [perProject] order. */
     private fun buildTrend(
-        rows: List<Pair<LocalDate, Long>>,
+        slices: List<DaySlice>,
+        perProject: List<ProjectTotal>,
         rangeStart: LocalDate,
         rangeEnd: LocalDate,
         granularity: TrendGranularity,
         firstDayOfWeek: DayOfWeek,
-    ): List<TrendBucket> = when (granularity) {
-        TrendGranularity.DAY -> {
-            val byDay = rows.groupBy({ it.first }, { it.second }).mapValues { it.value.sum() }
-            generateSequence(rangeStart) { if (it < rangeEnd) it.plusDays(1) else null }
-                .map { d -> TrendBucket(d.format(dayLabelFmt), d, byDay[d] ?: 0L) }
-                .toList()
+    ): List<TrendBucket> {
+        fun bucket(label: String, start: LocalDate, rows: List<DaySlice>?): TrendBucket {
+            val secondsByProject = rows.orEmpty().groupBy({ it.projectId }, { it.seconds }).mapValues { it.value.sum() }
+            val segments = perProject.mapNotNull { p ->
+                secondsByProject[p.projectId]?.takeIf { it > 0 }?.let { ProjectSegment(p.projectId, p.colorHex, it) }
+            }
+            return TrendBucket(label, start, segments.sumOf { it.seconds }, segments)
         }
-        TrendGranularity.WEEK -> {
-            // Minimal-days pinned to ISO's 4 so a Monday firstDayOfWeek reproduces WeekFields.ISO
-            // byte-for-byte (same week-start grouping AND same W## week numbers); only the
-            // first-day-of-week shifts bucket boundaries for e.g. a Sunday-start account.
-            val wf = WeekFields.of(firstDayOfWeek, WEEK_MIN_DAYS)
-            val byWeekStart = rows.groupBy(
-                { it.first.with(wf.dayOfWeek(), 1) },
-                { it.second },
-            ).mapValues { it.value.sum() }
-            val firstWeek = rangeStart.with(wf.dayOfWeek(), 1)
-            generateSequence(firstWeek) { it.plusWeeks(1) }
-                .takeWhile { it <= rangeEnd }
-                .map { ws ->
-                    val week = ws.get(wf.weekOfWeekBasedYear())
-                    // Include the (week-based) year so labels don't collide across year
-                    // boundaries, e.g. W52 of 2025 vs W52 of 2026 in a multi-year range.
-                    val yy = ws.get(wf.weekBasedYear()) % PERCENT_YEAR_BASE
-                    TrendBucket("W$week '%02d".format(yy), ws, byWeekStart[ws] ?: 0L)
-                }
-                .toList()
+        return when (granularity) {
+            TrendGranularity.DAY -> {
+                val byDay = slices.groupBy { it.date }
+                generateSequence(rangeStart) { if (it < rangeEnd) it.plusDays(1) else null }
+                    .map { d -> bucket(d.format(dayLabelFmt), d, byDay[d]) }
+                    .toList()
+            }
+            TrendGranularity.WEEK -> {
+                // Minimal-days pinned to ISO's 4 so a Monday firstDayOfWeek reproduces WeekFields.ISO
+                // byte-for-byte (same week-start grouping AND same W## week numbers); only the
+                // first-day-of-week shifts bucket boundaries for e.g. a Sunday-start account.
+                val wf = WeekFields.of(firstDayOfWeek, WEEK_MIN_DAYS)
+                val byWeekStart = slices.groupBy { it.date.with(wf.dayOfWeek(), 1) }
+                val firstWeek = rangeStart.with(wf.dayOfWeek(), 1)
+                generateSequence(firstWeek) { it.plusWeeks(1) }
+                    .takeWhile { it <= rangeEnd }
+                    .map { ws ->
+                        val week = ws.get(wf.weekOfWeekBasedYear())
+                        // Include the (week-based) year so labels don't collide across year
+                        // boundaries, e.g. W52 of 2025 vs W52 of 2026 in a multi-year range.
+                        val yy = ws.get(wf.weekBasedYear()) % PERCENT_YEAR_BASE
+                        bucket("W$week '%02d".format(yy), ws, byWeekStart[ws])
+                    }
+                    .toList()
+            }
         }
     }
 }

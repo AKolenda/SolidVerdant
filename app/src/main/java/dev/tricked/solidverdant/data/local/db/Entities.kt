@@ -6,6 +6,7 @@
 
 package dev.tricked.solidverdant.data.local.db
 
+import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -15,7 +16,9 @@ enum class SyncState { SYNCED, PENDING, CONFLICT }
 
 @Entity(
     tableName = "time_entries",
-    indices = [Index("organizationId"), Index("start")],
+    // Every list, range, tombstone and active-timer query filters by organization and orders or
+    // bounds by start; the composite index serves both (and replaces the organization-only one).
+    indices = [Index("organizationId", "start"), Index("start")],
 )
 data class TimeEntryEntity(
     @PrimaryKey val id: String,
@@ -84,6 +87,12 @@ data class TimeEntryTagCrossRef(val timeEntryId: String, val tagId: String)
 
 /** Projection row for [TimeEntryDao.observeTagRefs]; not a table. */
 data class TimeEntryTagRef(val timeEntryId: String, val tagId: String)
+
+/**
+ * Projection row for [TimeEntryDao.observeVisibleEntriesWithTags]: one row per entry and catalogue
+ * tag (tag columns null for an untagged entry); not a table.
+ */
+data class TimeEntryWithTagRow(@Embedded val entry: TimeEntryEntity, val tagId: String?, val tagName: String?)
 
 /**
  * Per-source freshness timestamps for an organization (roadmap #35, foundation for the sync-center

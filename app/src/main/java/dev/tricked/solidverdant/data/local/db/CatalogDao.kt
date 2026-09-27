@@ -33,12 +33,36 @@ interface CatalogDao {
     @Query("SELECT * FROM tags WHERE organizationId = :orgId")
     fun observeTags(orgId: String): Flow<List<TagEntity>>
 
+    // One-shot reads so a refresh can skip rewriting an unchanged catalogue: every write wakes
+    // every observer of the table, even when the rows are identical.
+    @Query("SELECT * FROM projects WHERE organizationId = :orgId")
+    suspend fun getProjects(orgId: String): List<ProjectEntity>
+
+    @Query("SELECT * FROM clients WHERE organizationId = :orgId")
+    suspend fun getClients(orgId: String): List<ClientEntity>
+
+    @Query("SELECT * FROM tasks WHERE organizationId = :orgId")
+    suspend fun getTasks(orgId: String): List<TaskEntity>
+
+    @Query("SELECT * FROM tags WHERE organizationId = :orgId")
+    suspend fun getTags(orgId: String): List<TagEntity>
+
+    @Query("SELECT * FROM memberships")
+    suspend fun getMemberships(): List<MembershipEntity>
+
+    @Query("SELECT * FROM organizations")
+    suspend fun getOrganizations(): List<OrganizationEntity>
+
     @Upsert suspend fun upsertOrganizations(items: List<OrganizationEntity>)
 
     @Upsert suspend fun upsertMemberships(items: List<MembershipEntity>)
 
     @Query("SELECT * FROM memberships")
     fun observeMemberships(): Flow<List<MembershipEntity>>
+
+    /** The signed-in account's membership in [orgId] (the cache is cleared with the account). */
+    @Query("SELECT * FROM memberships WHERE organizationId = :orgId LIMIT 1")
+    suspend fun getMembershipForOrganization(orgId: String): MembershipEntity?
 
     @Query("DELETE FROM projects")
     suspend fun clearProjects()

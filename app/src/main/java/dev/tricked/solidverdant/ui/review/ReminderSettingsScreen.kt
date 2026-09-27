@@ -7,51 +7,43 @@
 package dev.tricked.solidverdant.ui.review
 
 import android.content.Intent
-import android.provider.Settings
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.EventAvailable
+import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.NotificationsOff
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tricked.solidverdant.R
-import dev.tricked.solidverdant.ui.localization.appLocale
-import java.time.LocalTime
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
+import dev.tricked.solidverdant.ui.components.GroupedDivider
+import dev.tricked.solidverdant.ui.components.GroupedRow
+import dev.tricked.solidverdant.ui.components.GroupedSection
+import dev.tricked.solidverdant.ui.components.GroupedSwitchRow
+import dev.tricked.solidverdant.ui.components.LoadingState
+import dev.tricked.solidverdant.ui.theme.Dimens
 
 /**
  * Configures the tracking reminder and the end-of-day review (gap analysis #4, #18, #78).
@@ -65,16 +57,11 @@ import java.time.format.FormatStyle
 @Composable
 fun ReminderSettingsScreen(onBack: () -> Unit = {}) {
     val viewModel: ReminderSettingsViewModel = hiltViewModel()
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val permission = rememberNotificationPermissionState()
     val context = LocalContext.current
-    val locale = appLocale()
+    val timeFormatter = rememberTimeOfDayFormatter()
     var showTimePicker by remember { mutableStateOf(false) }
-
-    val timeLabel = remember(state.minuteOfDay, locale) {
-        LocalTime.of(state.minuteOfDay / MINUTES_PER_HOUR, state.minuteOfDay % MINUTES_PER_HOUR)
-            .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
-    }
 
     Scaffold(
         topBar = {
@@ -92,14 +79,7 @@ fun ReminderSettingsScreen(onBack: () -> Unit = {}) {
         },
     ) { innerPadding ->
         if (state.loading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center,
-            ) {
-                CircularProgressIndicator()
-            }
+            LoadingState(modifier = Modifier.fillMaxSize().padding(innerPadding))
             return@Scaffold
         }
 
@@ -108,167 +88,82 @@ fun ReminderSettingsScreen(onBack: () -> Unit = {}) {
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(top = Dimens.Space8, bottom = Dimens.Space24),
+            verticalArrangement = Arrangement.spacedBy(Dimens.Space24),
         ) {
             if (state.anyEnabled && !permission.hasPermission) {
-                PermissionWarningCard(
-                    onAllow = permission.request,
-                    onOpenSettings = {
-                        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                        runCatching { context.startActivity(intent) }
-                    },
-                )
+                // Without the permission nothing below can be delivered, so the fix comes first.
+                GroupedSection(
+                    header = stringResource(R.string.reminder_permission_warning_title),
+                    footer = stringResource(R.string.reminder_permission_warning_body),
+                ) {
+                    GroupedRow(
+                        title = stringResource(R.string.reminder_permission_allow),
+                        leadingIcon = Icons.Outlined.NotificationsOff,
+                        onClick = permission.request,
+                        showChevron = false,
+                        modifier = Modifier.testTag(ReviewTestTags.REMINDER_ALLOW_NOTIFICATIONS),
+                    )
+                    GroupedDivider(inset = Dimens.SettingsIconInset)
+                    GroupedRow(
+                        title = stringResource(R.string.reminder_permission_open_settings),
+                        leadingIcon = Icons.Outlined.Settings,
+                        onClick = {
+                            val intent = Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            runCatching { context.startActivity(intent) }
+                        },
+                    )
+                }
             }
 
-            Text(
-                text = stringResource(R.string.reminder_section_title),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-
-            ToggleRow(
-                title = stringResource(R.string.reminder_daily_title),
-                subtitle = stringResource(R.string.reminder_daily_subtitle),
-                checked = state.reminderEnabled,
-                onCheckedChange = viewModel::setReminderEnabled,
-            )
-
-            ToggleRow(
-                title = stringResource(R.string.reminder_eod_title),
-                subtitle = stringResource(R.string.reminder_eod_subtitle),
-                checked = state.endOfDayReviewEnabled,
-                onCheckedChange = viewModel::setEndOfDayReviewEnabled,
-            )
-
-            TimeRow(
-                timeLabel = timeLabel,
-                enabled = state.anyEnabled,
-                onClick = { showTimePicker = true },
-            )
-
-            Text(
-                text = stringResource(R.string.reminder_best_effort_note),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
-            )
+            GroupedSection(
+                header = stringResource(R.string.reminder_section_title),
+                footer = stringResource(R.string.reminder_best_effort_note),
+            ) {
+                GroupedSwitchRow(
+                    title = stringResource(R.string.reminder_daily_title),
+                    subtitle = stringResource(R.string.reminder_daily_subtitle),
+                    leadingIcon = Icons.Outlined.NotificationsActive,
+                    checked = state.reminderEnabled,
+                    onCheckedChange = { viewModel.setReminderEnabled(it) },
+                    modifier = Modifier.testTag(ReviewTestTags.REMINDER_DAILY_SWITCH),
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedSwitchRow(
+                    title = stringResource(R.string.reminder_eod_title),
+                    subtitle = stringResource(R.string.reminder_eod_subtitle),
+                    leadingIcon = Icons.Outlined.EventAvailable,
+                    checked = state.endOfDayReviewEnabled,
+                    onCheckedChange = { viewModel.setEndOfDayReviewEnabled(it) },
+                    modifier = Modifier.testTag(ReviewTestTags.REMINDER_EOD_SWITCH),
+                )
+                GroupedDivider(inset = Dimens.SettingsIconInset)
+                GroupedRow(
+                    title = stringResource(R.string.reminder_time_title),
+                    subtitle = if (state.anyEnabled) null else stringResource(R.string.reminder_time_disabled_hint),
+                    leadingIcon = Icons.Outlined.Schedule,
+                    value = if (state.anyEnabled) formatMinuteOfDay(state.minuteOfDay, timeFormatter) else null,
+                    onClick = if (state.anyEnabled) ({ showTimePicker = true }) else null,
+                    modifier = Modifier.testTag(ReviewTestTags.REMINDER_TIME_ROW),
+                )
+            }
         }
     }
 
     if (showTimePicker) {
         ReviewTimePickerDialog(
             title = stringResource(R.string.reminder_time_dialog_title),
-            initialHour = state.minuteOfDay / 60,
-            initialMinute = state.minuteOfDay % 60,
+            initialHour = state.minuteOfDay / MINUTES_PER_HOUR,
+            initialMinute = state.minuteOfDay % MINUTES_PER_HOUR,
             onConfirm = { hour, minute ->
                 showTimePicker = false
                 viewModel.setReminderTime(hour, minute)
             },
             onDismiss = { showTimePicker = false },
+            confirmTestTag = ReviewTestTags.REMINDER_TIME_CONFIRM,
         )
     }
 }
 
 private const val MINUTES_PER_HOUR = 60
-
-@Composable
-private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .clickable { onCheckedChange(!checked) }
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        // The row itself is the click target and carries the label; hide the switch from the
-        // accessibility tree so TalkBack announces one toggle, not two overlapping controls.
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            modifier = Modifier.clearAndSetSemantics {},
-        )
-    }
-}
-
-@Composable
-private fun TimeRow(timeLabel: String, enabled: Boolean, onClick: () -> Unit) {
-    val rowModifier = if (enabled) {
-        Modifier.clickable(onClick = onClick)
-    } else {
-        Modifier
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .then(rowModifier)
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = stringResource(R.string.reminder_time_title),
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = if (enabled) timeLabel else stringResource(R.string.reminder_time_disabled_hint),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (enabled) {
-            Text(
-                text = timeLabel,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-    }
-}
-
-@Composable
-private fun PermissionWarningCard(onAllow: () -> Unit, onOpenSettings: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer,
-            contentColor = MaterialTheme.colorScheme.onErrorContainer,
-        ),
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.NotificationsOff, contentDescription = null)
-                Text(
-                    text = stringResource(R.string.reminder_permission_warning_title),
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
-            }
-            Text(
-                text = stringResource(R.string.reminder_permission_warning_body),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onAllow, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text(stringResource(R.string.reminder_permission_allow))
-                }
-                TextButton(onClick = onOpenSettings, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text(stringResource(R.string.reminder_permission_open_settings))
-                }
-            }
-        }
-    }
-}

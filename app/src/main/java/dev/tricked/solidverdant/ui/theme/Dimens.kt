@@ -14,11 +14,11 @@ import androidx.compose.ui.unit.dp
  * The values are measured from the canonical screens rather than invented:
  *  - Statistics KPI / donut / trend cards use 16.dp content padding and 8.dp
  *    inner vertical gaps ([CardContentPadding], [CardContentGap]).
- *  - The month/day calendar entry blocks clip to [MaterialTheme.shapes.small]
- *    (8.dp), draw a 4.dp coloured side bar with an 8.dp gap, and are inset with
- *    8.dp horizontal / 4.dp vertical padding
- *    ([CornerRadius], [EntryBarWidth], [EntryBarGap], [EntryPaddingHorizontal],
- *    [EntryPaddingVertical]).
+ *  - The month/day calendar entry cards clip to [MaterialTheme.shapes.small]
+ *    (8.dp), lead with a 4.dp x 24.dp colour bar, keep an 8.dp gap after the
+ *    bar and between title and duration, and are inset with 8.dp horizontal /
+ *    4.dp vertical padding ([CornerRadius], [EntryBarWidth], [EntryBarHeight],
+ *    [EntryBarGap], [EntryPaddingHorizontal], [EntryPaddingVertical]).
  *  - Calendar day entries coerce to a minimum block height of 34.dp
  *    ([EntryMinHeight]).
  */
@@ -35,6 +35,10 @@ object Dimens {
 
     // --- Corner radius (matches MaterialTheme.shapes.small used by calendar blocks) ---
     val CornerRadius = 8.dp
+    val RadiusXs = 6.dp
+    val RadiusMd = 12.dp
+    val RadiusLg = 14.dp
+    val RadiusXl = 22.dp
 
     // --- Card content metrics (measured from KPI / donut / trend cards) ---
     val CardContentPadding = 16.dp
@@ -57,6 +61,52 @@ object Dimens {
     val MinTouchTarget = 48.dp
     val ControlHeightLarge = 64.dp
     val IconMedium = 24.dp
+    val IconSmall = 20.dp
+    val Hairline = 0.5.dp
+
+    // --- Grouped lists (iOS-style settings rows) ---
+    /** Divider inset that lines up with row titles: row padding 16 + icon 20 + gap 12. */
+    val SettingsIconInset = 48.dp
+    val AvatarSize = 48.dp
+    val ProjectDot = 10.dp
+    val DurationFieldWidth = 104.dp
+    val GroupedValueMaxWidth = 180.dp
+
+    // --- Timer history cards (stacked cards) ---
+    /** Height of the sliver that peeks below a collapsed stack of identical entries. */
+    val HistoryStackPeek = 6.dp
+
+    // --- Segmented control (iOS UISegmentedControl proportions) ---
+    /** Visible track height; the tappable row around it stays [MinTouchTarget] tall. */
+    val SegmentedTrackHeight = 32.dp
+    val SegmentedThumbInset = 2.dp
+    val SegmentedThumbShadow = 2.dp
+
+    // --- Dashboard charts ---
+    val ChartHeight = 160.dp
+    val ChartBarCorner = 3.dp
+    val ProgressBarHeight = 4.dp
+
+    // --- Docked timer sheet and new-entry button ---
+    val SheetHandleWidth = 32.dp
+    val SheetHandleHeight = 4.dp
+    val SheetShadow = 8.dp
+
+    /** List bottom padding so the last card scrolls clear of the floating new-entry button. */
+    val FabClearance = 88.dp
+
+    /** Widest the Time Tracker history grows on tablets before it is centred. */
+    val ContentMaxWidth = 720.dp
+
+    // --- Calendar day header (week strip) ---
+    val CalendarStripDay = 36.dp
+
+    /** Horizontal travel that turns a calendar swipe into the previous/next day, week or month. */
+    val CalendarSwipeThreshold = 72.dp
+
+    /** How far the running-timer bar is dragged up before it opens the entry's details. */
+    val TimerSwipeUpThreshold = 32.dp
+
     val NarrowCalendarWidth = 600.dp
     val PickerMaxWidth = 560.dp
     val PickerMaxHeight = 640.dp

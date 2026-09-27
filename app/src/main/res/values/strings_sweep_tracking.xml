@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Time Tracker sweep: start-timer shortcuts, running-entry and split messages. -->
+    <string name="start_timer_shortcuts">Shortcuts</string>
+    <string name="start_timer_shortcut_project_task">%1$s · %2$s</string>
+    <string name="running_entry_ended_start_after_end">This timer has already stopped. Choose a start before it ended.</string>
+    <string name="edit_active_entry_no_timer">No timer is running.</string>
+    <string name="split_time_outside_entry">Choose a time between %1$s and %2$s.</string>
+</resources>

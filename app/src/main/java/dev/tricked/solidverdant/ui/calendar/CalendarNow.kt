@@ -7,11 +7,15 @@
 package dev.tricked.solidverdant.ui.calendar
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 private const val MILLIS_PER_MINUTE = 60_000L
 private const val MILLIS_PER_SECOND = 1_000L
@@ -20,7 +24,19 @@ internal const val CURRENT_TIME_SCROLL_LEAD_HOURS = 2.0
 /** Keep time-dependent calendar content fresh, using second precision while a timer is visible. */
 @Composable
 internal fun rememberCalendarNow(secondPrecision: Boolean = false): Instant {
-    val now by produceState(initialValue = Instant.now(), secondPrecision) {
+    val now by rememberCalendarClock(secondPrecision)
+    return now
+}
+
+/**
+ * The calendar clock as a [State], ticking every second while [secondPrecision] (a running timer
+ * is visible) and every minute otherwise. Read it only where the live time is drawn, such as a
+ * running block's height and duration or a deferred `offset {}` lambda, so a tick does not
+ * recompose the whole grid. Layout reads [rememberCalendarMinute] instead.
+ */
+@Composable
+internal fun rememberCalendarClock(secondPrecision: Boolean = false): State<Instant> =
+    produceState(initialValue = Instant.now(), secondPrecision) {
         while (true) {
             val current = Instant.now()
             value = current
@@ -33,8 +49,11 @@ internal fun rememberCalendarNow(secondPrecision: Boolean = false): Instant {
             )
         }
     }
-    return now
-}
+
+/** [clock] truncated to the minute: its readers recompose once a minute, not on every tick. */
+@Composable
+internal fun rememberCalendarMinute(clock: State<Instant>): State<Instant> =
+    remember(clock) { derivedStateOf { clock.value.truncatedTo(ChronoUnit.MINUTES) } }
 
 internal fun millisUntilNextCalendarSecond(epochMillis: Long): Long {
     val elapsedInSecond = Math.floorMod(epochMillis, MILLIS_PER_SECOND)

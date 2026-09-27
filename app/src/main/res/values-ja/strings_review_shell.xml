@@ -12,8 +12,4 @@
     <string name="reminder_settings_title">リマインダー設定</string>
     <string name="manage_templates_title">テンプレートの管理</string>
     <string name="review_navigate_back">戻る</string>
-    <string name="review_badge_overflow">99+</string>
-    <plurals name="review_pending_badge_description">
-        <item quantity="other">レビュー、%1$d 件の項目</item>
-    </plurals>
 </resources>

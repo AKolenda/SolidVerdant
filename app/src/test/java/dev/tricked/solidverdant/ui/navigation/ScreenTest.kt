@@ -11,9 +11,25 @@ import org.junit.Test
 
 class ScreenTest {
     @Test
-    fun bottomNavScreens_haveUniqueStableRoutes() {
-        val routes = bottomNavScreens.map { it.route }
-        assertEquals(listOf("track", "calendar", "stats", "review"), routes)
+    fun menuScreens_haveUniqueStableRoutesInMenuOrder() {
+        val routes = menuScreens.map { it.route }
+        // Calendar deep links and device tests resolve these strings.
+        assertEquals(listOf("track", "calendar", "stats", "settings"), routes)
         assertEquals(routes.size, routes.toSet().size)
+    }
+
+    @Test
+    fun pushedDestinations_keepTheMenuItemThatOpenedThem() {
+        assertEquals("settings", nextSelectedDestination("settings", Screen.Review.route))
+        assertEquals("settings", nextSelectedDestination("settings", SyncRoutes.SYNC_CENTER))
+        assertEquals("track", nextSelectedDestination("track", SyncRoutes.SYNC_CENTER))
+    }
+
+    @Test
+    fun menuDestinationsSelectThemselves() {
+        assertEquals("calendar", nextSelectedDestination("track", "calendar"))
+        assertEquals("stats", nextSelectedDestination("track", "stats"))
+        assertEquals("track", nextSelectedDestination("settings", "track"))
+        assertEquals("settings", nextSelectedDestination("settings", null))
     }
 }

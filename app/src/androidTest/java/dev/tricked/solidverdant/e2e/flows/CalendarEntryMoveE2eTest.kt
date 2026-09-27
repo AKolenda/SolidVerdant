@@ -11,7 +11,6 @@ package dev.tricked.solidverdant.e2e.flows
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
@@ -21,6 +20,7 @@ import dev.tricked.solidverdant.e2e.BackendPortable
 import dev.tricked.solidverdant.e2e.E2eFixture
 import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.TestTags
+import dev.tricked.solidverdant.e2e.robots.openCalendarFromMenu
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Rule
@@ -47,8 +47,7 @@ class CalendarEntryMoveE2eTest {
         val fixture = e2e.prepare(E2eFixture.Completed(original))
         e2e.launchApp()
 
-        e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag("main_nav_calendar"), WAIT_MS)
-        e2e.composeRule.onNodeWithTag("main_nav_calendar", useUnmergedTree = true).performClick()
+        e2e.composeRule.openCalendarFromMenu()
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_WEEK_GRID), WAIT_MS)
         val entryTag = "week-entry-${requireNotNull(fixture.serverId)}"
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(entryTag), WAIT_MS)
@@ -57,6 +56,8 @@ class CalendarEntryMoveE2eTest {
             .performScrollTo()
             .performTouchInput {
                 down(center)
+                // Entries lift for dragging after a hold.
+                advanceEventTime(viewConfiguration.longPressTimeoutMillis + LONG_PRESS_MARGIN_MS)
                 moveBy(Offset(0f, -height.toFloat()), delayMillis = 250)
                 up()
             }
@@ -83,3 +84,5 @@ class CalendarEntryMoveE2eTest {
         const val WAIT_MS = 15_000L
     }
 }
+
+private const val LONG_PRESS_MARGIN_MS = 100L

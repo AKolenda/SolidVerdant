@@ -304,6 +304,12 @@ data class TimeEntriesMeta(
     @SerialName("per_page") val perPage: Int? = null,
 )
 
+/** One organization member from the members list: enough to name who logged an entry. */
+@Serializable
+data class OrganizationMember(val id: String, @SerialName("user_id") val userId: String, val name: String)
+
+@Serializable data class MembersResponse(val data: List<OrganizationMember>, val meta: TimeEntriesMeta? = null)
+
 /**
  * Request to update an existing time entry
  */

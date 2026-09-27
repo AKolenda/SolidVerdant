@@ -9,11 +9,9 @@ package dev.tricked.solidverdant.ui.calendar
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -41,19 +39,20 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
@@ -61,13 +60,11 @@ import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
-import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository.EntrySyncStatus
 import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.ui.components.EntryBlock
 import dev.tricked.solidverdant.ui.components.LoadingState
 import dev.tricked.solidverdant.ui.localization.appLocale
-import dev.tricked.solidverdant.ui.statistics.hexToColor
 import dev.tricked.solidverdant.ui.theme.Dimens
 import java.time.Instant
 import java.time.LocalDate
@@ -83,7 +80,6 @@ fun MonthCalendarView(
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
     onEntryClick: (TimeEntry) -> Unit,
-    onEntryLongPress: (TimeEntry) -> Unit = {},
     onMoveEntry: (TimeEntry, String, String) -> Unit = { _, _, _ -> },
     onCreateRange: (CalendarTimeRange) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -95,12 +91,18 @@ fun MonthCalendarView(
     var monthExpanded by remember { mutableStateOf(true) }
     val locale = appLocale()
     val selectedEntries = state.bucketsByDate[state.selectedDate]?.entries.orEmpty()
-    val now = rememberCalendarNow(secondPrecision = selectedEntries.any(::isRunningTimeEntry))
-    val initialScrollHours = calendarInitialScrollHours(now, state.zone, state.calendarSettings).toFloat()
+    val hasRunningEntry = remember(selectedEntries) { selectedEntries.any(::isRunningTimeEntry) }
+    // Only a running block and the now line read the per-second clock; the rest follows the minute.
+    val clock = rememberCalendarClock(secondPrecision = hasRunningEntry)
+    val minuteNow by rememberCalendarMinute(clock)
+    val initialScrollHours = calendarInitialScrollHours(minuteNow, state.zone, state.calendarSettings).toFloat()
     val timelineInitialScroll = with(LocalDensity.current) {
         (calendarHourHeight(state.calendarSettings) * initialScrollHours).roundToPx()
     }
     val timelineScrollState = rememberScrollState(initial = timelineInitialScroll)
+    val selectedDateTitle = remember(state.selectedDate, locale) {
+        state.selectedDate.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(locale))
+    }
     Column(modifier = modifier.fillMaxWidth().padding(Dimens.Space12)) {
         if (!monthExpanded) {
             Row(
@@ -112,7 +114,7 @@ fun MonthCalendarView(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    state.selectedDate.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(locale)),
+                    selectedDateTitle,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -136,22 +138,24 @@ fun MonthCalendarView(
                 onNextMonth = onNextMonth,
                 onSelectDate = onSelectDate,
                 onCollapse = { monthExpanded = false },
+                today = minuteNow.atZone(state.zone).toLocalDate(),
             )
         }
 
         SelectedDayEntries(
             state = state,
+            selectedDateTitle = selectedDateTitle,
             monthExpanded = monthExpanded,
             projects = projects,
             tasks = tasks,
             clients = clients,
             scrollState = timelineScrollState,
             onEntryClick = onEntryClick,
-            onEntryLongPress = onEntryLongPress,
             syncStatusByEntryId = syncStatusByEntryId,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
-            now = now,
+            now = minuteNow,
+            clock = clock,
             settings = state.calendarSettings,
         )
     }
@@ -165,6 +169,7 @@ private fun MonthCalendarGrid(
     onNextMonth: () -> Unit,
     onSelectDate: (LocalDate) -> Unit,
     onCollapse: () -> Unit,
+    today: LocalDate,
 ) {
     Column {
         Row(
@@ -196,14 +201,16 @@ private fun MonthCalendarGrid(
         if (state.isLoading) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space4))
         }
-        MonthCalendarGridWeeks(state, onSelectDate, onCollapse)
+        Column(Modifier.calendarSwipePaging(onPrevious = onPreviousMonth, onNext = onNextMonth)) {
+            MonthCalendarGridWeeks(state, today, onSelectDate, onCollapse)
+        }
     }
 }
 
 @Composable
-private fun MonthCalendarGridWeeks(state: CalendarUiState, onSelectDate: (LocalDate) -> Unit, onCollapse: () -> Unit) {
-    val weeks = monthGridWeeks(state.visibleMonth, state.weekStart)
-    val maxSeconds = state.bucketsByDate.values.maxOfOrNull { it.totalSeconds } ?: 1L
+private fun MonthCalendarGridWeeks(state: CalendarUiState, today: LocalDate, onSelectDate: (LocalDate) -> Unit, onCollapse: () -> Unit) {
+    val weeks = remember(state.visibleMonth, state.weekStart) { monthGridWeeks(state.visibleMonth, state.weekStart) }
+    val maxSeconds = remember(state.bucketsByDate) { state.bucketsByDate.values.maxOfOrNull { it.totalSeconds } ?: 0L }
     weeks.forEach { week ->
         Row(modifier = Modifier.fillMaxWidth()) {
             week.forEach { day ->
@@ -211,6 +218,7 @@ private fun MonthCalendarGridWeeks(state: CalendarUiState, onSelectDate: (LocalD
                     day = day,
                     state = state,
                     maxSeconds = maxSeconds,
+                    today = today,
                     onSelectDate = onSelectDate,
                     onCollapse = onCollapse,
                 )
@@ -224,26 +232,36 @@ private fun RowScope.MonthCalendarDay(
     day: LocalDate,
     state: CalendarUiState,
     maxSeconds: Long,
+    today: LocalDate,
     onSelectDate: (LocalDate) -> Unit,
     onCollapse: () -> Unit,
 ) {
     val bucket = state.bucketsByDate[day]
     val inMonth = java.time.YearMonth.from(day) == state.visibleMonth
     val selected = day == state.selectedDate
-    val intensity = ((bucket?.totalSeconds ?: 0L).toFloat() / maxSeconds).coerceIn(0f, 1f)
+    val isToday = day == today
+    val intensity = monthHeatIntensity(bucket?.totalSeconds ?: 0L, maxSeconds)
+    val colors = MaterialTheme.colorScheme
+    // Grey cards like the entry cards; tracked days warm toward the accent by their share of the
+    // busiest day, and the selected day takes the accent itself.
+    val background = when {
+        selected -> colors.primary
+        else -> lerp(colors.surfaceContainerHighest, colors.primaryContainer, intensity * MONTH_HEAT_MAX)
+    }
+    val dateColor = when {
+        selected -> colors.onPrimary
+        isToday -> colors.primary
+        inMonth -> colors.onSurface
+        else -> colors.onSurfaceVariant
+    }
+    val totalColor = if (selected) colors.onPrimary else colors.onSurfaceVariant
     Column(
         modifier = Modifier
             .weight(1f)
             .aspectRatio(1f)
             .padding(Dimens.Space2)
             .clip(MaterialTheme.shapes.small)
-            .background(
-                if (selected) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f + 0.55f * intensity)
-                },
-            )
+            .background(background)
             .clickable {
                 onSelectDate(day)
                 onCollapse()
@@ -255,26 +273,14 @@ private fun RowScope.MonthCalendarDay(
         Text(
             text = day.dayOfMonth.toString(),
             style = MaterialTheme.typography.bodySmall,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = calendarDayContentColor(
-                selected = selected,
-                isToday = false,
-                primary = MaterialTheme.colorScheme.primary,
-                onPrimaryContainer = MaterialTheme.colorScheme.onPrimaryContainer,
-                default = if (inMonth) Color.Unspecified else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
-            ),
+            fontWeight = if (selected || isToday) FontWeight.Bold else FontWeight.Normal,
+            color = dateColor,
         )
         bucket?.let {
             Text(
                 text = formatDuration(it.totalSeconds),
                 style = MaterialTheme.typography.labelSmall,
-                color = calendarDayContentColor(
-                    selected = selected,
-                    isToday = false,
-                    primary = MaterialTheme.colorScheme.primary,
-                    onPrimaryContainer = MaterialTheme.colorScheme.onPrimaryContainer,
-                    default = Color.Unspecified,
-                ),
+                color = totalColor,
             )
         }
     }
@@ -283,27 +289,24 @@ private fun RowScope.MonthCalendarDay(
 @Composable
 private fun ColumnScope.SelectedDayEntries(
     state: CalendarUiState,
+    selectedDateTitle: String,
     monthExpanded: Boolean,
     projects: List<Project>,
     tasks: List<Task>,
     clients: List<Client>,
     scrollState: ScrollState,
     onEntryClick: (TimeEntry) -> Unit,
-    onEntryLongPress: (TimeEntry) -> Unit,
     syncStatusByEntryId: Map<String, EntrySyncStatus>,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
     now: Instant,
+    clock: State<Instant>,
     settings: CalendarGridSettings = CalendarGridSettings(),
 ) {
     val entries = state.bucketsByDate[state.selectedDate]?.entries.orEmpty()
     if (monthExpanded) {
         Text(
-            text = state.selectedDate.format(
-                DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(
-                    appLocale(),
-                ),
-            ),
+            text = selectedDateTitle,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(top = Dimens.Space16, bottom = Dimens.Space8),
@@ -322,11 +325,11 @@ private fun ColumnScope.SelectedDayEntries(
             scrollState = scrollState,
             fillViewport = true,
             onEntryClick = onEntryClick,
-            onEntryLongPress = onEntryLongPress,
             syncStatusByEntryId = syncStatusByEntryId,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
             now = now,
+            clock = clock,
             modifier = Modifier.weight(1f),
         )
         !monthExpanded -> DayTimeline(
@@ -340,11 +343,11 @@ private fun ColumnScope.SelectedDayEntries(
             scrollState = scrollState,
             fillViewport = true,
             onEntryClick = onEntryClick,
-            onEntryLongPress = onEntryLongPress,
             syncStatusByEntryId = syncStatusByEntryId,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
             now = now,
+            clock = clock,
             modifier = Modifier.weight(1f),
         )
         else -> LazyColumn(modifier = Modifier.fillMaxWidth()) {
@@ -359,11 +362,11 @@ private fun ColumnScope.SelectedDayEntries(
                     settings = settings,
                     scrollState = scrollState,
                     onEntryClick = onEntryClick,
-                    onEntryLongPress = onEntryLongPress,
                     syncStatusByEntryId = syncStatusByEntryId,
                     onMoveEntry = onMoveEntry,
                     onCreateRange = onCreateRange,
                     now = now,
+                    clock = clock,
                 )
             }
         }
@@ -376,7 +379,6 @@ private fun ColumnScope.SelectedDayEntries(
  * so a day rendered here is visually identical to the same day inside the week grid.
  */
 @Composable
-@OptIn(ExperimentalFoundationApi::class)
 fun DayTimeline(
     day: LocalDate,
     entries: List<TimeEntry>,
@@ -387,16 +389,21 @@ fun DayTimeline(
     now: Instant,
     settings: CalendarGridSettings = CalendarGridSettings(),
     onEntryClick: (TimeEntry) -> Unit,
-    onEntryLongPress: (TimeEntry) -> Unit = {},
     syncStatusByEntryId: Map<String, EntrySyncStatus> = emptyMap(),
     onMoveEntry: (TimeEntry, String, String) -> Unit = { _, _, _ -> },
     onCreateRange: (CalendarTimeRange) -> Unit = {},
     modifier: Modifier = Modifier,
     scrollState: ScrollState? = null,
     fillViewport: Boolean = false,
+    /** A live clock for a running entry's height and the now line; [now] is used when absent. */
+    clock: State<Instant>? = null,
 ) {
     val today = now.atZone(zone).toLocalDate()
-    val noDescription = stringResource(R.string.calendar_entry_untitled)
+    val fallbackClock = rememberUpdatedState(now)
+    val liveClock = clock ?: fallbackClock
+    // Laid out once per data change; with a running entry, once a minute.
+    val layoutKey = calendarLayoutClockKey(entries, now)
+    val blocks = remember(entries, day, zone, settings, layoutKey) { layoutTrackedEntries(entries, day, now, zone, settings) }
     val initialScrollHours = calendarInitialScrollHours(now, zone, settings).toFloat()
     val initialScroll = with(LocalDensity.current) {
         (calendarHourHeight(settings) * initialScrollHours).roundToPx()
@@ -423,86 +430,45 @@ fun DayTimeline(
                 modifier = Modifier.padding(start = CalendarGutterWidth),
             )
 
-            layoutTrackedEntries(entries, day, now, zone, settings).forEach { block ->
+            val density = LocalDensity.current
+            val gridHeightPx = with(density) { totalHeight.toPx() }
+            val entryAreaWidthPx = with(density) { entryAreaWidth.toPx() }
+            blocks.forEach { block ->
                 val entry = block.entry
                 val project = projectsById[entry.projectId]
-                val task = tasksById[entry.taskId]
-                val client = project?.clientId?.let(clientsById::get)
-                val top = block.startFraction
-                val height = block.heightFraction
                 val slotWidth = entryAreaWidth / block.columnCount.coerceAtLeast(1)
-                val blockColor = if (entry.type == TimeEntryType.BREAK) {
-                    MaterialTheme.colorScheme.tertiary
-                } else {
-                    project?.color?.let { hexToColor(it) } ?: MaterialTheme.colorScheme.primary
+                key(entry.id) {
+                    CalendarEntryBlockItem(
+                        block = block,
+                        day = day,
+                        zone = zone,
+                        settings = settings,
+                        clock = liveClock,
+                        totalHeight = totalHeight,
+                        gridHeightPx = gridHeightPx,
+                        columnWidthPx = entryAreaWidthPx,
+                        dayIndex = 0,
+                        dayCount = 1,
+                        project = project,
+                        task = tasksById[entry.taskId],
+                        client = project?.clientId?.let(clientsById::get),
+                        syncStatus = syncStatusByEntryId[entry.id],
+                        testTag = "entry-row-${entry.id}",
+                        showBreakSubtitle = false,
+                        formatOpenDuration = ::formatDuration,
+                        onEntryClick = onEntryClick,
+                        onMoveEntry = onMoveEntry,
+                        modifier = Modifier
+                            .offset(x = CalendarGutterWidth + (slotWidth * block.column), y = totalHeight * block.startFraction)
+                            .width(slotWidth)
+                            .padding(end = Dimens.Space1),
+                    )
                 }
-                val metadata = calendarEntryMetadata(
-                    entry = entry,
-                    projectName = project?.name,
-                    taskName = task?.name,
-                    clientName = client?.name,
-                )
-                val label = if (entry.type == TimeEntryType.BREAK) {
-                    entry.description?.ifBlank { null }?.let { stringResource(R.string.calendar_break_with_description, it) }
-                        ?: stringResource(R.string.calendar_break_entry)
-                } else {
-                    metadata.title ?: noDescription
-                }
-                val subtitle = if (entry.type == TimeEntryType.BREAK) {
-                    null
-                } else {
-                    metadata.subtitle
-                }
-                val duration = metadata.durationSeconds?.let(::formatDuration)
-                    ?: formatDuration(entryDurationSecondsOnDay(entry, day, zone, now))
-                val details = listOfNotNull(subtitle, duration).joinToString(", ")
-                val a11y = if (details.isBlank()) {
-                    stringResource(R.string.calendar_entry_a11y, label)
-                } else {
-                    stringResource(R.string.calendar_entry_a11y_details, label, details)
-                }
-                val entryModifier = calendarEntryDragModifier(
-                    modifier = Modifier
-                        .offset(
-                            x = CalendarGutterWidth + (slotWidth * block.column),
-                            y = totalHeight * top,
-                        )
-                        .width(slotWidth)
-                        .padding(end = Dimens.Space1),
-                    entry = entry,
-                    day = day,
-                    zone = zone,
-                    dayIndex = 0,
-                    dayCount = 1,
-                    blockStartFraction = top,
-                    blockHeightPx = with(LocalDensity.current) {
-                        (totalHeight * height).coerceAtLeast(Dimens.EntryMinHeight).toPx()
-                    },
-                    gridHeightPx = with(LocalDensity.current) { totalHeight.toPx() },
-                    columnWidthPx = with(LocalDensity.current) { entryAreaWidth.toPx() },
-                    settings = settings,
-                    onMoveEntry = onMoveEntry,
-                )
-                EntryBlock(
-                    color = blockColor,
-                    title = label,
-                    subtitle = subtitle,
-                    time = duration,
-                    modifier = entryModifier
-                        .height((totalHeight * height).coerceAtLeast(Dimens.EntryMinHeight))
-                        .combinedClickable(
-                            onClick = { onEntryClick(entry) },
-                            onLongClick = { onEntryLongPress(entry) },
-                        )
-                        .testTag("entry-row-${entry.id}")
-                        .semantics { contentDescription = a11y },
-                    syncStatus = syncStatusByEntryId[entry.id],
-                )
             }
 
             if (day == today) {
                 CurrentTimeMarker(
-                    now = now,
+                    clock = liveClock,
                     day = day,
                     zone = zone,
                     settings = settings,
@@ -512,3 +478,13 @@ fun DayTimeline(
         }
     }
 }
+
+/**
+ * A day's share of the busiest loaded day, 0..1. When no loaded day has work time (only breaks or
+ * empty days) every day is 0 rather than a NaN colour from dividing by zero.
+ */
+internal fun monthHeatIntensity(seconds: Long, maxSeconds: Long): Float =
+    if (maxSeconds <= 0L) 0f else (seconds.toFloat() / maxSeconds).coerceIn(0f, 1f)
+
+/** How far the busiest day blends from the grey card toward the accent container. */
+private const val MONTH_HEAT_MAX = 0.7f

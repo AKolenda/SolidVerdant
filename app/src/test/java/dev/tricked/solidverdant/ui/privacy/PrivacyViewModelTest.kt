@@ -11,6 +11,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -63,6 +64,9 @@ class PrivacyViewModelTest {
         kotlinx.coroutines.Dispatchers.resetMain()
     }
 
+    private val unsynced = MutableStateFlow(0)
+    private var syncRequests = 0
+
     private fun viewModel(): PrivacyViewModel = PrivacyViewModel(
         context = context,
         readEndpoint = { endpoint },
@@ -80,7 +84,58 @@ class PrivacyViewModelTest {
             Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uri)
         },
         storageDispatcher = dispatcher,
+        unsyncedChanges = unsynced,
+        requestSync = { syncRequests += 1 },
     ).also { viewModels += it }
+
+    @Test
+    fun `clearing is refused while changes are waiting to sync`() = runTest(dispatcher.scheduler) {
+        unsynced.value = 2
+        val vm = viewModel()
+        vm.state.first { !it.computingStorage && it.unsyncedChanges == 2 }
+
+        vm.clearCache()
+
+        val state = vm.state.first { it.clearOutcome != null }
+        assertEquals(PrivacyViewModel.ClearOutcome.BLOCKED, state.clearOutcome)
+        assertEquals("the upload queue must not be wiped", 0, clearCalls)
+        assertFalse(state.clearingCache)
+    }
+
+    @Test
+    fun `changes queued while the dialog was open still block the clear`() = runTest(dispatcher.scheduler) {
+        val vm = viewModel()
+        vm.state.first { !it.computingStorage }
+        unsynced.value = 1 // arrives after the screen decided to show the plain confirmation
+
+        vm.clearCache()
+
+        assertEquals(PrivacyViewModel.ClearOutcome.BLOCKED, vm.state.first { it.clearOutcome != null }.clearOutcome)
+        assertEquals(0, clearCalls)
+    }
+
+    @Test
+    fun `a clear with nothing waiting requests a sync afterwards`() = runTest(dispatcher.scheduler) {
+        val vm = viewModel()
+        vm.state.first { !it.computingStorage }
+
+        vm.clearCache()
+
+        assertEquals(PrivacyViewModel.ClearOutcome.CLEARED, vm.state.first { it.clearOutcome != null }.clearOutcome)
+        assertEquals(1, clearCalls)
+        assertEquals(1, syncRequests)
+        vm.consumeClearOutcome()
+        assertEquals(null, vm.state.value.clearOutcome)
+    }
+
+    @Test
+    fun `sync now sends the waiting changes`() {
+        val vm = viewModel()
+
+        vm.syncNow()
+
+        assertEquals(1, syncRequests)
+    }
 
     @Test
     fun `computes and exposes storage sizes off main thread`() = runTest(dispatcher.scheduler) {

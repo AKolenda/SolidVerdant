@@ -43,12 +43,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.ui.auth.AuthUiState
 import dev.tricked.solidverdant.ui.auth.OAuthConfigState
 import dev.tricked.solidverdant.ui.config.ConfigScreen
+import dev.tricked.solidverdant.ui.theme.Dimens
 
 /**
  * Login screen with OAuth flow initiation
@@ -86,7 +86,7 @@ fun LoginScreen(
                             contentDescription = stringResource(R.string.choose_language),
                         )
                     }
-                    IconButton(onClick = { showConfigDialog = true }) {
+                    IconButton(onClick = { showConfigDialog = true }, modifier = Modifier.testTag(LoginTestTags.CONFIG_BUTTON)) {
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = stringResource(R.string.settings),
@@ -100,7 +100,7 @@ fun LoginScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(24.dp),
+                .padding(Dimens.Space24),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
@@ -109,7 +109,7 @@ fun LoginScreen(
                 style = MaterialTheme.typography.displayMedium,
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(Dimens.Space16))
 
             Text(
                 text = stringResource(R.string.time_tracking_client),
@@ -117,7 +117,7 @@ fun LoginScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(Dimens.Space32 + Dimens.Space16))
 
             if (uiState.isLoading) {
                 CircularProgressIndicator()
@@ -131,7 +131,7 @@ fun LoginScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(Dimens.Space16))
 
             // Display error if any
             uiState.error?.let { error ->
@@ -140,7 +140,7 @@ fun LoginScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(Dimens.Space24))
 
             // Display current configuration
             Text(
@@ -175,14 +175,14 @@ private fun ErrorCard(error: String) {
         ),
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(Dimens.Space16),
         ) {
             Text(
                 text = stringResource(R.string.error),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onErrorContainer,
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(Dimens.Space8))
             Text(
                 text = error,
                 style = MaterialTheme.typography.bodyMedium,

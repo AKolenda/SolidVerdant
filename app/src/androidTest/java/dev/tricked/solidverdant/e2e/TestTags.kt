@@ -9,6 +9,8 @@ package dev.tricked.solidverdant.e2e
 import dev.tricked.solidverdant.ui.calendar.CalendarTestTags
 import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
 import dev.tricked.solidverdant.ui.login.LoginTestTags
+import dev.tricked.solidverdant.ui.navigation.MAIN_MENU_BUTTON_TAG
+import dev.tricked.solidverdant.ui.settings.SettingsTestTags
 import dev.tricked.solidverdant.ui.sync.SyncCenterTestTags
 import dev.tricked.solidverdant.ui.tile.ProjectSelectionTestTags
 import dev.tricked.solidverdant.ui.tracking.TrackingTestTags
@@ -27,18 +29,27 @@ object TestTags {
     const val TRACK_ENTRY_ROW = TrackingTestTags.ENTRY_ROW
     const val TRACK_START_BUTTON = TrackingTestTags.START_BUTTON
     const val TRACK_RESET_FIELDS_BUTTON = TrackingTestTags.RESET_FIELDS_BUTTON
-    const val TRACK_AUTO_CLEAR_FIELDS_SWITCH = TrackingTestTags.AUTO_CLEAR_FIELDS_SWITCH
     const val TRACK_STOP_BUTTON = TrackingTestTags.STOP_BUTTON
-    const val TRACK_SETTINGS_BUTTON = TrackingTestTags.SETTINGS_BUTTON
-    const val TRACK_LIVE_UPDATE_SWITCH = TrackingTestTags.LIVE_UPDATE_SWITCH
     const val TRACK_REFRESH_BUTTON = TrackingTestTags.REFRESH_BUTTON
+    const val TRACK_TIMER_FAB = TrackingTestTags.TIMER_FAB
+    const val TRACK_START_TIMER_ACTION = TrackingTestTags.START_TIMER_ACTION
+    const val TRACK_START_TIMER_SHEET = TrackingTestTags.START_TIMER_SHEET
+    const val MAIN_MENU_BUTTON = MAIN_MENU_BUTTON_TAG
+    const val NAV_TIMER = "main_nav_track"
+    const val NAV_CALENDAR = "main_nav_calendar"
+    const val NAV_DASHBOARD = "main_nav_stats"
+    const val NAV_SETTINGS = "main_nav_settings"
+    const val SETTINGS_SCREEN = SettingsTestTags.SCREEN
+    const val SETTINGS_REVIEW_ROW = SettingsTestTags.REVIEW_ROW
+    const val SETTINGS_LOGOUT_BUTTON = SettingsTestTags.LOGOUT_BUTTON
+    const val SETTINGS_LOGOUT_CONFIRM = SettingsTestTags.LOGOUT_CONFIRM
+    const val SETTINGS_LIVE_UPDATE_SWITCH = SettingsTestTags.LIVE_UPDATE_SWITCH
     const val TRACK_ADD_ENTRY_BUTTON = TrackingTestTags.ADD_ENTRY_BUTTON
     const val TRACK_EDIT_ACTIVE_ENTRY = TrackingTestTags.EDIT_ACTIVE_ENTRY
-    const val TRACK_LOGOUT_BUTTON = TrackingTestTags.LOGOUT_BUTTON
     const val TRACK_ENTRY_EDIT_BUTTON = TrackingTestTags.ENTRY_EDIT_BUTTON
-    const val TRACK_ENTRY_DELETE_BUTTON = TrackingTestTags.ENTRY_DELETE_BUTTON
     const val TRACK_CONTINUE_BUTTON = TrackingTestTags.CONTINUE_BUTTON
     const val TRACK_SHEET = TrackingTestTags.SHEET
+    const val TRACK_DELETE_CONFIRM = TrackingTestTags.DELETE_CONFIRM
     const val TRACK_SHEET_PROJECT_TASK_SELECTOR = TrackingTestTags.SHEET_PROJECT_TASK_SELECTOR
     const val TRACK_SHEET_TASK_SELECTOR = TrackingTestTags.SHEET_TASK_SELECTOR
     const val TRACK_PROJECT_TASK_LIST = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.PROJECT_TASK_LIST
@@ -57,6 +68,7 @@ object TestTags {
     const val TRACK_SHEET_VALIDATION_BANNER = TrackingTestTags.SHEET_VALIDATION_BANNER
     const val TRACK_SYNC_STATUS_CARD = TrackingTestTags.SYNC_STATUS_CARD
     const val TRACK_SYNC_DETAILS_BUTTON = TrackingTestTags.SYNC_DETAILS_BUTTON
+    const val TRACK_SEARCH_BUTTON = TrackingTestTags.SEARCH_BUTTON
     const val TRACK_FILTER_OPEN_BUTTON = TrackingTestTags.FILTER_OPEN_BUTTON
     const val TRACK_FILTER_SEARCH_FIELD = TrackingTestTags.FILTER_SEARCH_FIELD
     const val TRACK_FILTER_CLOSE_BUTTON = TrackingTestTags.FILTER_CLOSE_BUTTON
@@ -73,7 +85,7 @@ object TestTags {
     const val CALENDAR_MODE_WEEK = CalendarTestTags.MODE_WEEK
     const val CALENDAR_MODE_DAY = CalendarTestTags.MODE_DAY
     const val CALENDAR_ADD_ENTRY = CalendarTestTags.ADD_ENTRY
-    const val CALENDAR_ADD_BREAK = CalendarTestTags.ADD_BREAK
+    const val CALENDAR_MORE_ACTIONS = CalendarTestTags.MORE_ACTIONS
     const val CALENDAR_ADD_BREAK_MENU = CalendarTestTags.ADD_BREAK_MENU
     const val CALENDAR_OVERLAY = CalendarTestTags.OVERLAY
     const val CALENDAR_OVERLAY_TOGGLE = CalendarTestTags.OVERLAY_TOGGLE
@@ -92,6 +104,7 @@ object TestTags {
     const val CALENDAR_SETTINGS_DENSITY_SPACIOUS = CalendarTestTags.SETTINGS_DENSITY_SPACIOUS
     const val CALENDAR_ENTRY_ACTIONS = CalendarTestTags.ENTRY_ACTIONS
     const val CALENDAR_EDIT_START_TIME = CalendarTestTags.EDIT_START_TIME
+    const val CALENDAR_EDIT_ENTRY = CalendarTestTags.EDIT_ENTRY
     const val CALENDAR_STOP_ENTRY = CalendarTestTags.STOP_ENTRY
     const val CALENDAR_DUPLICATE_ENTRY = CalendarTestTags.DUPLICATE_ENTRY
     const val CALENDAR_SPLIT_ENTRY = CalendarTestTags.SPLIT_ENTRY

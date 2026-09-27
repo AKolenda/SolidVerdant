@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="filter_all">すべて</string>
+    <string name="filter_nothing_to_choose">まだ選択肢がありません</string>
+    <string name="filter_select_dates">日付を選択</string>
+    <string name="filter_section_date">日付</string>
+    <string name="filter_section_details">詳細</string>
+    <string name="filter_section_status">ステータス</string>
+    <string name="filter_any_time">すべての期間</string>
+    <string name="filter_week_short">7日間</string>
+    <string name="filter_failed_sync">同期に失敗</string>
+    <plurals name="filter_selected_count">
+        <item quantity="other">%1$d 件選択</item>
+    </plurals>
+</resources>

@@ -37,11 +37,7 @@
     <string name="widget_zero_time" translatable="false">00:00:00</string>
     <string name="running_entries">Running</string><string name="tracking_now">now</string>
     <string name="enable_notifications">Enable notifications</string>
-    <plurals name="collapse_entries">
-        <item quantity="one">Collapse %1$d entry</item>
-        <item quantity="other">Collapse %1$d entries</item>
-    </plurals>
-    <string name="stats_empty">No tracked time in this range.</string><string name="stats_by_project">By project</string><string name="stats_trend">Trend</string><string name="stats_last_7_days">Last 7 days</string><string name="stats_last_week">Last week</string><string name="stats_this_week">This week</string><string name="stats_this_month">This month</string><string name="stats_previous_month">Previous month</string><string name="stats_custom">Custom</string><string name="apply">Apply</string><string name="stats_total">Total</string><string name="stats_entries">Entries</string><string name="stats_average_day">Avg / day</string><string name="calendar_show_month">Show month</string><string name="calendar_previous_month">Previous month</string><string name="calendar_next_month">Next month</string><string name="calendar_month_header">%1$s %2$d</string>
+    <string name="stats_empty">No tracked time in this range.</string><string name="stats_by_project">By project</string><string name="stats_last_7_days">Last 7 days</string><string name="stats_custom">Custom</string><string name="apply">Apply</string><string name="calendar_show_month">Show month</string><string name="calendar_previous_month">Previous month</string><string name="calendar_next_month">Next month</string><string name="calendar_month_header">%1$s %2$d</string>
     <string name="calendar_drag_to_create">Tap to create an entry, or touch and hold before dragging to select a start and end time.</string>
     <string name="calendar_more_actions">More calendar actions</string>
     <string name="calendar_timer_running">Running timer</string>
@@ -76,10 +72,6 @@
     <string name="calendar_settings_minutes">%1$d min</string>
     <string name="calendar_settings_hour">%1$02d:00</string>
     <string name="long_timer_warning">Long-timer warning</string>
-    <plurals name="long_timer_warning_description">
-        <item quantity="one">Warn after %1$d hour. Stored only on this device.</item>
-        <item quantity="other">Warn after %1$d hours. Stored only on this device.</item>
-    </plurals>
     <plurals name="hours_short">
         <item quantity="one">%1$dh</item>
         <item quantity="other">%1$dh</item>
@@ -116,9 +108,19 @@
     <string name="sync_conflict_edit_locked">Resolve this sync conflict in Review before saving edits.</string>
 
     <!-- Bottom Navigation -->
-    <string name="nav_track">Track</string>
     <string name="nav_calendar">Calendar</string>
-    <string name="nav_stats">Stats</string>
+    <string name="nav_timer">Timer</string>
+    <string name="nav_time_tracker">Time Tracker</string>
+    <string name="nav_reports">Reports</string>
+    <string name="main_menu_open">Open menu</string>
+    <string name="timer_fab_open">New time entry</string>
+    <string name="timer_fab_close">Close new entry options</string>
+    <string name="timer_manual">Manual</string>
+    <string name="start_timer_title">Start timer</string>
+    <string name="calendar_total">Total: %1$s</string>
+    <string name="settings_organization">Organization</string>
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_section_data">Data &amp; sync</string>
 
     <!-- Tile -->
     <string name="tile_label">Time Tracking</string>
@@ -150,7 +152,6 @@
     <string name="network_restored">Back online</string>
 
     <!-- Tracking Screen -->
-    <string name="time_tracking">Time Tracking</string>
     <string name="switch_organization">Switch organization</string>
     <string name="refresh">Refresh</string><string name="syncing">Syncing</string>
     <string name="logout">Logout</string>
@@ -210,7 +211,6 @@
     <string name="what_are_you_working_on">What are you working on?</string>
     <string name="project">Project</string>
     <string name="task">Task</string>
-    <string name="update">Update</string>
     <string name="no_time_entries">No time entries yet</string>
     <string name="edit">Edit</string>
     <string name="delete">Delete</string>
@@ -225,7 +225,10 @@
     <string name="split_entry_title">Split at time</string>
     <string name="today">Today</string>
     <string name="yesterday">Yesterday</string>
-    <string name="time_and_duration">Time and duration</string>
+    <string name="time_section">Time</string>
+    <string name="end">End</string>
+    <string name="duration">Duration</string>
+    <string name="delete_entry">Delete entry</string>
     <string name="running_entry_start_edit_hint">This timer is still running. Changing the start time updates its elapsed time.</string>
     <string name="start_time">Start time</string>
     <string name="end_time">End time</string>
@@ -236,14 +239,6 @@
     <string name="decrease_15_minutes">Decrease by 15 minutes</string>
     <string name="increase_15_minutes">Increase by 15 minutes</string>
     <string name="done">Done</string>
-    <plurals name="customer_count">
-        <item quantity="one">%1$d customer</item>
-        <item quantity="other">%1$d customers</item>
-    </plurals>
-    <plurals name="project_count">
-        <item quantity="one">%1$d project</item>
-        <item quantity="other">%1$d projects</item>
-    </plurals>
 
     <!-- Notifications -->
     <string name="notification_channel_active_name">Active Timer</string>
@@ -284,10 +279,12 @@
     <string name="clear_description_after_stop_description">Keep the project and task selected for the next entry</string>
     <string name="reset_entry_fields">Reset entry fields</string>
     <string name="theme">Theme</string>
-    <string name="theme_description">Choose the app color style</string>
     <string name="theme_system">System</string>
     <string name="theme_light">Light</string>
     <string name="theme_neo">Neo</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_verdant">Verdant</string>
+    <string name="theme_dynamic">Wallpaper</string>
     <string name="pause">Pause</string>
     <string name="resume">Resume</string>
     <string name="paused">Paused</string>
@@ -303,7 +300,6 @@
     <!-- About / Verification -->
     <string name="about">About</string>
     <string name="app_version">Version %1$s</string>
-    <string name="verification_info">Verification Info</string>
     <string name="package_id_label">Package ID</string>
     <string name="signing_certificate_label">Signing Certificate (SHA-256)</string>
     <string name="copied_to_clipboard">Copied to clipboard</string>

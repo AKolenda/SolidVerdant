@@ -17,18 +17,24 @@ object TrackingTestTags {
     const val HISTORY_LIST = "track_history_list"
     const val ENTRY_ROW = "track_entry_row"
     const val START_BUTTON = "track_start_button"
+    const val TIMER_FAB = "track_timer_fab"
+    const val START_TIMER_ACTION = "track_start_timer_action"
+    const val START_TIMER_SHEET = "track_start_timer_sheet"
     const val STOP_BUTTON = "track_stop_button"
     const val RESET_FIELDS_BUTTON = "track_reset_fields_button"
-    const val SETTINGS_BUTTON = "track_settings_button"
-    const val LIVE_UPDATE_SWITCH = "track_live_update_switch"
-    const val AUTO_CLEAR_FIELDS_SWITCH = "track_auto_clear_fields_switch"
-    const val CLEAR_DESCRIPTION_AFTER_STOP_SWITCH = "track_clear_description_after_stop_switch"
     const val REFRESH_BUTTON = "track_refresh_button"
     const val ADD_ENTRY_BUTTON = "track_add_entry_button"
     const val EDIT_ACTIVE_ENTRY = "track_edit_active_entry"
-    const val LOGOUT_BUTTON = "track_logout_button"
+    const val ACTIVE_TIMER_BAR = "track_active_timer_bar"
+    const val RUNNING_TIMER_CONTROLS = "track_running_timer_controls"
+    const val RUNNING_TIMER_STOP = "track_running_timer_stop"
     const val ENTRY_EDIT_BUTTON = "track_entry_edit"
-    const val ENTRY_DELETE_BUTTON = "track_entry_delete"
+    const val ENTRY_DUPLICATE_ACTION = "track_entry_duplicate"
+    const val ENTRY_DELETE_ACTION = "track_entry_delete"
+    const val ENTRY_CONTINUE_ACTION = "track_entry_continue"
+    const val DELETE_CONFIRM = "track_delete_confirm"
+    const val ENTRY_REVIEW_ISSUES = "track_entry_review_issues"
+    const val DELETE_CANCEL = "track_delete_cancel"
     const val CONTINUE_BUTTON = "track_continue_last"
     const val SHEET = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.SHEET
     const val SHEET_PROJECT_TASK_SELECTOR = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.PROJECT_TASK_SELECTOR
@@ -51,6 +57,8 @@ object TrackingTestTags {
     const val ELAPSED_TIMER = "track_elapsed_timer"
     const val SYNC_STATUS_CARD = "track_sync_status_card"
     const val SYNC_DETAILS_BUTTON = "track_sync_details"
+    const val SEARCH_BUTTON = "track_search_button"
+    const val SEARCH_CLOSE_BUTTON = "track_search_close"
     const val FILTER_OPEN_BUTTON = "track_filter_open"
     const val FILTER_SEARCH_FIELD = "track_filter_search"
     const val FILTER_CLOSE_BUTTON = "track_filter_close"
@@ -59,7 +67,14 @@ object TrackingTestTags {
 
     fun entryTimeRange(entryId: String): String = "track_entry_time_range_$entryId"
 
+    /** Retry on a history card; a stacked card is keyed by its first entry and retries every failed one. */
     fun entryRetrySyncButton(entryId: String): String = "track_entry_retry_sync_$entryId"
+
+    fun entryActionsButton(entryId: String): String = "track_entry_actions_$entryId"
+
+    fun entryContinueButton(entryId: String): String = "track_entry_continue_$entryId"
+
+    fun entryGroupToggle(entryId: String): String = "track_entry_group_toggle_$entryId"
 
     fun sheetTagChip(tagId: String): String = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.tagChip(tagId)
 }

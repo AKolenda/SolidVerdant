@@ -8,6 +8,8 @@ package dev.tricked.solidverdant.ui.components
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -34,6 +36,7 @@ fun TagsSelector(
     onTagsChanged: (List<String>) -> Unit,
     enabled: Boolean,
     onCreateTag: ((String) -> Unit)? = null,
+    style: SelectorStyle = SelectorStyle.Field,
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -59,6 +62,8 @@ fun TagsSelector(
         enabled = enabled,
         shape = MaterialTheme.shapes.medium,
         testTag = EditTimeEntryTestTags.TAGS_SELECTOR,
+        style = style,
+        leading = { GroupedRowIcon(Icons.AutoMirrored.Outlined.Label) },
     )
 
     if (expanded && enabled) {

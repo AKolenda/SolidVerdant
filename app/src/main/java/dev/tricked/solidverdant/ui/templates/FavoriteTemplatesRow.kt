@@ -6,20 +6,16 @@
 
 package dev.tricked.solidverdant.ui.templates
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -33,21 +29,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.repository.EntryTemplate
+import dev.tricked.solidverdant.ui.components.GroupedDivider
+import dev.tricked.solidverdant.ui.components.GroupedRow
+import dev.tricked.solidverdant.ui.theme.Dimens
 
 /**
- * Quick-start chip row shown on the Track screen while idle (gap analysis #1). Favorites come first,
- * then recents (see [TemplateOrdering]). One tap resolves the template against the current catalogue
- * and starts a timer; when the description has placeholders or a referenced item is unavailable, a
- * dialog collects/confirms first so nothing is submitted silently.
+ * The start-timer shortcuts for templates, shown in the Time Tracker's start sheet while idle (gap
+ * analysis #1): one grouped row per template, favorites first, then recents (see
+ * [TemplateOrdering]), each with its description and "Project · Task". Place it inside a
+ * [dev.tricked.solidverdant.ui.components.GroupedSection]; [leadingDivider] separates it from rows
+ * above. One tap resolves the template against the current catalogue and starts a timer; when the
+ * description has placeholders or a referenced item is unavailable, a dialog collects/confirms
+ * first so nothing is submitted silently.
  */
 @Composable
 fun FavoriteTemplatesRow(
@@ -57,68 +55,64 @@ fun FavoriteTemplatesRow(
     tags: List<Tag>,
     onStart: (TemplateStart) -> Unit,
     modifier: Modifier = Modifier,
+    leadingDivider: Boolean = false,
 ) {
     if (templates.isEmpty()) return
 
     var pending by remember { mutableStateOf<EntryTemplate?>(null) }
 
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = stringResource(R.string.templates_quick_start_title),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            templates.forEach { template ->
-                val label = templateDisplayLabel(template, projects)
-                val resolution = remember(template, projects, tasks, tags) {
-                    TemplateResolver.resolve(template, projects, tasks, tags)
-                }
-                val startDesc = stringResource(R.string.templates_start_content_desc, label)
-                val warnDesc = stringResource(R.string.templates_unavailable_content_desc)
-                AssistChip(
-                    onClick = {
-                        val placeholders = TemplatePlaceholders.extract(template.description)
-                        if (placeholders.isEmpty() && !resolution.hasIssues) {
-                            onStart(resolution.toStart())
-                        } else {
-                            pending = template
-                        }
-                    },
-                    label = { Text(label) },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = if (template.isFavorite) Icons.Filled.Star else Icons.Filled.PlayArrow,
-                            contentDescription = if (template.isFavorite) {
-                                stringResource(R.string.templates_reason_favorite)
-                            } else {
-                                null
-                            },
-                        )
-                    },
-                    trailingIcon = if (resolution.hasIssues) {
-                        {
-                            Icon(
-                                imageVector = Icons.Filled.Warning,
-                                contentDescription = warnDesc,
-                                tint = MaterialTheme.colorScheme.error,
-                            )
-                        }
-                    } else {
-                        null
-                    },
-                    modifier = Modifier
-                        .heightIn(min = 48.dp)
-                        .semantics { contentDescription = startDesc },
-                    colors = AssistChipDefaults.assistChipColors(),
-                )
-            }
+    templates.forEachIndexed { index, template ->
+        if (index > 0 || leadingDivider) GroupedDivider(inset = Dimens.SettingsIconInset)
+        val label = templateDisplayLabel(template, projects)
+        val resolution = remember(template, projects, tasks, tags) {
+            TemplateResolver.resolve(template, projects, tasks, tags)
         }
+        val projectName = remember(template.projectId, projects) { projects.firstOrNull { it.id == template.projectId }?.name }
+        val taskName = remember(template.taskId, tasks) { tasks.firstOrNull { it.id == template.taskId }?.name }
+        val warnDesc = stringResource(R.string.templates_unavailable_content_desc)
+        GroupedRow(
+            title = label,
+            subtitle = when {
+                projectName == null -> null
+                taskName == null -> projectName
+                else -> stringResource(R.string.start_timer_shortcut_project_task, projectName, taskName)
+            },
+            leadingIcon = Icons.Filled.PlayArrow,
+            showChevron = false,
+            singleLine = true,
+            onClickLabel = stringResource(R.string.templates_start_content_desc, label),
+            onClick = {
+                val placeholders = TemplatePlaceholders.extract(template.description)
+                if (placeholders.isEmpty() && !resolution.hasIssues) {
+                    onStart(resolution.toStart())
+                } else {
+                    pending = template
+                }
+            },
+            trailing = if (resolution.hasIssues || template.isFavorite) {
+                {
+                    // An unavailable project, task or tag is flagged before the favorite star.
+                    if (resolution.hasIssues) {
+                        Icon(
+                            imageVector = Icons.Filled.Warning,
+                            contentDescription = warnDesc,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(Dimens.IconSmall),
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Star,
+                            contentDescription = stringResource(R.string.templates_reason_favorite),
+                            tint = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.size(Dimens.IconSmall),
+                        )
+                    }
+                }
+            } else {
+                null
+            },
+            modifier = modifier,
+        )
     }
 
     pending?.let { template ->
@@ -166,7 +160,7 @@ private fun TemplateStartDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(titleRes)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(Dimens.Space12)) {
                 placeholders.forEach { token ->
                     OutlinedTextField(
                         value = values[token].orEmpty(),
@@ -181,12 +175,13 @@ private fun TemplateStartDialog(
                 }
             }
         },
+        // The app's dialog buttons: the action filled, Cancel as text.
         confirmButton = {
-            TextButton(onClick = {
+            Button(onClick = {
                 val filled = TemplatePlaceholders.fill(template.description, values.toMap())
                 onStart(resolution.toStart(description = filled))
             }) {
-                Text(stringResource(confirmRes), fontWeight = FontWeight.SemiBold)
+                Text(stringResource(confirmRes))
             }
         },
         dismissButton = {

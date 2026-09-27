@@ -24,6 +24,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
 import androidx.test.espresso.Espresso
 import dev.tricked.solidverdant.e2e.TestTags
 import java.time.LocalDate
@@ -65,22 +67,31 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         firstNodeWithTag(TestTags.TRACK_ENTRY_ROW).assertIsDisplayed()
     }
 
+    /** Start the next entry from the start-timer sheet behind the + button. */
     fun tapStart(): TrackRobot = apply {
-        waitForPrimaryTag(TestTags.TRACK_START_BUTTON)
+        openStartTimerSheet()
         waitUntilEnabledTagExists(TestTags.TRACK_START_BUTTON)
         firstEnabledNodeWithTag(TestTags.TRACK_START_BUTTON)
-            .performScrollTo()
             .assertIsDisplayed()
             .performClick()
     }
 
+    /** Stop the running timer docked at the bottom of Time Tracker. */
     fun tapStop(): TrackRobot = apply {
-        waitForPrimaryTag(TestTags.TRACK_STOP_BUTTON)
         waitUntilEnabledTagExists(TestTags.TRACK_STOP_BUTTON)
         firstEnabledNodeWithTag(TestTags.TRACK_STOP_BUTTON)
-            .performScrollTo()
             .assertIsDisplayed()
             .performClick()
+    }
+
+    /** Unfold the idle + button and choose Timer; the sheet holds the next entry's fields. */
+    fun openStartTimerSheet(): TrackRobot = apply {
+        if (nodesWithTag(TestTags.TRACK_START_TIMER_SHEET).fetchSemanticsNodes().isNotEmpty()) return@apply
+        waitUntilEnabledTagExists(TestTags.TRACK_TIMER_FAB)
+        firstEnabledNodeWithTag(TestTags.TRACK_TIMER_FAB).performClick()
+        waitUntilEnabledTagExists(TestTags.TRACK_START_TIMER_ACTION)
+        firstEnabledNodeWithTag(TestTags.TRACK_START_TIMER_ACTION).performClick()
+        waitUntilTagExists(TestTags.TRACK_START_TIMER_SHEET)
     }
 
     fun tapRefresh(): TrackRobot = apply {
@@ -88,7 +99,15 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         firstEnabledNodeWithTag(TestTags.TRACK_REFRESH_BUTTON).performClick()
     }
 
+    /** Add a manual entry: + adds one directly while a timer runs; idle, it unfolds into Manual. */
     fun openAddEntry(): TrackRobot = apply {
+        composeRule.waitUntil(DEFAULT_TIMEOUT_MS) {
+            nodesWithTag(TestTags.TRACK_ADD_ENTRY_BUTTON).fetchSemanticsNodes().isNotEmpty() ||
+                nodesWithTag(TestTags.TRACK_TIMER_FAB).fetchSemanticsNodes().isNotEmpty()
+        }
+        if (nodesWithTag(TestTags.TRACK_ADD_ENTRY_BUTTON).fetchSemanticsNodes().isEmpty()) {
+            firstEnabledNodeWithTag(TestTags.TRACK_TIMER_FAB).performClick()
+        }
         waitUntilEnabledTagExists(TestTags.TRACK_ADD_ENTRY_BUTTON)
         firstEnabledNodeWithTag(TestTags.TRACK_ADD_ENTRY_BUTTON).performClick()
         waitUntilSheetTagExists(TestTags.TRACK_SHEET_SAVE_BUTTON)
@@ -114,29 +133,31 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
     }
 
     fun assertStopButtonVisible(timeoutMs: Long = DEFAULT_TIMEOUT_MS): TrackRobot = apply {
-        waitForPrimaryTag(TestTags.TRACK_STOP_BUTTON, timeoutMs)
         waitUntilTagExists(TestTags.TRACK_STOP_BUTTON, timeoutMs)
-        firstNodeWithTag(TestTags.TRACK_STOP_BUTTON).performScrollTo().assertIsDisplayed()
+        firstNodeWithTag(TestTags.TRACK_STOP_BUTTON).assertIsDisplayed()
     }
 
-    /** A running timer must not expose a second start action. */
+    /** A running timer must not expose a second start action: no start sheet and no Timer choice. */
     fun assertStartButtonGone(): TrackRobot = apply {
         waitUntilTagIsGone(TestTags.TRACK_START_BUTTON)
+        waitUntilTagIsGone(TestTags.TRACK_TIMER_FAB)
     }
 
     fun openSettings(): TrackRobot = apply {
-        waitUntilTagExists(TestTags.TRACK_SETTINGS_BUTTON)
-        firstNodeWithTag(TestTags.TRACK_SETTINGS_BUTTON).performClick()
-        waitUntilTagExists(TestTags.TRACK_LOGOUT_BUTTON)
+        composeRule.openMenuDestination(TestTags.NAV_SETTINGS)
+        waitUntilTagExists(TestTags.SETTINGS_LOGOUT_BUTTON)
     }
 
     fun assertLiveUpdateSettingVisible(): TrackRobot = apply {
-        waitUntilTagExists(TestTags.TRACK_LIVE_UPDATE_SWITCH)
-        firstNodeWithTag(TestTags.TRACK_LIVE_UPDATE_SWITCH).performScrollTo().assertIsDisplayed()
+        waitUntilTagExists(TestTags.SETTINGS_LIVE_UPDATE_SWITCH)
+        firstNodeWithTag(TestTags.SETTINGS_LIVE_UPDATE_SWITCH).performScrollTo().assertIsDisplayed()
     }
 
+    /** Logout asks first (it deletes this device's data), so confirm the prompt. */
     fun logout(): TrackRobot = apply {
-        firstNodeWithTag(TestTags.TRACK_LOGOUT_BUTTON).performClick()
+        firstNodeWithTag(TestTags.SETTINGS_LOGOUT_BUTTON).performScrollTo().performClick()
+        waitUntilEnabledTagExists(TestTags.SETTINGS_LOGOUT_CONFIRM)
+        firstEnabledNodeWithTag(TestTags.SETTINGS_LOGOUT_CONFIRM).performClick()
     }
 
     fun assertLoginVisible(): TrackRobot = apply {
@@ -144,16 +165,17 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         firstNodeWithTag(TestTags.LOGIN_BUTTON).assertIsDisplayed()
     }
 
+    /** Idle Time Tracker: the + button that unfolds into Timer and Manual is back. */
     fun assertStartButtonVisible(): TrackRobot = apply {
-        waitForPrimaryTag(TestTags.TRACK_START_BUTTON)
-        waitUntilTagExists(TestTags.TRACK_START_BUTTON)
-        firstNodeWithTag(TestTags.TRACK_START_BUTTON).performScrollTo().assertIsDisplayed()
+        waitUntilTagExists(TestTags.TRACK_TIMER_FAB)
+        firstNodeWithTag(TestTags.TRACK_TIMER_FAB).assertIsDisplayed()
     }
 
+    /** "Continue last entry" sits in the start-timer sheet, under the next entry's fields. */
     fun tapContinueLastEntry(): TrackRobot = apply {
-        scrollPrimaryTo(TestTags.TRACK_CONTINUE_BUTTON)
+        openStartTimerSheet()
         waitUntilEnabledTagExists(TestTags.TRACK_CONTINUE_BUTTON)
-        firstEnabledNodeWithTag(TestTags.TRACK_CONTINUE_BUTTON).assertIsDisplayed().performClick()
+        firstEnabledNodeWithTag(TestTags.TRACK_CONTINUE_BUTTON).performScrollTo().assertIsDisplayed().performClick()
     }
 
     /** Open the edit sheet for the first (newest) visible single-entry row. */
@@ -164,14 +186,33 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         waitUntilTagExists(TestTags.TRACK_SHEET_SAVE_BUTTON)
     }
 
+    /** History rows delete with a swipe to the left, confirmed in the delete prompt. */
     fun tapFirstEntryDelete(): TrackRobot = apply {
-        scrollHistoryTo(TestTags.TRACK_ENTRY_DELETE_BUTTON)
-        waitUntilTagExists(TestTags.TRACK_ENTRY_DELETE_BUTTON)
-        firstNodeWithTag(TestTags.TRACK_ENTRY_DELETE_BUTTON).assertIsDisplayed().performClick()
+        scrollHistoryTo(TestTags.TRACK_ENTRY_ROW)
+        waitUntilTagExists(TestTags.TRACK_ENTRY_ROW)
+        firstNodeWithTag(TestTags.TRACK_ENTRY_ROW).assertIsDisplayed().performTouchInput { swipeLeft() }
+        waitUntilEnabledTagExists(TestTags.TRACK_DELETE_CONFIRM)
+        firstEnabledNodeWithTag(TestTags.TRACK_DELETE_CONFIRM).performClick()
+        waitUntilTagIsGone(TestTags.TRACK_DELETE_CONFIRM)
     }
 
+    /** True while search is closed: the header shows its search button and no search field. */
+    fun isHistorySearchHidden(): Boolean {
+        waitUntilTagExists(TestTags.TRACK_SEARCH_BUTTON)
+        return nodesWithTag(TestTags.TRACK_FILTER_SEARCH_FIELD).fetchSemanticsNodes().isEmpty()
+    }
+
+    /** Open the search bar from the header's search button. */
+    fun openHistorySearch(): TrackRobot = apply {
+        if (nodesWithTag(TestTags.TRACK_FILTER_SEARCH_FIELD).fetchSemanticsNodes().isNotEmpty()) return@apply
+        waitUntilEnabledTagExists(TestTags.TRACK_SEARCH_BUTTON)
+        firstEnabledNodeWithTag(TestTags.TRACK_SEARCH_BUTTON).performClick()
+        waitUntilTagExists(TestTags.TRACK_FILTER_SEARCH_FIELD)
+    }
+
+    /** Open the search options sheet from the search bar, opening search first when needed. */
     fun openHistoryFilters(): TrackRobot = apply {
-        scrollHistoryTo(TestTags.TRACK_FILTER_OPEN_BUTTON)
+        openHistorySearch()
         waitUntilEnabledTagExists(TestTags.TRACK_FILTER_OPEN_BUTTON)
         firstEnabledNodeWithTag(TestTags.TRACK_FILTER_OPEN_BUTTON).performClick()
         waitUntilTagExists(TestTags.TRACK_FILTER_SEARCH_FIELD)
@@ -182,26 +223,16 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         firstNodeWithTag(TestTags.TRACK_FILTER_SEARCH_FIELD).performTextInput(text)
     }
 
+    /** Close the options sheet with Done; the search bar and its query stay. */
     fun closeHistoryFilters(): TrackRobot = apply {
         firstEnabledNodeWithTag(TestTags.TRACK_FILTER_CLOSE_BUTTON).performClick()
         waitUntilTagIsGone(TestTags.TRACK_FILTER_CLOSE_BUTTON)
         waitUntilTagExists(TestTags.TRACK_FILTER_SEARCH_FIELD)
-        // API 29 can retain the outgoing text-field semantics after the collapsed control is
-        // available. The enabled collapsed control is the authoritative state and is also the
-        // control the next step must interact with.
         waitUntilEnabledTagExists(TestTags.TRACK_FILTER_OPEN_BUTTON)
     }
 
     fun assertHistorySearch(text: String): TrackRobot = apply {
         firstNodeWithTag(TestTags.TRACK_FILTER_SEARCH_FIELD).assertTextContains(text)
-    }
-
-    fun historyFilterOpenWidthRatio(): Float {
-        scrollHistoryTo(TestTags.TRACK_FILTER_OPEN_BUTTON)
-        waitUntilTagExists(TestTags.TRACK_FILTER_OPEN_BUTTON)
-        val openWidth = firstNodeWithTag(TestTags.TRACK_FILTER_OPEN_BUTTON).fetchSemanticsNode().boundsInRoot.width
-        val historyWidth = firstNodeWithTag(TestTags.TRACK_HISTORY_LIST).fetchSemanticsNode().boundsInRoot.width
-        return openWidth / historyWidth
     }
 
     fun duplicateOpenEntry(): TrackRobot = apply {
@@ -401,23 +432,6 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
     fun tapSnackbarAction(label: String): TrackRobot = apply {
         waitUntilTextExists(label)
         composeRule.onAllNodes(hasText(label), useUnmergedTree = true).onFirst().performClick()
-    }
-
-    /** Scroll the layout-specific primary column before addressing a potentially lazy child. */
-    private fun scrollPrimaryTo(tag: String) {
-        val containerTag = if (nodesWithTag(TestTags.TRACK_PRIMARY_LIST).fetchSemanticsNodes().isNotEmpty()) {
-            TestTags.TRACK_PRIMARY_LIST
-        } else {
-            // Compact layouts keep controls and history in the same LazyColumn.
-            TestTags.TRACK_HISTORY_LIST
-        }
-        firstNodeWithTag(containerTag).performScrollToNode(hasTestTag(tag))
-    }
-
-    private fun waitForPrimaryTag(tag: String, timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
-        composeRule.waitUntil(timeoutMs) {
-            runCatching { scrollPrimaryTo(tag) }.isSuccess
-        }
     }
 
     private fun scrollHistoryTo(tag: String) {

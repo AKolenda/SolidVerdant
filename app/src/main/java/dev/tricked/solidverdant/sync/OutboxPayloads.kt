@@ -24,6 +24,7 @@ data class StartPayload(
      */
     val start: String = "",
     val type: TimeEntryType = TimeEntryType.WORK,
+    val billable: Boolean = false,
 )
 
 @Serializable

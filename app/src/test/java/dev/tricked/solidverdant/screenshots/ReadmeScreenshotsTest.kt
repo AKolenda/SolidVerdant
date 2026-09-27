@@ -6,28 +6,44 @@
 
 package dev.tricked.solidverdant.screenshots
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.model.Client
+import dev.tricked.solidverdant.data.model.Membership
+import dev.tricked.solidverdant.data.model.Organization
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.repository.EntryTemplate
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.inbox.InboxIssue
@@ -39,7 +55,12 @@ import dev.tricked.solidverdant.ui.calendar.DayBucket
 import dev.tricked.solidverdant.ui.calendar.MonthCalendarView
 import dev.tricked.solidverdant.ui.calendar.WeekCalendarView
 import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
-import dev.tricked.solidverdant.ui.localization.appLocale
+import dev.tricked.solidverdant.ui.components.GroupedDivider
+import dev.tricked.solidverdant.ui.components.GroupedSection
+import dev.tricked.solidverdant.ui.components.SheetTitleRow
+import dev.tricked.solidverdant.ui.navigation.MainMenuHeader
+import dev.tricked.solidverdant.ui.navigation.MainMenuSheet
+import dev.tricked.solidverdant.ui.navigation.MainTopBar
 import dev.tricked.solidverdant.ui.review.InboxHeader
 import dev.tricked.solidverdant.ui.review.InboxIssueCard
 import dev.tricked.solidverdant.ui.review.InboxIssueCardActions
@@ -48,21 +69,24 @@ import dev.tricked.solidverdant.ui.review.ReviewDayUiState
 import dev.tricked.solidverdant.ui.review.ReviewItem
 import dev.tricked.solidverdant.ui.review.ReviewItemType
 import dev.tricked.solidverdant.ui.review.ReviewProject
-import dev.tricked.solidverdant.ui.statistics.InteractiveBarChart
-import dev.tricked.solidverdant.ui.statistics.KpiGrid
-import dev.tricked.solidverdant.ui.statistics.ProjectTotal
+import dev.tricked.solidverdant.ui.settings.SettingsContent
+import dev.tricked.solidverdant.ui.statistics.EstimateProgress
+import dev.tricked.solidverdant.ui.statistics.MetricDelta
+import dev.tricked.solidverdant.ui.statistics.PeriodComparison
 import dev.tricked.solidverdant.ui.statistics.StatCatalog
-import dev.tricked.solidverdant.ui.statistics.StatFilterBar
-import dev.tricked.solidverdant.ui.statistics.StatFilters
-import dev.tricked.solidverdant.ui.statistics.StatisticsSummary
-import dev.tricked.solidverdant.ui.statistics.TrendBucket
-import dev.tricked.solidverdant.ui.statistics.charts.DonutChart
-import dev.tricked.solidverdant.ui.statistics.hexToColor
+import dev.tricked.solidverdant.ui.statistics.StatRange
+import dev.tricked.solidverdant.ui.statistics.StatisticsAggregator
+import dev.tricked.solidverdant.ui.statistics.StatisticsContent
+import dev.tricked.solidverdant.ui.statistics.StatisticsUiState
+import dev.tricked.solidverdant.ui.statistics.TrendGranularity
 import dev.tricked.solidverdant.ui.templates.TemplateResolver
 import dev.tricked.solidverdant.ui.templates.TemplateRow
 import dev.tricked.solidverdant.ui.templates.templateDisplayLabel
 import dev.tricked.solidverdant.ui.templates.templateProjectTaskSummary
-import dev.tricked.solidverdant.ui.tracking.TrackingControls
+import dev.tricked.solidverdant.ui.tracking.ActiveTimerBar
+import dev.tricked.solidverdant.ui.tracking.StartTimerForm
+import dev.tricked.solidverdant.ui.tracking.TimeTrackerTopBar
+import dev.tricked.solidverdant.ui.tracking.TimerFab
 import dev.tricked.solidverdant.ui.tracking.TrackingUiState
 import dev.tricked.solidverdant.ui.tracking.trackingHistoryItems
 import org.junit.Test
@@ -76,7 +100,6 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.ZoneOffset
-import java.time.format.TextStyle
 import dev.tricked.solidverdant.ui.navigation.Screen as NavScreen
 
 /**
@@ -97,7 +120,26 @@ import dev.tricked.solidverdant.ui.navigation.Screen as NavScreen
 @Config(sdk = [34], qualifiers = "xhdpi")
 class ReadmeScreenshotsTest {
 
-    private class Screen(val name: String, val content: @Composable () -> Unit)
+    /** One README screen: the production shell pieces around it, then its content. */
+    private class Screen(
+        val name: String,
+        val header: (@Composable () -> Unit)? = null,
+        val pushedTitleRes: Int? = null,
+        val bottomBar: @Composable () -> Unit = {},
+        val fab: @Composable () -> Unit = {},
+        val content: @Composable () -> Unit,
+    )
+
+    @Composable
+    private fun Screen.Shell() {
+        ScreenshotHost.AppShell(
+            header = header,
+            pushedTitleRes = pushedTitleRes,
+            bottomBar = bottomBar,
+            fab = fab,
+            content = content,
+        )
+    }
 
     @Test
     fun captureReadmeAndMatrix() {
@@ -117,13 +159,7 @@ class ReadmeScreenshotsTest {
                                 "generated",
                                 "${screen.name}-${theme.id}-${device.id}$localeSuffix.png",
                             ),
-                            content = {
-                                ScreenshotHost.AppShell(
-                                    destination = destinationFor(screen.name),
-                                    inboxBadgeCount = if (screen.name == "inbox") 4 else 0,
-                                    content = screen.content,
-                                )
-                            },
+                            content = { screen.Shell() },
                         )
                         if (locale == LocaleAxis.ENGLISH &&
                             theme == ScreenshotMatrix.readmeTheme &&
@@ -139,13 +175,7 @@ class ReadmeScreenshotsTest {
                                     "readme",
                                     "${screen.name}.png",
                                 ),
-                                content = {
-                                    ScreenshotHost.AppShell(
-                                        destination = destinationFor(screen.name),
-                                        inboxBadgeCount = if (screen.name == "inbox") 4 else 0,
-                                        content = screen.content,
-                                    )
-                                },
+                                content = { screen.Shell() },
                             )
                         }
                     }
@@ -154,11 +184,36 @@ class ReadmeScreenshotsTest {
         }
     }
 
-    private fun destinationFor(screenName: String): NavScreen = when (screenName) {
-        "calendar-month", "calendar-week" -> NavScreen.Calendar
-        "statistics" -> NavScreen.Stats
-        "inbox", "review", "templates" -> NavScreen.Review
-        else -> NavScreen.Track
+    private val timeTrackerHeader: @Composable () -> Unit = {
+        TimeTrackerTopBar(syncing = false, onRefresh = {}, onRequestNotifications = null, onSearch = {})
+    }
+
+    /** The Calendar header and new-entry button; the calendar views below are its body. */
+    private val calendarHeader: @Composable () -> Unit = {
+        MainTopBar(
+            title = stringResource(R.string.nav_calendar),
+            actions = {
+                IconButton(onClick = {}) {
+                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.calendar_more_actions))
+                }
+            },
+        )
+    }
+    private val addEntryFab: @Composable () -> Unit = {
+        FloatingActionButton(
+            onClick = {},
+            shape = CircleShape,
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+        ) {
+            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_time_entry))
+        }
+    }
+    private val idleTimerFab: @Composable () -> Unit = {
+        TimerFab(timerActive = false, expanded = false, onExpandedChange = {}, onStartTimer = {}, onAddManual = {})
+    }
+    private val reviewHeader: @Composable () -> Unit = {
+        MainTopBar(title = stringResource(R.string.review_title))
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -169,7 +224,7 @@ class ReadmeScreenshotsTest {
     private val zone = ZoneId.of("UTC")
 
     private val projects = listOf(
-        Project(id = "p1", name = "Website Redesign", color = "#386A20"),
+        Project(id = "p1", name = "Website Redesign", color = "#386A20", clientId = "c1"),
         Project(id = "p2", name = "Internal Tools", color = "#386666"),
         Project(id = "p3", name = "Client — Acme", color = "#8A5A00", isArchived = true),
     )
@@ -218,6 +273,7 @@ class ReadmeScreenshotsTest {
             projectId = "p1",
             entryTags = listOf(tags[1]),
         ),
+        entry("e6", "Landing page build", "2026-06-10T07:00:00Z", "2026-06-10T08:30:00Z", 5400, taskId = "t1", entryTags = listOf(tags[0])),
     )
 
     private val syncOperations = listOf(
@@ -237,47 +293,47 @@ class ReadmeScreenshotsTest {
         ),
     )
 
+    private val runningState = TrackingUiState(
+        isTracking = true,
+        elapsedSeconds = 5_112,
+        currentTimeEntry = entry("running", "Landing page build", "2026-06-10T14:00:00Z", null, 0, taskId = "t1"),
+        projects = projects,
+        tasks = tasks,
+        clients = clients,
+        timeEntries = historyEntries,
+        hasLoadedTimeEntries = true,
+        editingDescription = "Landing page build",
+        editingProjectId = "p1",
+        editingTaskId = "t1",
+        editingTags = listOf("tag1"),
+        editingBillable = true,
+        syncOperations = syncOperations,
+    )
+
     private fun groupedHistory(): Map<LocalDate, List<TimeEntry>> = historyEntries.groupBy { LocalDate.parse(it.start.substring(0, 10)) }
         .toSortedMap(compareByDescending { it })
 
     @Suppress("LongMethod")
     private fun buildScreens(): List<Screen> = listOf(
-        // 1. Track — active timer running + history rows with sync chips.
-        Screen("track") {
-            val state = TrackingUiState(
-                isTracking = true,
-                elapsedSeconds = 5_112,
-                currentTimeEntry = entry("running", "Landing page build", "2026-06-10T14:00:00Z", null, 0, taskId = "t1"),
-                projects = projects,
-                tasks = tasks,
-                clients = clients,
-                timeEntries = historyEntries,
-                hasLoadedTimeEntries = true,
-                editingDescription = "Landing page build",
-                editingProjectId = "p1",
-                editingTaskId = "t1",
-                editingTags = listOf("tag1"),
-                editingBillable = true,
-                syncOperations = syncOperations,
-            )
-            LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                item {
-                    TrackingControls(
-                        uiState = state,
-                        onDescriptionChange = {},
-                        onProjectChange = {},
-                        onTaskChange = {},
-                        onTagsChange = {},
-                        onBillableChange = {},
-                        onStart = {},
-                        onStop = {},
-                        onPause = {},
-                        onResume = {},
-                        onUpdate = {},
-                    )
-                }
+        // 1. Time Tracker — history with the running timer docked at the bottom.
+        Screen(
+            name = "track",
+            header = timeTrackerHeader,
+            bottomBar = {
+                ActiveTimerBar(
+                    uiState = runningState,
+                    elapsedSeconds = runningState.elapsedSeconds,
+                    onStop = {},
+                    onPause = {},
+                    onResume = {},
+                    onEditActiveEntry = {},
+                )
+            },
+            fab = { TimerFab(timerActive = true, expanded = false, onExpandedChange = {}, onStartTimer = {}, onAddManual = {}) },
+        ) {
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
                 trackingHistoryItems(
-                    uiState = state,
+                    uiState = runningState,
                     groupedEntries = groupedHistory(),
                     onEdit = {},
                     onDelete = {},
@@ -285,8 +341,57 @@ class ReadmeScreenshotsTest {
                 )
             }
         },
+        // 1b. Time Tracker idle — the start-timer sheet for the next entry over the history.
+        Screen(name = "track-idle", header = timeTrackerHeader) {
+            val state = TrackingUiState(
+                projects = projects,
+                tasks = tasks,
+                tags = tags,
+                clients = clients,
+                timeEntries = historyEntries,
+                hasLoadedTimeEntries = true,
+                editingDescription = "",
+                editingProjectId = "p1",
+                editingTaskId = "t2",
+                editingBillable = true,
+            )
+            Box(Modifier.fillMaxSize()) {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    trackingHistoryItems(
+                        uiState = state,
+                        groupedEntries = groupedHistory(),
+                        onEdit = {},
+                        onDelete = {},
+                        onDateClick = {},
+                        onContinue = {},
+                    )
+                }
+                // A modal sheet opens in its own window, which Roborazzi does not capture; draw
+                // the same scrim and sheet in place.
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f)))
+                Surface(
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                    shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                    // The app sheet: page background behind grouped sections, like AppSheet.
+                    color = MaterialTheme.colorScheme.background,
+                ) {
+                    Column(Modifier.padding(top = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        SheetTitleRow(title = stringResource(R.string.start_timer_title))
+                        StartTimerForm(
+                            uiState = state,
+                            onDescriptionChange = {},
+                            onProjectChange = {},
+                            onTaskChange = {},
+                            onTagsChange = {},
+                            onBillableChange = {},
+                            onStart = {},
+                        )
+                    }
+                }
+            }
+        },
         // 2. History list — several entries grouped by day, with sync chips.
-        Screen("history") {
+        Screen(name = "history", header = timeTrackerHeader, fab = idleTimerFab) {
             val state = TrackingUiState(
                 projects = projects,
                 tasks = tasks,
@@ -295,18 +400,19 @@ class ReadmeScreenshotsTest {
                 hasLoadedTimeEntries = true,
                 syncOperations = syncOperations,
             )
-            LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
                 trackingHistoryItems(
                     uiState = state,
                     groupedEntries = groupedHistory(),
                     onEdit = {},
                     onDelete = {},
                     onDateClick = {},
+                    onContinue = {},
                 )
             }
         },
         // 3. Calendar — month view with sample entries.
-        Screen("calendar-month") {
+        Screen(name = "calendar-month", header = calendarHeader, fab = addEntryFab) {
             val d10 = LocalDate.of(2026, 6, 10)
             val d09 = LocalDate.of(2026, 6, 9)
             val state = CalendarUiState(
@@ -338,8 +444,32 @@ class ReadmeScreenshotsTest {
                 tasks = tasks,
             )
         },
+        // 3b. Calendar — day view: date and total, the week strip, grey entry cards.
+        Screen(name = "calendar-day", header = calendarHeader, fab = addEntryFab) {
+            val d10 = LocalDate.of(2026, 6, 10)
+            val dayEntries = historyEntries.filter { it.start.startsWith("2026-06-10") }
+            WeekCalendarView(
+                state = CalendarUiState(
+                    viewMode = CalendarViewMode.DAY,
+                    zone = ZoneOffset.UTC,
+                    selectedDate = d10,
+                    weekAnchor = d10,
+                    weekStart = DayOfWeek.MONDAY,
+                    visibleDays = listOf(d10),
+                    isLoading = false,
+                    bucketsByDate = mapOf(d10 to DayBucket(d10, dayEntries, dayEntries.sumOf { it.duration ?: 0 }.toLong())),
+                ),
+                onSelectDate = {},
+                onEntryClick = {},
+                onPrevious = {},
+                onNext = {},
+                projects = projects,
+                tasks = tasks,
+                clients = clients,
+            )
+        },
         // 4. Calendar — week view with a couple of overlay calendar events.
-        Screen("calendar-week") {
+        Screen(name = "calendar-week", header = calendarHeader, fab = addEntryFab) {
             val week = (8..14).map { LocalDate.of(2026, 6, it) } // Mon..Sun
             val mon = week[0]
             val tue = week[1]
@@ -399,62 +529,108 @@ class ReadmeScreenshotsTest {
                 onEntryClick = {},
                 onPrevious = {},
                 onNext = {},
-                onToday = {},
                 projects = projects,
             )
         },
-        // 5. Statistics — filter bar + KPI grid + charts.
-        Screen("statistics") {
-            val locale = appLocale()
-            val summary = StatisticsSummary(
-                totalSeconds = 5 * 3600 + 45 * 60,
-                entryCount = 18,
-                avgSecondsPerDay = 4600,
-                billableSeconds = 4 * 3600 + 10 * 60,
-                nonBillableSeconds = 1 * 3600 + 35 * 60,
-                perProject = listOf(
-                    ProjectTotal("p1", "Website Redesign", "#386A20", 12_600),
-                    ProjectTotal("p2", "Internal Tools", "#386666", 5_400),
-                    ProjectTotal(null, "No project", "#8298AE", 2_700),
-                ),
-                trend = listOf(
-                    TrendBucket("Mon", LocalDate.of(2026, 6, 8), 12_600),
-                    TrendBucket("Tue", LocalDate.of(2026, 6, 9), 8_100),
-                    TrendBucket("Wed", LocalDate.of(2026, 6, 10), 13_800),
-                    TrendBucket("Thu", LocalDate.of(2026, 6, 11), 6_300),
-                    TrendBucket("Fri", LocalDate.of(2026, 6, 12), 9_900),
-                ),
-            )
-            Column(
-                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                StatFilterBar(
-                    filters = StatFilters(projectIds = setOf("p1")),
-                    catalog = StatCatalog(projects = projects, clients = clients, tasks = tasks, tags = tags),
-                    onFiltersChange = {},
-                    onClearFilters = {},
-                )
-                KpiGrid(summary)
-                DonutChart(
-                    slices = summary.perProject.map { hexToColor(it.colorHex) to it.seconds.toFloat() },
-                    modifier = Modifier.size(180.dp).align(Alignment.CenterHorizontally),
-                )
-                InteractiveBarChart(
-                    bars = summary.trend,
-                    barColor = MaterialTheme.colorScheme.primary,
-                    onBarClick = {},
-                    labelFor = { bucket ->
-                        bucket.startDate.dayOfWeek.getDisplayName(
-                            TextStyle.SHORT,
-                            locale,
+        // 4b. Side menu — the account, organization and destinations.
+        Screen(name = "menu", header = timeTrackerHeader) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f))) {
+                MainMenuSheet(
+                    selectedRoute = NavScreen.Track.route,
+                    onNavigate = {},
+                    modifier = Modifier.fillMaxHeight(),
+                    header = {
+                        MainMenuHeader(
+                            userName = "Alex Morgan",
+                            userEmail = "alex@acme.studio",
+                            organizationName = "Acme Studio",
+                            memberships = emptyList(),
+                            currentMembershipId = "m1",
+                            canSwitchOrganization = true,
+                            onMembershipChange = {},
                         )
                     },
                 )
             }
         },
+        // 5. Dashboard — a full week stacked by four projects.
+        Screen(name = "statistics") {
+            val dashboardProjects = listOf(
+                Project(id = "d1", name = "Website Redesign", color = "#5E5CE6"),
+                Project(id = "d2", name = "Mobile App", color = "#FF9F0A"),
+                Project(id = "d3", name = "Client — Acme", color = "#30B0C7"),
+                Project(id = "d4", name = "Internal Tools", color = "#34C759"),
+            )
+            // Minutes per project for Mon 8 – Sun 14 June 2026.
+            val minutesByDay = listOf(
+                listOf(210, 95, 60, 40),
+                listOf(150, 140, 0, 55),
+                listOf(240, 60, 90, 30),
+                listOf(120, 170, 45, 50),
+                listOf(180, 80, 75, 20),
+                listOf(0, 90, 0, 0),
+                listOf(0, 0, 0, 0),
+            )
+            val weekStart = LocalDate.of(2026, 6, 8)
+            val weekEntries = minutesByDay.flatMapIndexed { day, minutes ->
+                var cursor = weekStart.plusDays(day.toLong()).atTime(8, 30).toInstant(ZoneOffset.UTC)
+                minutes.mapIndexedNotNull { p, mins ->
+                    if (mins == 0) return@mapIndexedNotNull null
+                    val end = cursor.plusSeconds(mins * 60L)
+                    entry(
+                        "w$day$p",
+                        null,
+                        cursor.toString(),
+                        end.toString(),
+                        mins * 60,
+                        projectId = dashboardProjects[p].id,
+                        billable =
+                        p != 3,
+                    )
+                        .also { cursor = end.plusSeconds(15 * 60L) }
+                }
+            }
+            val weekRange = weekStart..weekStart.plusDays(6)
+            val summary = StatisticsAggregator.compute(
+                entries = weekEntries,
+                projects = dashboardProjects,
+                rangeStart = weekRange.start,
+                rangeEnd = weekRange.endInclusive,
+                zone = zone,
+                granularity = TrendGranularity.DAY,
+                firstDayOfWeek = DayOfWeek.MONDAY,
+            )
+            StatisticsContent(
+                state = StatisticsUiState(
+                    isLoading = false,
+                    range = StatRange.LastWeek,
+                    catalog = StatCatalog(projects = dashboardProjects),
+                    summary = summary,
+                    comparison = PeriodComparison(
+                        total = MetricDelta(summary.totalSeconds, 29L * 3600L + 40L * 60L),
+                        previousStart = weekRange.start.minusWeeks(1),
+                        previousEnd = weekRange.endInclusive.minusWeeks(1),
+                    ),
+                    estimateProgress = listOf(
+                        EstimateProgress("d1", "Website Redesign", "#5E5CE6", estimatedSeconds = 60 * 3600, spentSeconds = 41 * 3600),
+                        EstimateProgress("d3", "Client — Acme", "#30B0C7", estimatedSeconds = 12 * 3600, spentSeconds = 13 * 3600),
+                    ),
+                    rangeStart = weekRange.start,
+                    rangeEnd = weekRange.endInclusive,
+                    granularity = TrendGranularity.DAY,
+                ),
+                exporting = false,
+                onRangeChange = {},
+                onFiltersChange = {},
+                onClearFilters = {},
+                onRefresh = {},
+                onExport = {},
+                onProjectClick = {},
+                onBucketClick = {},
+            )
+        },
         // 6. Time Inbox — a few review issue cards.
-        Screen("inbox") {
+        Screen(name = "inbox", header = reviewHeader) {
             val projectsById = projects.associateBy { it.id }
             val issues = listOf(
                 InboxIssue(
@@ -517,7 +693,7 @@ class ReadmeScreenshotsTest {
             }
         },
         // 7. End-of-day review — the guided pane.
-        Screen("review") {
+        Screen(name = "review", header = reviewHeader) {
             val state = ReviewDayUiState(
                 loading = false,
                 hasOrganization = true,
@@ -564,7 +740,7 @@ class ReadmeScreenshotsTest {
             )
         },
         // 8. Edit/create entry sheet.
-        Screen("edit-entry") {
+        Screen(name = "edit-entry", header = timeTrackerHeader) {
             val editing = entry(
                 id = "e2",
                 description = "Landing page build",
@@ -606,18 +782,52 @@ class ReadmeScreenshotsTest {
                 )
             }
         },
-        // 9. Templates / favorites.
-        Screen("templates") {
+        // 9. Settings tab.
+        Screen(name = "settings") {
+            SettingsContent(
+                user = User(id = "u1", name = "Alex Morgan", email = "alex@acme.studio", timezone = "Europe/Amsterdam"),
+                memberships = emptyList(),
+                currentMembership = Membership("m1", "owner", Organization(id = "org1", name = "Acme Studio", currency = "EUR")),
+                canSwitchOrganization = true,
+                serverEndpoint = "https://time.acme.studio",
+                clientId = "9f3c2a71-5d1e-4c9b-a0f2-1b7e6d4c8a90",
+                appTheme = dev.tricked.solidverdant.data.local.AppThemeMode.SYSTEM,
+                alwaysShowNotifications = true,
+                optimisticRefresh = true,
+                liveUpdateEnabled = false,
+                autoClearEntryFieldsAfterStop = true,
+                clearDescriptionAfterStop = false,
+                longTimerHours = 4,
+                onMembershipChange = {},
+                onAppThemeChange = {},
+                onAlwaysShowNotificationsChange = {},
+                onOptimisticRefreshChange = {},
+                onLiveUpdateEnabledChange = {},
+                onAutoClearEntryFieldsAfterStopChange = {},
+                onClearDescriptionAfterStopChange = {},
+                onLongTimerHoursChange = {},
+                onOpenReview = {},
+                onOpenReminderSettings = {},
+                onOpenManageTemplates = {},
+                onOpenSyncCenter = {},
+                onOpenPrivacy = {},
+                onLogout = {},
+                liveUpdatesSupported = true,
+                systemLiveUpdatesEnabled = true,
+                onRequestNotificationPermission = {},
+            )
+        },
+        // 10. Templates / favorites.
+        Screen(name = "templates", pushedTitleRes = R.string.review_menu_manage_templates) {
             val templates = listOf(
                 EntryTemplate("tm1", "org1", "Deep work", "p1", "t1", "Focus block", listOf("tag1"), true, true, 0, 0L),
                 EntryTemplate("tm2", "org1", null, "p1", null, "Daily standup", emptyList(), false, false, 1, 0L),
                 EntryTemplate("tm3", "org1", "Client call", "p3", null, null, listOf("missing-tag"), true, false, 2, 0L),
             )
-            Column(
-                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
+            // Production draws the rows as one grouped section of lazy items.
+            GroupedSection(modifier = Modifier.padding(top = 16.dp)) {
                 templates.forEachIndexed { index, template ->
+                    if (index > 0) GroupedDivider()
                     val resolution = TemplateResolver.resolve(template, projects, tasks, tags)
                     TemplateRow(
                         template = template,

@@ -30,21 +30,25 @@ import dev.tricked.solidverdant.sync.SyncTrigger
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.time.DayOfWeek
-import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -92,7 +96,27 @@ class InboxViewModel @Inject constructor(
     private val retentionMs = TimeUnit.DAYS.toMillis(InboxAnalyzer.DISMISSAL_RETENTION_DAYS)
 
     private val _uiState = MutableStateFlow(InboxUiState(zone = currentPolicy.zone))
-    val uiState: StateFlow<InboxUiState> = _uiState.asStateFlow()
+
+    /**
+     * Keeps [_uiState] current from Room, DataStore and the temporal policy. It never emits; it runs
+     * only while [uiState] has a collector, because this ViewModel outlives the Review tab and
+     * collecting in `init` kept every one of these flows (and the analysis) hot for the whole session.
+     */
+    private val observation: Flow<Nothing> = flow {
+        coroutineScope {
+            launch {
+                temporalPolicyProvider.policy.collect { policy ->
+                    currentPolicy = policy
+                    _uiState.update { it.copy(zone = policy.zone) }
+                }
+            }
+            observeInbox()
+        }
+    }
+
+    /** The pane's state; observation starts with the first collector and stops 5 s after the last. */
+    val uiState: StateFlow<InboxUiState> = merge(_uiState, observation)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STATE_STOP_TIMEOUT_MS), _uiState.value)
 
     @Volatile
     private var context: OrgContext? = null
@@ -111,16 +135,6 @@ class InboxViewModel @Inject constructor(
             preventOverlap = membership.organization.preventOverlappingTimeEntries,
         )
     }.distinctUntilChanged()
-
-    init {
-        viewModelScope.launch {
-            temporalPolicyProvider.policy.collect { policy ->
-                currentPolicy = policy
-                _uiState.update { it.copy(zone = policy.zone) }
-            }
-        }
-        viewModelScope.launch { observeInbox() }
-    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private suspend fun observeInbox() {
@@ -210,6 +224,14 @@ class InboxViewModel @Inject constructor(
                     tags = data.tags,
                     horizonChosen = data.settings.horizonChosen,
                     horizonStartMs = data.settings.horizonStartMs,
+                    horizonOption = matchHorizonOption(
+                        chosen = data.settings.horizonChosen,
+                        startMs = data.settings.horizonStartMs,
+                        nowMs = now,
+                        zone = zone,
+                        firstDayOfWeek = currentPolicy.firstDayOfWeek,
+                    ),
+                    firstDayOfWeek = currentPolicy.firstDayOfWeek,
                 )
             }
         }
@@ -442,17 +464,7 @@ class InboxViewModel @Inject constructor(
      */
     fun chooseHorizon(option: HorizonOption) {
         val policy = currentPolicy
-        val startMs: Long? = when (option) {
-            HorizonOption.TODAY ->
-                LocalDate.now(policy.zone).atStartOfDay(policy.zone).toInstant().toEpochMilli()
-            HorizonOption.THIS_WEEK -> {
-                val today = LocalDate.now(policy.zone)
-                val daysBack = ((today.dayOfWeek.value - policy.firstDayOfWeek.value) + DAYS_PER_WEEK) % DAYS_PER_WEEK
-                today.minusDays(daysBack.toLong()).atStartOfDay(policy.zone).toInstant().toEpochMilli()
-            }
-            HorizonOption.LAST_30_DAYS -> clock.nowMs() - TimeUnit.DAYS.toMillis(LAST_N_DAYS.toLong())
-            HorizonOption.EVERYTHING -> null
-        }
+        val startMs = horizonStartFor(option, clock.nowMs(), policy.zone, policy.firstDayOfWeek)
         viewModelScope.launch { inboxSettingsDataStore.setHorizonStart(startMs) }
     }
 
@@ -500,11 +512,10 @@ class InboxViewModel @Inject constructor(
     }.getOrNull()
 }
 
+private const val STATE_STOP_TIMEOUT_MS = 5_000L
 private const val MINUTE_OF_DAY_START = 0
 private const val MINUTE_OF_DAY_END = 1440
 private const val MIN_GAP_MINUTES = 1
 private const val MAX_GAP_MINUTES = 24 * 60
 private const val MIN_DURATION_HOURS = 1
 private const val MAX_DURATION_HOURS = 24
-private const val DAYS_PER_WEEK = 7
-private const val LAST_N_DAYS = 30

@@ -7,11 +7,14 @@
 package dev.tricked.solidverdant.ui.calendar
 
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.domain.time.formatTimeEntryInstant
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
+import kotlin.math.roundToLong
 
 /** A half-open time range selected in a calendar time grid. */
 data class CalendarTimeRange(val start: ZonedDateTime, val end: ZonedDateTime)
@@ -63,6 +66,38 @@ fun calendarTimeAtGridPosition(
     return grid.start.plusSeconds(second).atZone(zone)
 }
 
+/**
+ * Where a held entry lands after being dragged [dragYPx] down (negative is up) and [dayShift]
+ * columns across from [day]. The drop is the entry's real [entryStart] plus the dragged time,
+ * snapped to the grid. Working from the real start rather than the drawn block matters for an entry
+ * that starts before the visible hours: its block is clipped to the grid top, so reading the drop
+ * from the block's top would shift it by the hidden part as well as by the drag.
+ *
+ * The start stays inside the target day's grid, except that an entry which already started before
+ * the grid may stay up to its original time of day.
+ */
+fun calendarDragTargetStart(
+    entryStart: Instant,
+    day: LocalDate,
+    dayShift: Int,
+    dragYPx: Float,
+    gridHeightPx: Float,
+    zone: ZoneId,
+    settings: CalendarGridSettings = CalendarGridSettings(),
+): ZonedDateTime {
+    val normalized = settings.normalized()
+    val sourceGrid = calendarGridBounds(day, zone, normalized)
+    val targetGrid = calendarGridBounds(day.plusDays(dayShift.toLong()), zone, normalized)
+    val slotSeconds = normalized.snapMinutes * SECONDS_PER_MINUTE
+    // The same local time-of-day on the target day: both grids open at the configured start hour.
+    val startOffset = entryStart.epochSecond - sourceGrid.start.epochSecond
+    val dragSeconds = if (gridHeightPx <= 0f) 0L else (dragYPx / gridHeightPx * sourceGrid.seconds).roundToLong()
+    val minSecond = minOf(0L, startOffset)
+    val maxSecond = (targetGrid.seconds - slotSeconds).coerceAtLeast(minSecond)
+    val second = snapToSlot(startOffset + dragSeconds, slotSeconds).coerceIn(minSecond, maxSecond)
+    return targetGrid.start.plusSeconds(second).atZone(zone)
+}
+
 /** Preserve an entry's complete duration while moving its start across local calendar days. */
 fun calendarEntryRangeAt(entry: TimeEntry, targetStart: ZonedDateTime): CalendarEntryRange? {
     val originalStart = runCatching { ZonedDateTime.parse(entry.start) }.getOrNull() ?: return null
@@ -70,6 +105,15 @@ fun calendarEntryRangeAt(entry: TimeEntry, targetStart: ZonedDateTime): Calendar
     val duration = Duration.between(originalStart, originalEnd)
     if (duration.isZero || duration.isNegative) return null
     return CalendarEntryRange(start = targetStart, end = targetStart.plus(duration))
+}
+
+/**
+ * The split point chosen as [date] at [hour]:[minute] in [zone], in the app's UTC `Z` timestamp
+ * shape, or null unless it falls strictly inside [start]..[end].
+ */
+fun calendarSplitTimestamp(date: LocalDate, hour: Int, minute: Int, zone: ZoneId, start: ZonedDateTime, end: ZonedDateTime): String? {
+    val candidate = date.atTime(hour, minute).atZone(zone)
+    return if (candidate.isAfter(start) && candidate.isBefore(end)) formatTimeEntryInstant(candidate) else null
 }
 
 /** A useful one-hour fallback for the toolbar's Add action when no drag range was selected. */
@@ -97,6 +141,7 @@ private fun calendarGridSecond(y: Float, gridHeightPx: Float, secondsInGrid: Lon
     return ((y / gridHeightPx).coerceIn(0f, 1f) * secondsInGrid).toLong()
 }
 
-private fun snapToSlot(second: Long, slotSeconds: Long): Long = ((second + slotSeconds / 2) / slotSeconds) * slotSeconds
+// Floor division so a time before the grid start (a negative offset) snaps like any other.
+private fun snapToSlot(second: Long, slotSeconds: Long): Long = Math.floorDiv(second + slotSeconds / 2, slotSeconds) * slotSeconds
 
 private const val SECONDS_PER_MINUTE = 60L

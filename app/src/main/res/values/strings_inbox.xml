@@ -92,9 +92,6 @@
     <string name="inbox_settings_check_missing_description">Missing description</string>
     <string name="inbox_settings_check_missing_tags">Missing tags</string>
     <string name="inbox_settings_check_long">Long entries</string>
-    <string name="inbox_settings_done">Done</string>
-    <string name="inbox_settings_decrease">Decrease</string>
-    <string name="inbox_settings_increase">Increase</string>
     <string name="inbox_minutes_value">%1$d min</string>
     <string name="inbox_hours_value">%1$d h</string>
 

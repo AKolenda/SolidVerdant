@@ -11,27 +11,23 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.outlined.Event
+import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,16 +38,20 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import dev.tricked.solidverdant.R
-import dev.tricked.solidverdant.ui.components.SectionCard
+import dev.tricked.solidverdant.data.calendar.DeviceCalendar
+import dev.tricked.solidverdant.ui.components.GroupedDivider
+import dev.tricked.solidverdant.ui.components.GroupedRow
+import dev.tricked.solidverdant.ui.components.GroupedSection
+import dev.tricked.solidverdant.ui.components.GroupedSwitchRow
 import dev.tricked.solidverdant.ui.theme.Dimens
 
 /**
- * Opt-in device-calendar overlay controls: the on/off switch, the runtime-permission education and
- * recovery states, and the per-calendar selection. All privacy-sensitive language lives here so the
- * user understands access is local and read-only (FEATURE_GAP_ANALYSIS.md #22/#77).
+ * Opt-in device-calendar overlay controls as grouped sections: the on/off switch with the privacy
+ * note, the runtime-permission education and recovery states, and the per-calendar toggles with
+ * the overlay's status beneath them. All privacy-sensitive language lives here so the user
+ * understands access is local and read-only (FEATURE_GAP_ANALYSIS.md #22/#77).
  */
 @Composable
 fun CalendarOverlayControls(
@@ -64,66 +64,42 @@ fun CalendarOverlayControls(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    SectionCard(
-        modifier = modifier.fillMaxWidth(),
-        title = stringResource(R.string.calendar_overlay_title),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.MinTouchTarget),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.calendar_overlay_show),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.weight(1f),
-            )
-            Switch(
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Dimens.Space16)) {
+        GroupedSection(footer = stringResource(R.string.calendar_overlay_privacy)) {
+            GroupedSwitchRow(
+                title = stringResource(R.string.calendar_overlay_show),
                 checked = state.overlayEnabled,
                 onCheckedChange = onToggleOverlay,
+                leadingIcon = Icons.Outlined.Event,
                 modifier = Modifier.testTag(CalendarTestTags.OVERLAY_TOGGLE),
             )
         }
 
         if (state.overlayEnabled) {
             when {
-                !state.hasCalendarPermission ->
-                    PermissionSection(
-                        permanentlyDenied = state.permissionRequested && !showRationale,
-                        onRequestPermission = onRequestPermission,
-                        onOpenAppSettings = onOpenAppSettings,
+                !state.hasCalendarPermission -> PermissionSection(
+                    permanentlyDenied = state.permissionRequested && !showRationale,
+                    onRequestPermission = onRequestPermission,
+                    onOpenAppSettings = onOpenAppSettings,
+                )
+
+                state.calendarListLoading -> GroupedSection(modifier = Modifier.testTag(CalendarTestTags.OVERLAY_CALENDAR_LOADING)) {
+                    GroupedRow(
+                        title = stringResource(R.string.calendar_overlay_calendars_loading),
+                        trailing = { SmallProgress() },
                     )
+                }
 
-                state.calendarListLoading ->
-                    StatusText(
-                        stringResource(R.string.calendar_overlay_calendars_loading),
-                        modifier = Modifier.testTag(CalendarTestTags.OVERLAY_CALENDAR_LOADING),
-                    )
+                state.calendarListError -> GroupedSection(
+                    footer = stringResource(R.string.calendar_overlay_calendars_error),
+                    modifier = Modifier.testTag(CalendarTestTags.OVERLAY_CALENDAR_ERROR),
+                ) {
+                    RetryRow(onRetry = onRetry, modifier = Modifier.testTag(CalendarTestTags.OVERLAY_RETRY))
+                }
 
-                state.calendarListError ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag(CalendarTestTags.OVERLAY_CALENDAR_ERROR),
-                    ) {
-                        StatusText(stringResource(R.string.calendar_overlay_calendars_error))
-                        TextButton(
-                            onClick = onRetry,
-                            modifier = Modifier
-                                .heightIn(min = 48.dp)
-                                .testTag(CalendarTestTags.OVERLAY_RETRY),
-                        ) {
-                            Text(stringResource(R.string.calendar_overlay_retry))
-                        }
-                    }
+                state.availableCalendars.isEmpty() -> OverlayNote(stringResource(R.string.calendar_overlay_no_calendars))
 
-                state.availableCalendars.isEmpty() ->
-                    StatusText(stringResource(R.string.calendar_overlay_no_calendars))
-
-                else ->
-                    CalendarPickerSection(state = state, onToggleCalendar = onToggleCalendar, onRetry = onRetry)
+                else -> CalendarPickerSection(state = state, onToggleCalendar = onToggleCalendar, onRetry = onRetry)
             }
         }
     }
@@ -131,155 +107,141 @@ fun CalendarOverlayControls(
 
 @Composable
 private fun PermissionSection(permanentlyDenied: Boolean, onRequestPermission: () -> Unit, onOpenAppSettings: () -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text(
-            text = stringResource(
-                if (permanentlyDenied) {
-                    R.string.calendar_overlay_denied
-                } else {
-                    R.string.calendar_overlay_permission_rationale
-                },
-            ),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        PrivacyNote()
+    GroupedSection(
+        footer = stringResource(
+            if (permanentlyDenied) R.string.calendar_overlay_denied else R.string.calendar_overlay_permission_rationale,
+        ),
+    ) {
         if (permanentlyDenied) {
-            TextButton(onClick = onOpenAppSettings, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text(stringResource(R.string.calendar_overlay_open_settings))
-            }
+            // Leaves the app for system settings, so it keeps the chevron.
+            GroupedRow(
+                title = stringResource(R.string.calendar_overlay_open_settings),
+                leadingIcon = Icons.Outlined.Settings,
+                onClick = onOpenAppSettings,
+            )
         } else {
-            Button(onClick = onRequestPermission, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text(stringResource(R.string.calendar_overlay_grant))
-            }
+            GroupedRow(
+                title = stringResource(R.string.calendar_overlay_grant),
+                leadingIcon = Icons.Outlined.LockOpen,
+                showChevron = false,
+                onClick = onRequestPermission,
+            )
         }
     }
 }
 
+/** Every device calendar as a toggle row, with the overlay's current state as the footer. */
 @Composable
 private fun CalendarPickerSection(state: CalendarUiState, onToggleCalendar: (String) -> Unit, onRetry: () -> Unit) {
-    var expanded by remember { mutableStateOf(state.selectedCalendarIds.isEmpty()) }
-    Column(modifier = Modifier.fillMaxWidth()) {
-        PrivacyNote()
-        TextButton(onClick = { expanded = !expanded }, modifier = Modifier.heightIn(min = 48.dp)) {
-            Text(
-                pluralStringResource(
-                    R.plurals.calendar_overlay_choose_count,
-                    state.selectedCalendarIds.size,
-                    state.selectedCalendarIds.size,
-                ),
+    val selectedCount = state.selectedCalendarIds.size
+    val status = when {
+        state.selectedCalendarIds.isEmpty() -> R.string.calendar_overlay_none_selected
+        state.overlayLoading -> R.string.calendar_overlay_loading
+        state.overlayError -> R.string.calendar_overlay_error
+        state.overlayEvents.isEmpty() -> R.string.calendar_overlay_empty
+        else -> R.string.calendar_overlay_showing
+    }
+    GroupedSection(
+        header = pluralStringResource(R.plurals.calendar_overlay_choose_count, selectedCount, selectedCount),
+        footer = stringResource(status),
+    ) {
+        state.availableCalendars.forEachIndexed { index, calendar ->
+            if (index > 0) GroupedDivider(inset = Dimens.SettingsIconInset)
+            OverlayCalendarRow(
+                calendar = calendar,
+                checked = calendar.id in state.selectedCalendarIds,
+                onToggle = { onToggleCalendar(calendar.id) },
             )
         }
-        if (expanded) {
-            Text(
-                text = stringResource(R.string.calendar_overlay_select_prompt),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 2.dp),
-            )
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 220.dp)
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                state.availableCalendars.forEach { calendar ->
-                    val checked = calendar.id in state.selectedCalendarIds
-                    val desc = stringResource(
-                        R.string.calendar_overlay_calendar_desc,
-                        calendar.displayName,
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .toggleable(
-                                value = checked,
-                                role = Role.Checkbox,
-                                onValueChange = { onToggleCalendar(calendar.id) },
-                            )
-                            .semantics { contentDescription = desc }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Checkbox(checked = checked, onCheckedChange = null)
-                        Spacer(Modifier.width(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(12.dp)
-                                .clip(MaterialTheme.shapes.extraSmall)
-                                .background(
-                                    calendar.colorArgb?.let { Color(it) }
-                                        ?: MaterialTheme.colorScheme.secondary,
-                                ),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = calendar.displayName.ifBlank { calendar.accountName },
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                            )
-                            if (calendar.accountName.isNotBlank()) {
-                                Text(
-                                    text = calendar.accountName,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Status for the currently-selected calendars.
-        when {
-            state.selectedCalendarIds.isEmpty() ->
-                StatusText(stringResource(R.string.calendar_overlay_none_selected))
-
-            state.overlayLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                Spacer(Modifier.width(8.dp))
-                StatusText(stringResource(R.string.calendar_overlay_loading))
-            }
-
-            state.overlayError -> Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                StatusText(stringResource(R.string.calendar_overlay_error))
-                TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text(stringResource(R.string.calendar_overlay_retry))
-                }
-            }
-
-            state.overlayEvents.isEmpty() ->
-                StatusText(stringResource(R.string.calendar_overlay_empty))
-
-            else -> StatusText(stringResource(R.string.calendar_overlay_showing))
+        if (status == R.string.calendar_overlay_error) {
+            GroupedDivider(inset = Dimens.SettingsIconInset)
+            RetryRow(onRetry = onRetry)
         }
     }
 }
 
+/**
+ * One device calendar: its colour where grouped rows have their icon, the name and account, and a
+ * switch. The whole row toggles, like [GroupedSwitchRow].
+ */
 @Composable
-private fun PrivacyNote() {
-    Text(
-        text = stringResource(R.string.calendar_overlay_privacy),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(vertical = 2.dp),
+private fun OverlayCalendarRow(calendar: DeviceCalendar, checked: Boolean, onToggle: () -> Unit) {
+    val description = stringResource(R.string.calendar_overlay_calendar_desc, calendar.displayName)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = Dimens.MinTouchTarget)
+            .toggleable(value = checked, role = Role.Switch, onValueChange = { onToggle() })
+            .semantics { contentDescription = description }
+            .padding(horizontal = Dimens.Space16, vertical = Dimens.Space12),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Space12),
+    ) {
+        Box(modifier = Modifier.size(Dimens.IconSmall), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .size(Dimens.ProjectDot)
+                    .clip(CircleShape)
+                    .background(calendar.colorArgb?.let { Color(it) } ?: MaterialTheme.colorScheme.secondary),
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = calendar.displayName.ifBlank { calendar.accountName },
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (calendar.accountName.isNotBlank()) {
+                Text(
+                    text = calendar.accountName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = null,
+            // The same colours as GroupedSwitchRow, so every switch in the sheet matches.
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                uncheckedThumbColor = MaterialTheme.colorScheme.surface,
+                uncheckedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
+        )
+    }
+}
+
+@Composable
+private fun RetryRow(onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    GroupedRow(
+        title = stringResource(R.string.calendar_overlay_retry),
+        leadingIcon = Icons.Default.Refresh,
+        showChevron = false,
+        onClick = onRetry,
+        modifier = modifier,
     )
 }
 
 @Composable
-private fun StatusText(text: String, modifier: Modifier = Modifier) {
+private fun SmallProgress() {
+    CircularProgressIndicator(modifier = Modifier.size(Dimens.IconSmall), strokeWidth = Dimens.Space2)
+}
+
+/** A status line on its own, styled and inset like a grouped section's footer. */
+@Composable
+private fun OverlayNote(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier.padding(vertical = 2.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space16 + Dimens.Space16),
     )
 }
