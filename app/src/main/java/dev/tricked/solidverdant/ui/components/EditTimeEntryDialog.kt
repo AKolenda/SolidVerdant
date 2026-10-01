@@ -43,8 +43,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Velocity
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Project
@@ -204,6 +209,8 @@ fun EditTimeEntryDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                // Only the drag handle may dismiss the sheet; swipes in the form just scroll it.
+                .nestedScroll(ConsumeVerticalOverscroll)
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
                 .imePadding()
@@ -727,3 +734,10 @@ private const val DURATION_STEP_MINUTES = 15L
 private const val MINIMUM_DURATION_MINUTES = 1L
 private const val SECONDS_PER_MINUTE = 60L
 private const val SHEET_HEIGHT_FRACTION = 0.9f
+
+/** Swallows leftover vertical scroll and fling so the form never drags its parent sheet. */
+internal object ConsumeVerticalOverscroll : NestedScrollConnection {
+    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset = available.copy(x = 0f)
+
+    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity = available.copy(x = 0f)
+}
