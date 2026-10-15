@@ -69,7 +69,8 @@ class AuthViewModelLogoutTest {
             every { isLoggedIn } returns flowOf(true)
             every { endpoint } returns flowOf("https://example.invalid")
             every { clientId } returns flowOf("client")
-            coEvery { logout() } coAnswers {
+            coEvery { logout(any()) } coAnswers {
+                firstArg<suspend () -> Unit>().invoke()
                 assertFalse(
                     "Paused notification state must be gone before credentials are cleared",
                     context.getSharedPreferences(NOTIFICATION_STATE_PREFERENCES, Context.MODE_PRIVATE)
@@ -115,7 +116,7 @@ class AuthViewModelLogoutTest {
         verify(exactly = 1) { syncScheduler.cancelSync() }
         coVerify(exactly = 1) { cacheCleaner.clear() }
         coVerify(exactly = 1) { settings.clearLongTimerWarningDeadline() }
-        coVerify(exactly = 1) { authRepository.logout() }
+        coVerify(exactly = 1) { authRepository.logout(any()) }
         assertFalse(
             context.getSharedPreferences(NOTIFICATION_STATE_PREFERENCES, Context.MODE_PRIVATE)
                 .contains(PAUSED_START_PREFERENCE),

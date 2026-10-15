@@ -112,6 +112,7 @@ class AuthViewModel @Inject constructor(
     private val _snapshotHydrated = MutableStateFlow(false)
     val snapshotHydrated: StateFlow<Boolean> = _snapshotHydrated.asStateFlow()
     private var accountDataGeneration = 0L
+    private var oauthGeneration = 0L
     private var userDataJob: Job? = null
 
     init {
@@ -142,11 +143,13 @@ class AuthViewModel @Inject constructor(
      * Start the OAuth2 authorization flow
      */
     fun startOAuthFlow() {
+        val generation = ++oauthGeneration
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
             authRepository.initializeOAuthFlow()
                 .onSuccess { authUrl ->
+                    if (generation != oauthGeneration) return@onSuccess
                     Timber.d("OAuth flow started")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
@@ -154,6 +157,7 @@ class AuthViewModel @Inject constructor(
                     )
                 }
                 .onFailure { error ->
+                    if (generation != oauthGeneration) return@onFailure
                     Timber.e(error, "Failed to start OAuth flow")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
@@ -174,20 +178,24 @@ class AuthViewModel @Inject constructor(
             return
         }
 
+        val generation = oauthGeneration
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
             authRepository.handleOAuthCallback(code, state)
                 .onSuccess {
+                    if (generation != oauthGeneration) return@onSuccess
+                    oauthGeneration++
                     Timber.d("OAuth callback handled successfully")
                     // Load user data after successful authentication
                     loadUserData()
                 }
-                .onFailure { error ->
-                    Timber.e(error, "Failed to handle OAuth callback")
+                .onFailure {
+                    if (generation != oauthGeneration) return@onFailure
+                    Timber.e("Failed to handle OAuth callback")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = error.message ?: context.getString(R.string.auth_error_complete_oauth),
+                        error = context.getString(R.string.auth_error_complete_oauth),
                     )
                 }
         }
@@ -267,6 +275,8 @@ class AuthViewModel @Inject constructor(
      * Save OAuth configuration
      */
     fun saveOAuthConfig(endpoint: String, clientId: String) {
+        oauthGeneration++
+        _uiState.value = _uiState.value.copy(authUrl = null, isLoading = false, error = null)
         viewModelScope.launch {
             authRepository.saveOAuthConfig(endpoint, clientId)
                 .onSuccess {
@@ -312,6 +322,8 @@ class AuthViewModel @Inject constructor(
      * Reset OAuth configuration to defaults
      */
     fun resetOAuthConfig() {
+        oauthGeneration++
+        _uiState.value = _uiState.value.copy(authUrl = null, isLoading = false, error = null)
         viewModelScope.launch {
             authRepository.resetOAuthConfig()
                 .onSuccess {
@@ -333,26 +345,25 @@ class AuthViewModel @Inject constructor(
      */
     @OptIn(coil.annotation.ExperimentalCoilApi::class)
     fun logout() {
+        oauthGeneration++
         accountDataGeneration++
         userDataJob?.cancel()
         userDataJob = null
         viewModelScope.launch {
-            _uiState.value.user?.profilePhotoUrl?.takeIf { it.isNotBlank() }?.let { url ->
-                context.imageLoader.memoryCache?.remove(MemoryCache.Key(url))
-                withContext(Dispatchers.IO) {
-                    context.imageLoader.diskCache?.remove(url)
+            authRepository.logout {
+                _uiState.value.user?.profilePhotoUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                    context.imageLoader.memoryCache?.remove(MemoryCache.Key(url))
+                    withContext(Dispatchers.IO) {
+                        context.imageLoader.diskCache?.remove(url)
+                    }
                 }
+                // Cleanup and credential invalidation share the session lock, so a new login
+                // cannot publish its credentials or account data between these steps.
+                syncScheduler.cancelSync()
+                settingsDataStore.clearLongTimerWarningDeadline()
+                TimeTrackingNotificationService.clearForLogout(context)
+                userCacheCleaner.clear()
             }
-            // Cancel any in-flight/queued sync before clearing the cache so it can't
-            // re-insert the outgoing account's rows into the just-cleared database.
-            // Unsynced changes are cancelled by the scheduler before account data is cleared.
-            syncScheduler.cancelSync()
-            settingsDataStore.clearLongTimerWarningDeadline()
-            TimeTrackingNotificationService.clearForLogout(context)
-            userCacheCleaner.clear()
-            // Clear account-owned data before changing auth state. Once auth is cleared,
-            // navigation can dispose this ViewModel and cancel any remaining work.
-            authRepository.logout()
             _uiState.value = AuthUiState()
             Timber.d("User logged out")
         }

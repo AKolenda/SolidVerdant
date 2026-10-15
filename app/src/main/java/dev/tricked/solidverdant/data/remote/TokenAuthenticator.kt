@@ -7,8 +7,10 @@
 package dev.tricked.solidverdant.data.remote
 
 import dev.tricked.solidverdant.data.local.AuthDataStore
+import dev.tricked.solidverdant.data.local.AuthSession
 import dev.tricked.solidverdant.data.local.UserCacheCleaner
 import dev.tricked.solidverdant.data.model.TokenResponse
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import okhttp3.Authenticator
@@ -23,24 +25,17 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 internal interface TokenStorage {
-    suspend fun accessToken(): String?
-    suspend fun refreshToken(): String?
-    suspend fun endpoint(): String
-    suspend fun clientId(): String
-    suspend fun saveTokens(accessToken: String, refreshToken: String)
-    suspend fun saveTokensIfRefreshTokenMatches(expectedRefreshToken: String, accessToken: String, refreshToken: String): Boolean
-    suspend fun clearTokens()
+    suspend fun getSession(): AuthSession
+    suspend fun saveRefreshedTokens(expected: AuthSession, accessToken: String, refreshToken: String): Boolean
+    suspend fun invalidateSession(expected: AuthSession, clearAccountData: suspend () -> Unit): Boolean
 }
 
 private class DataStoreTokenStorage(private val store: AuthDataStore) : TokenStorage {
-    override suspend fun accessToken() = store.getAccessToken()
-    override suspend fun refreshToken() = store.getRefreshToken()
-    override suspend fun endpoint() = store.getEndpoint()
-    override suspend fun clientId() = store.getClientId()
-    override suspend fun saveTokens(accessToken: String, refreshToken: String) = store.saveTokens(accessToken, refreshToken)
-    override suspend fun saveTokensIfRefreshTokenMatches(expectedRefreshToken: String, accessToken: String, refreshToken: String) =
-        store.saveTokensIfRefreshTokenMatches(expectedRefreshToken, accessToken, refreshToken)
-    override suspend fun clearTokens() = store.clearTokens()
+    override suspend fun getSession() = store.getSession()
+    override suspend fun saveRefreshedTokens(expected: AuthSession, accessToken: String, refreshToken: String) =
+        store.saveRefreshedTokens(expected, accessToken, refreshToken)
+    override suspend fun invalidateSession(expected: AuthSession, clearAccountData: suspend () -> Unit) =
+        store.invalidateSession(expected, clearAccountData)
 }
 
 /** Outcome of a refresh attempt, distinguishing dead credentials from a recoverable failure. */
@@ -128,62 +123,60 @@ class TokenAuthenticator internal constructor(
     override fun authenticate(route: Route?, response: Response): Request? {
         if (responseCount(response) >= 2) return null
 
-        val failedToken = response.request.header("Authorization")
-            ?.removePrefix("Bearer ")
+        val requestSession = response.request.tag(RequestAuthSession::class.java) ?: return null
+        if (!response.request.url.hasAuthOrigin(requestSession.endpoint)) return null
+        val authorization = response.request.header("Authorization") ?: return null
+        if (!authorization.startsWith("Bearer ")) return null
+        val failedToken = authorization.removePrefix("Bearer ").takeIf { it.isNotEmpty() } ?: return null
 
         return synchronized(refreshLock) {
             runBlocking {
-                // Another request may have completed the refresh while this request waited.
-                val currentToken = storage.accessToken()
-                if (!currentToken.isNullOrEmpty() && currentToken != failedToken) {
-                    return@runBlocking retry(response, currentToken)
-                }
-
-                val refreshToken = storage.refreshToken()
-                if (refreshToken.isNullOrEmpty()) {
-                    // Nothing can recover this session: clear the dead access token so the app
-                    // returns to login instead of silently 401ing every request. Also clear the
-                    // account cache so the next signed-in user can't read this account's data.
-                    storage.clearTokens()
-                    userCacheCleaner?.clear()
-                    return@runBlocking null
-                }
-
                 try {
-                    when (val result = refresher.refresh(storage.endpoint(), storage.clientId(), refreshToken)) {
+                    val session = storage.getSession()
+                    if (!requestSession.matches(session)) return@runBlocking null
+
+                    // Concurrent requests may reuse a rotation only within their original session.
+                    val currentToken = session.accessToken
+                    if (!currentToken.isNullOrEmpty() && currentToken != failedToken) {
+                        return@runBlocking retry(response, currentToken)
+                    }
+
+                    val refreshToken = session.refreshToken
+                    if (refreshToken.isNullOrEmpty()) {
+                        storage.invalidateSession(session) { userCacheCleaner?.clear() }
+                        return@runBlocking null
+                    }
+
+                    when (val result = refresher.refresh(session.endpoint, session.clientId, refreshToken)) {
                         is RefreshResult.Success -> {
-                            val saved = storage.saveTokensIfRefreshTokenMatches(
-                                expectedRefreshToken = refreshToken,
+                            val saved = storage.saveRefreshedTokens(
+                                expected = session,
                                 accessToken = result.tokens.accessToken,
                                 refreshToken = result.tokens.refreshToken,
                             )
-                            if (saved) {
-                                retry(response, result.tokens.accessToken)
+                            // Both the saved result and a competing rotation must still belong to
+                            // this request. A replacement login must never authenticate its retry.
+                            val current = storage.getSession()
+                            val token = current.accessToken
+                            if (requestSession.matches(current) && !token.isNullOrEmpty() && (saved || token != failedToken)) {
+                                retry(response, token)
                             } else {
-                                // Logout or another session replaced the credentials while the
-                                // refresh request was in flight. Never retry with that stale result.
-                                val currentAccessToken = storage.accessToken()
-                                if (!currentAccessToken.isNullOrEmpty() && currentAccessToken != failedToken) {
-                                    retry(response, currentAccessToken)
-                                } else {
-                                    null
-                                }
+                                null
                             }
                         }
                         RefreshResult.Invalid -> {
-                            // The server rejected the refresh token; the credentials are dead.
-                            // Clear tokens and the account cache so account isolation holds.
-                            storage.clearTokens()
-                            userCacheCleaner?.clear()
+                            storage.invalidateSession(session) { userCacheCleaner?.clear() }
                             null
                         }
                         // Transient failure: preserve credentials so a later request can retry.
                         RefreshResult.Transient -> null
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     // An unexpected failure (e.g. malformed refresh payload) is not evidence that
                     // stored credentials are invalid; keep them and let a later request retry.
-                    Timber.e(e, "Token refresh failed")
+                    Timber.e("Token refresh failed")
                     null
                 }
             }

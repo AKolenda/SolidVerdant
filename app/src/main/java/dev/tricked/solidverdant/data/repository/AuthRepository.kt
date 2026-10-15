@@ -7,6 +7,7 @@
 package dev.tricked.solidverdant.data.repository
 
 import dev.tricked.solidverdant.data.local.AuthDataStore
+import dev.tricked.solidverdant.data.local.OAuthTransaction
 import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.Project
@@ -24,6 +25,8 @@ import dev.tricked.solidverdant.util.PKCEUtil
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import retrofit2.HttpException
 import timber.log.Timber
 import javax.inject.Inject
@@ -45,6 +48,15 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
     val endpoint: Flow<String> = authDataStore.endpoint
     val clientId: Flow<String> = authDataStore.clientId
 
+    private class OAuthCallbackGate {
+        val mutex = Mutex()
+        var callers = 0
+    }
+
+    // Only callers for the same single-use code flow wait on each other. An obsolete server
+    // cannot block a replacement flow. Entries exist only while callbacks own or await a gate.
+    private val oauthCallbackGates = mutableMapOf<OAuthTransaction, OAuthCallbackGate>()
+
     suspend fun getCurrentMembershipId(): String? = authDataStore.currentMembershipId.first()
 
     suspend fun getCurrentMembership(): Membership? {
@@ -62,19 +74,15 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         val pkceData = PKCEUtil.generatePKCEData()
 
         // Store PKCE data for later verification
-        authDataStore.savePKCEData(
+        val transaction = authDataStore.savePKCEData(
             codeVerifier = pkceData.codeVerifier,
             state = pkceData.state,
         )
 
-        // Get current config
-        val currentEndpoint = authDataStore.getEndpoint()
-        val currentClientId = authDataStore.getClientId()
-
         // Build authorization URL
         val authUrl = PKCEUtil.buildAuthorizationUrl(
-            endpoint = currentEndpoint,
-            clientId = currentClientId,
+            endpoint = transaction.endpoint,
+            clientId = transaction.clientId,
             codeChallenge = pkceData.codeChallenge,
             state = pkceData.state,
         )
@@ -95,53 +103,66 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
      * @return Result indicating success or failure
      */
     suspend fun handleOAuthCallback(code: String, state: String): Result<Unit> {
-        return try {
-            // Verify state parameter (CSRF protection)
-            val storedState = authDataStore.getState()
-            if (state != storedState || state.isEmpty()) {
-                Timber.w("Invalid state parameter in OAuth callback")
-                return Result.failure(Exception("Invalid state parameter"))
-            }
-
-            // Get stored PKCE data
-            val codeVerifier = authDataStore.getCodeVerifier()
-            if (codeVerifier.isNullOrEmpty()) {
-                Timber.w("No code verifier found")
-                return Result.failure(Exception("No code verifier found"))
-            }
-
-            // Get current config
-            val currentEndpoint = authDataStore.getEndpoint()
-            val currentClientId = authDataStore.getClientId()
-
-            // Create API instance
-            val api = apiClientFactory.createApi(currentEndpoint)
-
-            // Exchange code for tokens
-            val tokenResponse = api.exchangeCodeForToken(
-                clientId = currentClientId,
-                redirectUri = REDIRECT_URI,
-                codeVerifier = codeVerifier,
-                code = code,
-            )
-
-            // Save tokens
-            authDataStore.saveTokens(
-                accessToken = tokenResponse.accessToken,
-                refreshToken = tokenResponse.refreshToken,
-            )
-
-            // Clear PKCE data
-            authDataStore.clearPKCEData()
-
-            Timber.d("OAuth callback handled successfully")
-            Result.success(Unit)
+        val pending = try {
+            authDataStore.getOAuthTransaction(state)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Timber.e(e, "Failed to handle OAuth callback")
-            authDataStore.clearPKCEData()
-            Result.failure(e)
+            Timber.e("Failed to handle OAuth callback")
+            return Result.failure(e)
+        }
+        if (pending == null) {
+            Timber.w("Invalid state parameter in OAuth callback")
+            return Result.failure(Exception("Invalid state parameter"))
+        }
+
+        return withOAuthCallbackLock(pending) {
+            try {
+                // A preceding callback may have consumed or invalidated this single-use flow.
+                if (authDataStore.getOAuthTransaction(state) != pending) {
+                    return@withOAuthCallbackLock Result.failure(IllegalStateException())
+                }
+                val api = apiClientFactory.createApi(pending.endpoint)
+                val tokenResponse = api.exchangeCodeForToken(
+                    clientId = pending.clientId,
+                    redirectUri = REDIRECT_URI,
+                    codeVerifier = pending.codeVerifier,
+                    code = code,
+                )
+
+                // A logout, configuration change, or newer login invalidates this pending flow.
+                val saved = authDataStore.completeOAuthLogin(
+                    expected = pending,
+                    accessToken = tokenResponse.accessToken,
+                    refreshToken = tokenResponse.refreshToken,
+                )
+                if (!saved) return@withOAuthCallbackLock Result.failure(IllegalStateException())
+
+                Timber.d("OAuth callback handled successfully")
+                Result.success(Unit)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Token decoding exceptions may include the response body and its credentials.
+                Timber.e("Failed to handle OAuth callback")
+                authDataStore.clearPKCEData(pending)
+                Result.failure(e)
+            }
+        }
+    }
+
+    private suspend fun <T> withOAuthCallbackLock(transaction: OAuthTransaction, action: suspend () -> T): T {
+        val gate = synchronized(oauthCallbackGates) {
+            oauthCallbackGates.getOrPut(transaction) { OAuthCallbackGate() }.also { it.callers++ }
+        }
+        try {
+            return gate.mutex.withLock { action() }
+        } finally {
+            // Bookkeeping cannot suspend: cancellation while waiting must still release its reference.
+            synchronized(oauthCallbackGates) {
+                gate.callers--
+                if (gate.callers == 0) oauthCallbackGates.remove(transaction)
+            }
         }
     }
 
@@ -357,8 +378,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
     /**
      * Logout and clear all stored data (preserves OAuth config)
      */
-    suspend fun logout() {
-        authDataStore.clearAll()
+    suspend fun logout(clearAccountData: suspend () -> Unit = {}) {
+        authDataStore.clearAll(clearAccountData)
         Timber.d("User logged out")
     }
 
