@@ -6,9 +6,16 @@ on:
       - master
   workflow_dispatch: # Allows manual triggering
 
+concurrency:
+  group: nightly-release
+  cancel-in-progress: false
+
 jobs:
   build:
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
     - name: Check out code
@@ -40,7 +47,21 @@ jobs:
     - name: Build debug APK
       run: ./gradlew app:assembleDebug
 
+    - name: Check that this build is still current
+      id: current
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        latest_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/master" --jq '.object.sha')"
+        if [[ "$GITHUB_SHA" == "$latest_sha" ]]; then
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "publish=false" >> "$GITHUB_OUTPUT"
+          echo "Skipping an outdated nightly build."
+        fi
+
     - name: Update Nightly Release
+      if: steps.current.outputs.publish == 'true'
       uses: softprops/action-gh-release@v3
       with:
         tag_name: nightly
